@@ -95,7 +95,8 @@ train-status-app/
 ├── frontend/
 │   ├── src/
 │   ├── package.json
-│   └── vite.config.ts
+│   ├── vite.config.ts
+│   └── Dockerfile.dev
 │
 ├── backend/
 │   ├── cmd/
@@ -109,12 +110,12 @@ train-status-app/
 │   │   ├── logger/
 │   │   ├── middleware/
 │   │   ├── model/
-│   │   ├── response/
 │   │   ├── router/
 │   │   └── service/
 │   │
 │   ├── go.mod
-│   └── go.sum
+│   ├── go.mod
+│   └── Dockerfile.dev
 │
 ├── infra/
 │   ├── bootstrap/

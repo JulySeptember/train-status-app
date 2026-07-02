@@ -1,19 +1,66 @@
-# Node
-node_modules
-dist
+# ============================
+# OS
+# ============================
+.DS_Store
+Thumbs.db
 
+# ============================
+# Editor
+# ============================
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ============================
+# Environment
+# ============================
+*.env
+backend/.env
+frontend/.env.local
+
+# ============================
+# Frontend (Vite)
+# ============================
+frontend/node_modules/
+frontend/dist/
+
+# ============================
 # Go
-bin
+# ============================
+backend/*.exe
+backend/*.out
+bootstrap
+lambda.zip
 
+# ============================
 # Terraform
-.terraform
+# ============================
+**/.terraform/
 *.tfstate
 *.tfstate.*
-.terraform.lock.hcl
+*.tfplan
+crash.log
 
-# OS
-.DS_Store
+# Terraform variable files
+*.tfvars
+!infra/env/*.example.tfvars
 
-# IDE
-.vscode
-.idea
+# Terraform plan artifacts
+infra/plan.tfplan
+infra/plan.json
+infra/plan.txt
+
+# ============================
+# Logs
+# ============================
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# ============================
+# Secrets
+# ============================
+*.pem
+local_*
