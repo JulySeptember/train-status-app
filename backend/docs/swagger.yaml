@@ -1,0 +1,269 @@
+basePath: /
+definitions:
+  service.Fare:
+    properties:
+      from:
+        type: string
+      icFare:
+        type: integer
+      ticketFare:
+        type: integer
+      to:
+        type: string
+    type: object
+  service.Passenger:
+    properties:
+      count:
+        type: integer
+      year:
+        type: integer
+    type: object
+  service.Railway:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+  service.Station:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+  service.StationDetail:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+      passengers:
+        items:
+          $ref: '#/definitions/service.Passenger'
+        type: array
+      timetable:
+        items:
+          $ref: '#/definitions/service.Timetable'
+        type: array
+    type: object
+  service.Timetable:
+    properties:
+      destination:
+        type: string
+      time:
+        type: string
+      trainNumber:
+        type: string
+    type: object
+  service.TrainLocation:
+    properties:
+      delay:
+        type: integer
+      fromStation:
+        type: string
+      railway:
+        type: string
+      toStation:
+        type: string
+      trainNumber:
+        type: string
+    type: object
+  service.TrainStatus:
+    properties:
+      railway:
+        type: string
+      status:
+        type: string
+    type: object
+info:
+  contact: {}
+  description: Toei Transportation API
+  title: Train Status API
+  version: "1.0"
+paths:
+  /api/fares:
+    get:
+      description: Get IC card and ticket fare between two stations.
+      parameters:
+      - description: From station ID
+        example: odpt.Station:Toei.Oedo.Daimon
+        in: query
+        name: from
+        required: true
+        type: string
+      - description: To station ID
+        example: odpt.Station:Toei.Asakusa.Magome
+        in: query
+        name: to
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/service.Fare'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get fare
+      tags:
+      - Fare
+  /api/routes:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/service.Railway'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get railways
+      tags:
+      - Railway
+  /api/routes/{routeId}/stations:
+    get:
+      parameters:
+      - description: Route ID
+        in: path
+        name: routeId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/service.Station'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get stations by route
+      tags:
+      - Station
+  /api/stations/{stationId}:
+    get:
+      parameters:
+      - description: Station ID
+        in: path
+        name: stationId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/service.StationDetail'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get station detail
+      tags:
+      - Station
+  /api/status:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/service.TrainStatus'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get Train Status
+      tags:
+      - Status
+  /api/trains/{trainNumber}/location:
+    get:
+      parameters:
+      - description: Train Number
+        in: path
+        name: trainNumber
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/service.TrainLocation'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get train location
+      tags:
+      - Train
+  /health:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Health Check
+      tags:
+      - Health
+swagger: "2.0"

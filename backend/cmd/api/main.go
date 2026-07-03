@@ -1,9 +1,14 @@
+// @title			Train Status API
+// @version		1.0
+// @description	Toei Transportation API
+// @BasePath		/
 package main
 
 import (
 	"log"
 	"net/http"
 	"os"
+	_ "train-status-app/backend/docs"
 
 	"train-status-app/backend/assets"
 	"train-status-app/backend/internal/client"

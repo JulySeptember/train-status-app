@@ -4,12 +4,20 @@ import (
 	"net/http"
 
 	"train-status-app/backend/internal/handler"
+
+	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 func New(h *handler.Handler) http.Handler {
 
 	mux := http.NewServeMux()
 
+	mux.Handle(
+		"/swagger/",
+		httpSwagger.Handler(
+			httpSwagger.URL("/swagger/doc.json"),
+		),
+	)
 	// Health
 	mux.HandleFunc("GET /health", h.Health)
 
