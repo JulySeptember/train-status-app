@@ -1,30 +1,56 @@
 package main
 
 import (
-	"fmt"
+	"log"
 	"net/http"
 	"os"
 
+	"train-status-app/backend/assets"
+	"train-status-app/backend/internal/client"
+	"train-status-app/backend/internal/config"
+	"train-status-app/backend/internal/handler"
+	"train-status-app/backend/internal/middleware"
+	"train-status-app/backend/internal/router"
+	"train-status-app/backend/internal/service"
+
 	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/awslabs/aws-lambda-go-api-proxy/httpadapter"
 )
 
 func main() {
-	// Lambda環境なら Lambda を起動
+	cfg := config.Load()
+
+	c := client.New()
+
+	loader, err := assets.New()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	svc := service.New(c, loader)
+
+	h := handler.New(svc)
+
+	r := router.New(h)
+
+	var app http.Handler = r
+
+	app = middleware.Logging(app)
+	app = middleware.Recovery(app)
+
+	// AWS Lambda
 	if _, ok := os.LookupEnv("AWS_LAMBDA_RUNTIME_API"); ok {
-		lambda.Start(func() (string, error) {
-			return "OK", nil
-		})
+		adapter := httpadapter.New(app)
+		lambda.Start(adapter.ProxyWithContext)
 		return
 	}
 
-	// ローカル開発
-	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, "OK")
-	})
+	// Local
+	addr := ":" + cfg.Port
 
-	fmt.Println("Server started on :8080")
+	log.Printf("Server started on %s", addr)
 
-	if err := http.ListenAndServe(":8080", nil); err != nil {
-		panic(err)
+	if err := http.ListenAndServe(addr, app); err != nil {
+		log.Fatal(err)
 	}
 }

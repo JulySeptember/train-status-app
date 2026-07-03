@@ -270,25 +270,25 @@ bootstrap
 
 ---
 
-## 運行情報
+# 1. 運行情報
 
 ```http
 GET /api/status
 ```
 
-### 説明
+## 説明
 
-都営地下鉄・東京さくらトラム・日暮里・舎人ライナーの運行情報一覧を取得します。
+都営地下鉄・東京さくらトラム・日暮里・舎人ライナーの運行情報を取得します。
 
 ---
 
-## 路線一覧
+# 2. 路線一覧
 
 ```http
 GET /api/routes
 ```
 
-### 説明
+## 説明
 
 利用可能な路線一覧を取得します。
 
@@ -303,145 +303,143 @@ GET /api/routes
   {
     "id": "mita",
     "name": "都営三田線"
-  },
-  {
-    "id": "shinjuku",
-    "name": "都営新宿線"
-  },
-  {
-    "id": "oedo",
-    "name": "都営大江戸線"
-  },
-  {
-    "id": "arakawa",
-    "name": "東京さくらトラム"
-  },
-  {
-    "id": "nippori-toneri",
-    "name": "日暮里・舎人ライナー"
   }
 ]
 ```
 
 ---
 
-## 路線ごとの駅一覧
+# 3. 路線ごとの駅一覧
 
 ```http
 GET /api/routes/{routeId}/stations
 ```
 
-### パスパラメータ
+## パスパラメータ
 
 | Name | Description |
 |------|-------------|
 | routeId | 路線ID |
 
-### 例
+## 説明
 
-```http
-GET /api/routes/asakusa/stations
-```
+指定した路線に所属する駅一覧を取得します。
 
 ---
 
-## 路線ごとの列車ロケーション情報
+# 4. 駅詳細
 
 ```http
-GET /api/routes/{routeId}/locations
+GET /api/stations/{stationId}
 ```
 
-### パスパラメータ
-
-| Name | Description |
-|------|-------------|
-| routeId | 路線ID |
-
-### 例
-
-```http
-GET /api/routes/oedo/locations
-```
-
----
-
-## 駅時刻表
-
-```http
-GET /api/stations/{stationId}/timetable
-```
-
-### パスパラメータ
+## パスパラメータ
 
 | Name | Description |
 |------|-------------|
 | stationId | 駅ID |
 
-### 例
+## 説明
 
-```http
-GET /api/stations/shimbashi/timetable
+指定した駅の詳細情報を取得します。
+
+以下の情報をまとめて返します。
+
+- 駅情報
+- 駅時刻表
+- 年度別乗降者数
+
+時刻表の各列車には列車番号が含まれており、フロントでは時刻をクリックすると列車現在位置を取得できます。
+
+### レスポンス例
+
+```json
+{
+  "station": {
+    "id": "shimbashi",
+    "name": "新橋"
+  },
+  "timetable": [
+    {
+      "departureTime": "06:09",
+      "destination": "西馬込",
+      "trainNumber": "1001A"
+    }
+  ],
+  "passengers": [
+    {
+      "year": 2023,
+      "count": 108234
+    }
+  ]
+}
 ```
 
 ---
 
-## 列車時刻表
+# 5. 列車現在位置
 
 ```http
-GET /api/trains/{trainNumber}/timetable
+GET /api/trains/{trainNumber}/location
 ```
 
-### パスパラメータ
+## パスパラメータ
 
 | Name | Description |
 |------|-------------|
 | trainNumber | 列車番号 |
 
-### 例
+## 説明
 
-```http
-GET /api/trains/1001A/timetable
+指定した列車の現在位置・走行区間・遅延時間を取得します。
+
+駅時刻表の時刻をクリックした際に利用します。
+
+### レスポンス例
+
+```json
+{
+  "trainNumber": "1001A",
+  "fromStation": "新橋",
+  "toStation": "大門",
+  "delay": 120
+}
 ```
 
 ---
 
-## 運賃情報
+# 6. 運賃検索
 
 ```http
 GET /api/fares
 ```
 
-### クエリパラメータ
+## クエリパラメータ
 
 | Name | Required | Description |
 |------|----------|-------------|
 | from | Yes | 出発駅ID |
 | to | Yes | 到着駅ID |
 
-### 例
+## 例
 
 ```http
 GET /api/fares?from=shimbashi&to=nishi-magome
 ```
 
----
+## 説明
 
-## 駅別乗降者数
+指定した2駅間のIC運賃・切符運賃を取得します。
 
-```http
-GET /api/stations/{stationId}/passengers
-```
+### レスポンス例
 
-### パスパラメータ
-
-| Name | Description |
-|------|-------------|
-| stationId | 駅ID |
-
-### 例
-
-```http
-GET /api/stations/shimbashi/passengers
+```json
+{
+  "from": "shimbashi",
+  "to": "nishi-magome",
+  "ticketFare": 220,
+  "icCardFare": 220
+}
 ```
 
 ---
