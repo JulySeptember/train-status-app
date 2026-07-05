@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"train-status-app/backend/internal/service"
@@ -76,10 +77,21 @@ func (h *Handler) TrainStatus(
 		r.Context(),
 	)
 	if err != nil {
+
+		if errors.Is(err, service.ErrExternalAPI) {
+			writeJSON(
+				w,
+				http.StatusBadGateway,
+				map[string]string{
+					"error": err.Error(),
+				},
+			)
+			return
+		}
+
 		writeError(w, err)
 		return
 	}
-
 	writeJSON(
 		w,
 		http.StatusOK,
@@ -128,19 +140,45 @@ func (h *Handler) Stations(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-
 	routeID := r.PathValue("routeId")
+
+	if routeID == "" {
+		writeJSON(
+			w,
+			http.StatusBadRequest,
+			map[string]string{
+				"error": "routeId is required",
+			},
+		)
+		return
+	}
 
 	data, err := h.service.GetStations(
 		r.Context(),
 		routeID,
 	)
 	if err != nil {
+
+		if errors.Is(err, service.ErrStationNotFound) {
+			writeJSON(
+				w,
+				http.StatusNotFound,
+				map[string]string{
+					"error": err.Error(),
+				},
+			)
+			return
+		}
+
 		writeError(w, err)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, data)
+	writeJSON(
+		w,
+		http.StatusOK,
+		data,
+	)
 }
 
 // StationDetail godoc
@@ -157,15 +195,36 @@ func (h *Handler) StationDetail(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	stationID := r.PathValue(
-		"stationId",
-	)
+	stationID := r.PathValue("stationId")
+
+	if stationID == "" {
+		writeJSON(
+			w,
+			http.StatusBadRequest,
+			map[string]string{
+				"error": "stationId is required",
+			},
+		)
+		return
+	}
 
 	data, err := h.service.GetStationDetail(
 		r.Context(),
 		stationID,
 	)
 	if err != nil {
+
+		if errors.Is(err, service.ErrStationNotFound) {
+			writeJSON(
+				w,
+				http.StatusNotFound,
+				map[string]string{
+					"error": err.Error(),
+				},
+			)
+			return
+		}
+
 		writeError(w, err)
 		return
 	}
@@ -191,19 +250,51 @@ func (h *Handler) TrainLocation(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	trainNumber := r.PathValue(
-		"trainNumber",
-	)
+	trainNumber := r.PathValue("trainNumber")
+
+	if trainNumber == "" {
+		writeJSON(
+			w,
+			http.StatusBadRequest,
+			map[string]string{
+				"error": "trainNumber is required",
+			},
+		)
+		return
+	}
 
 	data, err := h.service.GetTrainLocation(
 		r.Context(),
 		trainNumber,
 	)
+
 	if err != nil {
+
+		if errors.Is(err, service.ErrExternalAPI) {
+			writeJSON(
+				w,
+				http.StatusBadGateway,
+				map[string]string{
+					"error": err.Error(),
+				},
+			)
+			return
+		}
+
+		if errors.Is(err, service.ErrTrainNotFound) {
+			writeJSON(
+				w,
+				http.StatusNotFound,
+				map[string]string{
+					"error": err.Error(),
+				},
+			)
+			return
+		}
+
 		writeError(w, err)
 		return
 	}
-
 	writeJSON(
 		w,
 		http.StatusOK,
@@ -227,13 +318,19 @@ func (h *Handler) Fare(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	from := r.URL.Query().Get(
-		"from",
-	)
+	from := r.URL.Query().Get("from")
+	to := r.URL.Query().Get("to")
 
-	to := r.URL.Query().Get(
-		"to",
-	)
+	if from == "" || to == "" {
+		writeJSON(
+			w,
+			http.StatusBadRequest,
+			map[string]string{
+				"error": "from and to are required",
+			},
+		)
+		return
+	}
 
 	data, err := h.service.GetFare(
 		r.Context(),
@@ -241,6 +338,18 @@ func (h *Handler) Fare(
 		to,
 	)
 	if err != nil {
+
+		if errors.Is(err, service.ErrFareNotFound) {
+			writeJSON(
+				w,
+				http.StatusNotFound,
+				map[string]string{
+					"error": err.Error(),
+				},
+			)
+			return
+		}
+
 		writeError(w, err)
 		return
 	}

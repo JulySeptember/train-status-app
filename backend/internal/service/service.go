@@ -2,11 +2,18 @@ package service
 
 import (
 	"context"
-	"fmt"
 
+	"errors"
 	"train-status-app/backend/assets"
 	"train-status-app/backend/internal/client"
 	"train-status-app/backend/internal/model"
+)
+
+var (
+	ErrExternalAPI     = errors.New("external api error")
+	ErrStationNotFound = errors.New("station not found")
+	ErrTrainNotFound   = errors.New("train not found")
+	ErrFareNotFound    = errors.New("fare not found")
 )
 
 type Service struct {
@@ -61,6 +68,9 @@ func (s *Service) GetTrainStatus(
 
 	statuses, err := s.client.GetTrainStatus(ctx)
 	if err != nil {
+		if errors.Is(err, client.ErrExternalAPI) {
+			return nil, ErrExternalAPI
+		}
 		return nil, err
 	}
 
@@ -133,6 +143,19 @@ func (s *Service) GetStations(
 	routeID string,
 ) ([]Station, error) {
 
+	found := false
+
+	for _, railway := range s.assets.Railways() {
+		if railway.SameAs == routeID {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return nil, ErrStationNotFound
+	}
+
 	items := make([]Station, 0)
 
 	for _, station := range s.assets.Stations() {
@@ -196,10 +219,7 @@ func (s *Service) GetStationDetail(
 
 	station, ok := stationMap[stationID]
 	if !ok {
-		return nil, fmt.Errorf(
-			"station not found: %s",
-			stationID,
-		)
+		return nil, ErrStationNotFound
 	}
 
 	stationTables := make([]model.StationTimetable, 0)
@@ -306,6 +326,9 @@ func (s *Service) GetTrainLocation(
 
 	trains, err := s.client.GetTrainLocations(ctx)
 	if err != nil {
+		if errors.Is(err, client.ErrExternalAPI) {
+			return nil, ErrExternalAPI
+		}
 		return nil, err
 	}
 
@@ -353,10 +376,7 @@ func (s *Service) GetTrainLocation(
 		return item, nil
 	}
 
-	return nil, fmt.Errorf(
-		"train not found: %s",
-		trainNumber,
-	)
+	return nil, ErrTrainNotFound
 }
 
 // =========================
@@ -395,9 +415,5 @@ func (s *Service) GetFare(
 		}
 	}
 
-	return nil, fmt.Errorf(
-		"fare not found: %s -> %s",
-		from,
-		to,
-	)
+	return nil, ErrFareNotFound
 }

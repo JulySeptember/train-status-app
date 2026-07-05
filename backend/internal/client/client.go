@@ -3,12 +3,14 @@ package client
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"net/http"
 	"time"
 
 	"train-status-app/backend/internal/model"
 )
+
+var ErrExternalAPI = errors.New("external api error")
 
 const (
 	trainStatusURL   = "https://api-public.odpt.org/api/v4/odpt:TrainInformation?odpt:operator=odpt.Operator:Toei"
@@ -50,7 +52,7 @@ func fetch[T any](
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", res.StatusCode)
+		return nil, ErrExternalAPI
 	}
 
 	var data []T
