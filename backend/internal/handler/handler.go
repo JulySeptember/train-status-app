@@ -131,10 +131,10 @@ func (h *Handler) Railways(
 //	@Summary	Get stations by route
 //	@Tags		Station
 //	@Produce	json
-//	@Param		routeId	path		string	true	"Route ID"
-//	@Success	200		{array}		service.Station
-//	@Failure	400		{object}	map[string]string
-//	@Failure	404		{object}	map[string]string
+//	@Param		routeId	path	string	true	"Route ID"	example(odpt.Railway:Toei.Asakusa)
+//	@Success	200	{array}		service.Station
+//	@Failure	400	{object}	map[string]string
+//	@Failure	404	{object}	map[string]string
 //	@Router		/api/routes/{routeId}/stations [get]
 func (h *Handler) Stations(
 	w http.ResponseWriter,
@@ -186,10 +186,10 @@ func (h *Handler) Stations(
 //	@Summary	Get station detail
 //	@Tags		Station
 //	@Produce	json
-//	@Param		stationId	path		string	true	"Station ID"
-//	@Success	200			{object}	service.StationDetail
-//	@Failure	400			{object}	map[string]string
-//	@Failure	404			{object}	map[string]string
+//	@Param		stationId	path	string	true	"Station ID"	example(odpt.Station:Toei.Asakusa.Shimbashi)
+//	@Success	200		{object}	service.StationDetail
+//	@Failure	400		{object}	map[string]string
+//	@Failure	404		{object}	map[string]string
 //	@Router		/api/stations/{stationId} [get]
 func (h *Handler) StationDetail(
 	w http.ResponseWriter,
@@ -241,10 +241,11 @@ func (h *Handler) StationDetail(
 //	@Summary	Get train location
 //	@Tags		Train
 //	@Produce	json
-//	@Param		trainNumber	path		string	true	"Train Number"
-//	@Success	200			{object}	service.TrainLocation
-//	@Failure	400			{object}	map[string]string
-//	@Failure	404			{object}	map[string]string
+//	@Param		trainNumber	path	string	true	"Train Number"	example(1965Ka)
+//	@Success	200		{object}	service.TrainLocation
+//	@Failure	400		{object}	map[string]string
+//	@Failure	404		{object}	map[string]string
+//	@Failure	502		{object}	map[string]string
 //	@Router		/api/trains/{trainNumber}/location [get]
 func (h *Handler) TrainLocation(
 	w http.ResponseWriter,
@@ -304,16 +305,16 @@ func (h *Handler) TrainLocation(
 
 // Fare godoc
 //
-// @Summary     Get fare
-// @Description Get IC card and ticket fare between two stations.
-// @Tags        Fare
-// @Produce     json
-// @Param       from query string true "From station ID" example(odpt.Station:Toei.Oedo.Daimon)
-// @Param       to   query string true "To station ID" example(odpt.Station:Toei.Asakusa.Magome)
-// @Success     200 {object} service.Fare
-// @Failure     400 {object} map[string]string
-// @Failure     404 {object} map[string]string
-// @Router      /api/fares [get]
+//	@Summary	Get fare
+//	@Description	Get IC card and ticket fare between two stations
+//	@Tags		Fare
+//	@Produce	json
+//	@Param		from	query	string	true	"From station ID"	example(odpt.Station:Toei.Oedo.Daimon)
+//	@Param		to	query	string	true	"To station ID"	example(odpt.Station:Toei.Asakusa.Magome)
+//	@Success	200	{object}	service.Fare
+//	@Failure	400	{object}	map[string]string
+//	@Failure	404	{object}	map[string]string
+//	@Router		/api/fares [get]
 func (h *Handler) Fare(
 	w http.ResponseWriter,
 	r *http.Request,

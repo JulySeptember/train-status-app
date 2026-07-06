@@ -12,6 +12,9 @@ TF_ENV_FILE := ../env/dev.tfvars
 LAMBDA_BINARY := bootstrap
 LAMBDA_ZIP := lambda.zip
 
+LAMBDA_ARTIFACT_BUCKET := train-status-app-july-backend-artifacts
+LAMBDA_ARTIFACT_KEY := lambda/train-status-app.zip
+
 # ============================
 # Docker
 # ============================
@@ -75,6 +78,16 @@ backend-package:
 	cd $(BACKEND_DIR) && \
 	rm -f $(LAMBDA_ZIP) && \
 	zip $(LAMBDA_ZIP) $(LAMBDA_BINARY)
+
+backend-upload:
+	aws s3 cp \
+		$(BACKEND_DIR)/$(LAMBDA_ZIP) \
+		s3://$(LAMBDA_ARTIFACT_BUCKET)/$(LAMBDA_ARTIFACT_KEY)
+
+backend-deploy:
+	$(MAKE) backend-build
+	$(MAKE) backend-package
+	$(MAKE) backend-upload
 
 backend-clean:
 	rm -f $(BACKEND_DIR)/$(LAMBDA_BINARY)

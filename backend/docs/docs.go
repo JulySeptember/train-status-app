@@ -17,7 +17,7 @@ const docTemplate = `{
     "paths": {
         "/api/fares": {
             "get": {
-                "description": "Get IC card and ticket fare between two stations.",
+                "description": "Get IC card and ticket fare between two stations",
                 "produces": [
                     "application/json"
                 ],
@@ -114,6 +114,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
+                        "example": "odpt.Railway:Toei.Asakusa",
                         "description": "Route ID",
                         "name": "routeId",
                         "in": "path",
@@ -163,6 +164,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
+                        "example": "odpt.Station:Toei.Asakusa.Shimbashi",
                         "description": "Station ID",
                         "name": "stationId",
                         "in": "path",
@@ -240,6 +242,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
+                        "example": "1965Ka",
                         "description": "Train Number",
                         "name": "trainNumber",
                         "in": "path",
@@ -264,6 +267,15 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {

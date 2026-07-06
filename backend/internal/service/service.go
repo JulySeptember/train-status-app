@@ -16,13 +16,18 @@ var (
 	ErrFareNotFound    = errors.New("fare not found")
 )
 
+type TrainClient interface {
+	GetTrainStatus(ctx context.Context) ([]model.TrainStatus, error)
+	GetTrainLocations(ctx context.Context) ([]model.TrainLocation, error)
+}
+
 type Service struct {
-	client *client.Client
+	client TrainClient
 	assets *assets.Loader
 }
 
 func New(
-	c *client.Client,
+	c TrainClient,
 	a *assets.Loader,
 ) *Service {
 	return &Service{

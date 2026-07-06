@@ -84,7 +84,7 @@ info:
 paths:
   /api/fares:
     get:
-      description: Get IC card and ticket fare between two stations.
+      description: Get IC card and ticket fare between two stations
       parameters:
       - description: From station ID
         example: odpt.Station:Toei.Oedo.Daimon
@@ -144,6 +144,7 @@ paths:
     get:
       parameters:
       - description: Route ID
+        example: odpt.Railway:Toei.Asakusa
         in: path
         name: routeId
         required: true
@@ -176,6 +177,7 @@ paths:
     get:
       parameters:
       - description: Station ID
+        example: odpt.Station:Toei.Asakusa.Shimbashi
         in: path
         name: stationId
         required: true
@@ -226,6 +228,7 @@ paths:
     get:
       parameters:
       - description: Train Number
+        example: 1965Ka
         in: path
         name: trainNumber
         required: true
@@ -245,6 +248,12 @@ paths:
             type: object
         "404":
           description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "502":
+          description: Bad Gateway
           schema:
             additionalProperties:
               type: string
