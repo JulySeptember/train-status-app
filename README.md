@@ -1,452 +1,107 @@
-# 駅運行情報 Webアプリ 設計書
+# Train Status App
+
+東京都交通局が公開するオープンデータを利用した駅運行情報Webアプリです。
+
+運行情報・列車位置・駅時刻表・運賃・乗降者数などを取得し、リアルタイムな駅情報を閲覧できます。
+
+本プロジェクトは、AWSのサーバーレスアーキテクチャを採用し、TerraformによるIaC、GoによるREST API、React + TypeScriptによるSPAとして構築しています。
 
 ---
 
-# 概要
+# 主な機能
 
-東京都交通局が公開するオープンデータを利用し、都営地下鉄・東京さくらトラム（都電荒川線）・日暮里・舎人ライナーの運行情報をリアルタイムで表示するサーバーレスWebアプリ。
-
-AWSのサーバーレスサービスを利用し、TerraformによるIaC、GoによるREST API、React + TypeScriptによるSPAとして構築する。
-
-保守性・拡張性・型安全性を重視し、実務を意識した設計を採用する。
+- 運行情報一覧
+- 路線一覧
+- 路線ごとの駅一覧
+- 駅詳細
+  - 時刻表
+  - 乗降者数
+- 列車現在位置
+- 運賃検索
 
 ---
 
 # システム構成
 
 ```
-                    Browser
-                       │
-                       ▼
-              CloudFront (HTTPS)
-                /          \
-               /            \
-              ▼              ▼
-      S3 (Frontend)     API Gateway
-                              │
-                              ▼
-                       Lambda (Go)
-                              │
-                              ▼
-            東京都交通局 オープンデータ(JSON)
-```
-
-CloudFrontをアプリケーション全体の入口とする。
-
-- `/`
-- `/assets/*`
-
-はS3へ
-
-- `/api/*`
-
-はAPI Gatewayへルーティングする。
-
-ブラウザからは同一オリジンとなるため、CORS設定は不要。
-
----
-
-# アーキテクチャ
-
-```
-React
+Browser
    │
 CloudFront
-   │
-├── S3
-└── API Gateway
-        │
-     Lambda
-        │
-東京都交通局 オープンデータ
+   ├── S3 (Frontend)
+   └── API Gateway
+            │
+         Lambda
+      ├── 東京都交通局API
+      └── Assets(JSON)
 ```
 
 ---
 
-# 採用技術
-
-| Layer | Technology |
-|--------|------------|
-| Frontend | React 19 |
-| Build Tool | Vite |
-| Language | TypeScript |
-| Styling | Tailwind CSS v4 |
-| UI | shadcn/ui |
-| Routing | React Router |
-| API State | TanStack Query |
-| Validation | Zod |
-| Backend | Go |
-| HTTP | net/http |
-| Infrastructure | Terraform |
-| Hosting | Amazon S3 |
-| CDN | CloudFront |
-| API | API Gateway HTTP API |
-| Compute | AWS Lambda |
-| CI/CD | Makefile |
-| Local Development | Docker Compose |
-
----
-
-# ディレクトリ構成
-
-```
-train-status-app/
-
-├── frontend/
-│   ├── src/
-│   ├── package.json
-│   ├── vite.config.ts
-│   └── Dockerfile.dev
-│
-├── backend/
-│   ├── cmd/
-│   │   └── api/
-│   │       └── main.go
-│   │
-│   ├── internal/
-│   │   ├── client/
-│   │   ├── config/
-│   │   ├── handler/
-│   │   ├── logger/
-│   │   ├── middleware/
-│   │   ├── model/
-│   │   ├── router/
-│   │   └── service/
-│   │
-│   ├── go.mod
-│   ├── go.mod
-│   └── Dockerfile.dev
-│
-├── infra/
-│   ├── bootstrap/
-│   │   ├── provider.tf
-│   │   ├── s3.tf
-│   │   ├── dynamodb.tf
-│   │   └── backend.tf
-│   │
-│   ├── main/
-│   │   ├── frontend_s3.tf
-│   │   ├── backend_s3.tf
-│   │   ├── cloudfront.tf
-│   │   ├── api_gateway.tf
-│   │   ├── lambda.tf
-│   │   ├── iam.tf
-│   │   ├── backend.tf
-│   │   └── variables.tf
-│   │
-│   └── env/
-│       └── dev.tfvars
-│
-├── docker-compose.yml
-├── Makefile
-└── README.md
-```
-
----
-
-# AWS構成
+# 使用技術
 
 ## Frontend
 
-```
-React
-
-↓
-
-S3
-
-↓
-
-CloudFront
-```
-
-### 役割
-
-- SPA配信
-- HTTPS
-- CDN
-- 静的ファイルキャッシュ
-
----
+- React 19
+- TypeScript
+- Vite
+- Tailwind CSS v4
+- shadcn/ui
+- React Router
+- TanStack Query
+- Zod
 
 ## Backend
 
-```
-Browser
+- Go
+- net/http
+- Go Generics
 
-↓
+## Infrastructure
 
-CloudFront
-
-↓
-
-API Gateway
-
-↓
-
-Lambda
-
-↓
-
-東京都交通局 オープンデータ
-```
-
-Lambdaはデータベースを持たず、
-
-東京都交通局APIから取得したデータを加工して返却する。
-
----
-
-# CloudFrontキャッシュ
-
-CloudFrontはオリジンごとにキャッシュ設定を変更する。
-
-### フロントエンド
-
-```
-JS
-CSS
-画像
-フォント
-```
-
-長期間キャッシュ。
-
-### API
-
-```
-/api/*
-```
-
-TTLを0秒とし、毎回Lambdaへ転送する。
-
-これにより
-
-- 静的ファイルは高速配信
-- APIはリアルタイム取得
-
-を両立する。
-
----
-
-# Bootstrap
-
-Terraform初回のみ実行。
-
-作成するリソース
-
-```
-tfstate保存S3
-
-Terraform Lock用DynamoDB
-
-Lambda成果物保存S3
-```
-
-```
-bootstrap
-
-├── tfstate-bucket
-├── terraform-lock-table
-└── lambda-artifact-bucket
-```
-
----
-
-# Main Terraform
-
-管理対象
-
-- Frontend S3
-- CloudFront
+- AWS Lambda
 - API Gateway
-- Lambda
-- IAM
-- CloudWatch Logs
+- CloudFront
+- Amazon S3
+- Terraform
 
 ---
 
-# API一覧
+# 設計方針
+
+- サーバーレスアーキテクチャを採用
+- TerraformによるInfrastructure as Code
+- Handler / Service / Client の責務分離
+- Service層でデータ加工・集約を実施
+- Go Genericsを利用し共通処理を抽象化
+- TypeScript + Zodによる型安全
+- 将来的なGTFS・GTFS Realtime対応を考慮
 
 ---
 
-# 1. 運行情報
+# API
 
-```http
-GET /api/status
-```
-
-## 説明
-
-都営地下鉄・東京さくらトラム・日暮里・舎人ライナーの運行情報を取得します。
-
----
-
-# 2. 路線一覧
-
-```http
-GET /api/routes
-```
-
-## 説明
-
-利用可能な路線一覧を取得します。
-
-### レスポンス例
-
-```json
-[
-  {
-    "id": "asakusa",
-    "name": "都営浅草線"
-  },
-  {
-    "id": "mita",
-    "name": "都営三田線"
-  }
-]
-```
+| Method | Endpoint |
+|---------|----------|
+| GET | /api/status |
+| GET | /api/routes |
+| GET | /api/routes/{routeId}/stations |
+| GET | /api/stations/{stationId} |
+| GET | /api/trains/{trainNumber}/location |
+| GET | /api/fares |
 
 ---
 
-# 3. 路線ごとの駅一覧
+# ライセンス
 
-```http
-GET /api/routes/{routeId}/stations
-```
+本アプリは東京都交通局が提供するオープンデータを利用しています。
 
-## パスパラメータ
+このアプリは東京都交通局が提供するオープンデータを加工して利用しています。
 
-| Name | Description |
-|------|-------------|
-| routeId | 路線ID |
+**提供者**
 
-## 説明
+東京都交通局
 
-指定した路線に所属する駅一覧を取得します。
-
----
-
-# 4. 駅詳細
-
-```http
-GET /api/stations/{stationId}
-```
-
-## パスパラメータ
-
-| Name | Description |
-|------|-------------|
-| stationId | 駅ID |
-
-## 説明
-
-指定した駅の詳細情報を取得します。
-
-以下の情報をまとめて返します。
-
-- 駅情報
-- 駅時刻表
-- 年度別乗降者数
-
-時刻表の各列車には列車番号が含まれており、フロントでは時刻をクリックすると列車現在位置を取得できます。
-
-### レスポンス例
-
-```json
-{
-  "station": {
-    "id": "shimbashi",
-    "name": "新橋"
-  },
-  "timetable": [
-    {
-      "departureTime": "06:09",
-      "destination": "西馬込",
-      "trainNumber": "1001A"
-    }
-  ],
-  "passengers": [
-    {
-      "year": 2023,
-      "count": 108234
-    }
-  ]
-}
-```
-
----
-
-# 5. 列車現在位置
-
-```http
-GET /api/trains/{trainNumber}/location
-```
-
-## パスパラメータ
-
-| Name | Description |
-|------|-------------|
-| trainNumber | 列車番号 |
-
-## 説明
-
-指定した列車の現在位置・走行区間・遅延時間を取得します。
-
-駅時刻表の時刻をクリックした際に利用します。
-
-### レスポンス例
-
-```json
-{
-  "trainNumber": "1001A",
-  "fromStation": "新橋",
-  "toStation": "大門",
-  "delay": 120
-}
-```
-
----
-
-# 6. 運賃検索
-
-```http
-GET /api/fares
-```
-
-## クエリパラメータ
-
-| Name | Required | Description |
-|------|----------|-------------|
-| from | Yes | 出発駅ID |
-| to | Yes | 到着駅ID |
-
-## 例
-
-```http
-GET /api/fares?from=shimbashi&to=nishi-magome
-```
-
-## 説明
-
-指定した2駅間のIC運賃・切符運賃を取得します。
-
-### レスポンス例
-
-```json
-{
-  "from": "shimbashi",
-  "to": "nishi-magome",
-  "ticketFare": 220,
-  "icCardFare": 220
-}
-```
-
----
-
-# 利用する東京都交通局オープンデータ
-
-無料・認証不要で利用可能なJSONデータを利用する。
+**利用データ**
 
 - 運行情報
 - 駅情報
@@ -457,289 +112,8 @@ GET /api/fares?from=shimbashi&to=nishi-magome
 - 運賃情報
 - 乗降者数情報
 
-画像データ・PDFは利用対象外とする。
+**ライセンス**
 
----
+Creative Commons Attribution 4.0 International (CC BY 4.0)
 
-# 将来的な拡張
-
-将来的にはGTFSおよびGTFS Realtimeにも対応できる設計とする。
-
-### GTFS
-
-- 路線情報
-- 停車駅情報
-- ダイヤ情報
-- 便情報
-
-### GTFS Realtime
-
-- Trip Updates
-- Vehicle Positions
-- Service Alerts
-
-現時点では実装対象外。
-
----
-
-# Go設計
-
-```
-Handler
-
-↓
-
-Service
-
-↓
-
-Client
-
-↓
-
-東京都交通局API
-```
-
-## Client
-
-HTTP通信のみ担当。
-
-## Service
-
-- Filter
-- Map
-- Sort
-- データ加工
-- レスポンス生成
-
-副作用はClientへ閉じ込める。
-
----
-
-# ジェネリクス
-
-Go Genericsを積極的に利用する。
-
-例
-
-```
-Fetch[T any]()
-```
-
-利用箇所
-
-- JSONデコード
-- APIレスポンス
-- 共通ユーティリティ
-
----
-
-# 関数型プログラミング
-
-以下の考え方を取り入れる。
-
-- 小さな関数
-- 純粋関数優先
-- 副作用を最小化
-- データ変換を関数へ分離
-
-```
-取得
-
-↓
-
-Filter
-
-↓
-
-Map
-
-↓
-
-Sort
-
-↓
-
-Response
-```
-
----
-
-# フロントエンド設計
-
-```
-API
-
-↓
-
-Zod
-
-↓
-
-TypeScript
-
-↓
-
-React
-```
-
-APIレスポンスはunknownとして受け取り、
-
-Zodで検証後に型へ変換する。
-
----
-
-# 状態管理
-
-サーバーデータ
-
-- TanStack Query
-
-ローカル状態
-
-- useState
-- Context API
-
-必要になった場合のみZustandを導入する。
-
----
-
-# CORSを不要にする構成
-
-CloudFrontをアプリケーション入口に統一する。
-
-```
-example.com
-
-↓
-
-/
-
-↓
-
-S3
-
-----------------
-
-example.com
-
-↓
-
-/api/*
-
-↓
-
-API Gateway
-```
-
-ブラウザからは同一オリジンとなるため、
-
-CORS設定は不要。
-
----
-
-# CI/CD
-
-Makefileを共通入口とする。
-
-```
-test
-
-↓
-
-frontend build
-
-↓
-
-backend build
-
-↓
-
-Lambda ZIP作成
-
-↓
-
-Artifact S3 Upload
-
-↓
-
-Terraform Apply
-
-↓
-
-Lambda Update
-```
-
-GitHub Actions導入時もMakefileをそのまま利用する。
-
----
-
-# Docker
-
-Docker Composeをローカル開発専用として利用する。
-
-```
-React
-
-+
-
-Go API
-```
-
-AWS環境の再現は目的としない。
-
----
-
-# ライセンス表記
-
-本アプリは東京都交通局が公開するオープンデータを加工して利用するため、CC BY 4.0に基づくクレジット表記を行う。
-
-アプリ内の「ライセンス」または「このアプリについて」ページ、およびREADMEに以下を掲載する。
-
-```
-本アプリは東京都交通局が提供するオープンデータを利用しています。
-
-このアプリは、以下の著作物を改変して利用しています。
-
-提供者
-東京都交通局
-
-利用データ
-・運行情報
-・駅情報
-・路線情報
-・列車ロケーション情報
-・駅時刻表
-・列車時刻表
-・運賃情報
-・乗降者数情報
-
-ライセンス
-クリエイティブ・コモンズ 表示4.0 国際
 https://creativecommons.org/licenses/by/4.0/deed.ja
-```
-
-フッターには
-
-```
-データ提供：東京都交通局（CC BY 4.0）
-```
-
-へのリンクを表示する。
-
----
-
-# 設計方針
-
-- フロントエンド・バックエンド完全分離
-- CloudFrontを単一エントリーポイントとしCORS不要
-- サーバーレスアーキテクチャ
-- TerraformによるIaC
-- MakefileをCI/CDの共通入口として利用
-- Go Genericsを活用し重複コードを削減
-- 関数型プログラミングの考え方を採用
-- TypeScript + Zodによる型安全
-- 東京都交通局の無料オープンデータ(JSON)を利用
-- 将来的なGTFS・GTFS Realtime対応を考慮
-- データベースを持たない軽量構成
-- AWS無料利用枠でも運用しやすい構成
