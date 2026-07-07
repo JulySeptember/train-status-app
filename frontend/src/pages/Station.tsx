@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { ChevronDown, ChevronUp } from "lucide-react";
 
 import { api } from "@/api";
 
@@ -22,6 +23,7 @@ export default function Station() {
   });
 
   const [direction, setDirection] = useState("");
+  const [showPassengers, setShowPassengers] = useState(false);
 
   if (isPending) {
     return <Loading />;
@@ -64,11 +66,11 @@ export default function Station() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold">{data.name}</h1>
+        <h1 className="text-3xl font-bold text-white">{data.name}</h1>
       </div>
 
       <section className="space-y-4">
-        <h2 className="text-xl font-semibold">時刻表</h2>
+        <h2 className="text-xl font-semibold text-white">時刻表</h2>
 
         <Tabs value={selectedDirection} onValueChange={setDirection}>
           <TabsList>
@@ -89,9 +91,24 @@ export default function Station() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-xl font-semibold">乗降者数</h2>
+        <button
+          onClick={() => setShowPassengers((v) => !v)}
+          className="flex w-full items-center justify-between rounded-xl border border-[#30363d] bg-[#161b22] px-5 py-4 transition hover:bg-[#21262d]"
+        >
+          <span className="text-xl font-semibold text-white">年間乗降人員</span>
 
-        <PassengerTable passengers={data.passengers ?? []} />
+          {showPassengers ? (
+            <ChevronUp size={20} className="text-gray-400" />
+          ) : (
+            <ChevronDown size={20} className="text-gray-400" />
+          )}
+        </button>
+
+        {showPassengers && (
+          <div className="overflow-hidden rounded-xl border border-[#30363d] bg-[#0d1117] p-5">
+            <PassengerTable passengers={data.passengers ?? []} />
+          </div>
+        )}
       </section>
     </div>
   );

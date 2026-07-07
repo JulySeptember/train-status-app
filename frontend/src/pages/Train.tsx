@@ -37,13 +37,24 @@ export default function Train() {
 
   if (!data.available) {
     return (
-      <div className="space-y-4">
-        <h1 className="text-2xl font-bold">列車情報</h1>
+      <div className="rounded-xl border border-[#30363d] bg-[#161b22] p-8">
+        <h1 className="mb-4 text-2xl font-bold text-white">列車情報</h1>
 
-        <p>{data.message}</p>
+        <p className="mb-6 text-gray-300">{data.message}</p>
+
+        <div className="rounded-lg border border-[#30363d] bg-[#0d1117] p-5">
+          <h2 className="mb-3 text-lg font-semibold text-white">
+            考えられる理由
+          </h2>
+
+          <ul className="list-disc space-y-2 pl-5 text-sm text-gray-400">
+            <li>運行前または運行終了の列車です。</li>
+            <li>現在位置情報が配信されていません。</li>
+            <li>データ提供元で一時的に取得できない状態です。</li>
+          </ul>
+        </div>
       </div>
     );
   }
-
   return <TrainLocation train={data} />;
 }

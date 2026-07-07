@@ -2,7 +2,7 @@
 
 東京都交通局が公開するオープンデータを利用した鉄道運行情報Webアプリです。
 
-運行情報や列車位置などのリアルタイムデータと、駅時刻表・運賃・乗降者数などの静的データを取得し、各路線・駅の情報を閲覧できます。
+運行情報や列車位置などの動的データと、駅時刻表・運賃・乗降者数などの静的データを取得し、各路線・駅の情報を閲覧できます。
 
 以下の路線に対応しています。
 
@@ -36,12 +36,17 @@
 Browser
    │
 CloudFront
-   ├── S3 (Frontend)
-   └── API Gateway
-            │
-         AWS Lambda
-      ├── 東京都交通局オープンデータAPI
-      └── Static Assets (JSON)
+   ├── Default (*)
+   │       │
+   │       └── S3
+   │
+   └── /api/*
+           │
+       API Gateway
+           │
+       AWS Lambda
+           │
+       東京都交通局API
 ```
 
 ---
@@ -63,6 +68,8 @@ CloudFront
 
 - Go
 - net/http
+- REST API
+- JSON API
 
 ## Infrastructure
 
@@ -82,6 +89,7 @@ CloudFront
 - Service層でデータの加工・集約を実施
 - Go Genericsを利用した共通処理の抽象化
 - TypeScript + Zodによる型安全なデータ管理
+- Docker Composeによるローカル開発環境の統一
 - 将来的なGTFS / GTFS Realtimeへの拡張を考慮した設計
 
 ---
@@ -99,11 +107,33 @@ CloudFront
 
 ---
 
+# 開発環境
+
+Docker Composeを利用したローカル開発環境を構築しています。
+
+Frontend・Backendをコンテナ分離し、開発環境を統一しています。
+
+```text
+Docker Compose
+
+frontend
+ └── React + Vite
+      :5173
+
+backend
+ └── Go REST API
+      :8080
+
+```
+
+起動: make up
+
+---
+
+
 # ライセンス
 
-本アプリは東京都交通局が提供するオープンデータを利用しています。
-
-このアプリでは東京都交通局が提供するオープンデータを加工して利用しています。
+本アプリは東京都交通局が提供するオープンデータを加工して利用しています。
 
 **提供者**
 

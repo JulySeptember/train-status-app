@@ -1,15 +1,8 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
+import { Clock3, ArrowRight } from "lucide-react";
 
 import { type DirectionTimetable } from "@/types";
-
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 
 type Props = {
   weekday?: DirectionTimetable;
@@ -18,7 +11,7 @@ type Props = {
   saturdayHoliday?: DirectionTimetable;
 };
 
-function TimetableTable({
+function TimetableCard({
   title,
   timetable,
 }: {
@@ -26,32 +19,38 @@ function TimetableTable({
   timetable?: DirectionTimetable;
 }) {
   return (
-    <div className="flex-1">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="text-center">{title}</TableHead>
-          </TableRow>
-        </TableHeader>
+    <div className="overflow-hidden rounded-xl border border-[#30363d] bg-[#0d1117]">
+      <div className="flex items-center gap-2 border-b border-[#30363d] px-5 py-4">
+        <Clock3 size={18} className="text-[#2ea043]" />
 
-        <TableBody>
-          {timetable?.timetables.map((train) => (
-            <TableRow key={`${train.time}-${train.trainNumber}`}>
-              <TableCell className="text-center">
-                <Link to={`/trains/${train.trainNumber}`} className="block">
-                  {train.time}
-                </Link>
-              </TableCell>
-            </TableRow>
-          ))}
+        <h3 className="font-semibold text-white">{title}</h3>
+      </div>
 
-          {!timetable && (
-            <TableRow>
-              <TableCell className="text-center">-</TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
+      <div className="divide-y divide-[#30363d]">
+        {timetable?.timetables?.length ? (
+          timetable.timetables.map((train) => (
+            <Link
+              key={`${train.time}-${train.trainNumber}`}
+              to={`/trains/${train.trainNumber}`}
+              className="flex items-center justify-between px-5 py-4 transition hover:bg-[#161b22]"
+            >
+              <div>
+                <p className="text-2xl font-bold text-white">{train.time}</p>
+
+                <p className="mt-1 text-sm text-gray-400">
+                  列車番号 {train.trainNumber}
+                </p>
+              </div>
+
+              <ArrowRight size={18} className="text-gray-500" />
+            </Link>
+          ))
+        ) : (
+          <div className="py-10 text-center text-gray-500">
+            データがありません
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -62,20 +61,115 @@ export default function Timetable({
   holiday,
   saturdayHoliday,
 }: Props) {
+  const [tab, setTab] = useState<
+    "weekday" | "saturday" | "holiday" | "saturdayHoliday"
+  >("weekday");
+
   if (saturdayHoliday) {
     return (
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <TimetableTable title="平日" timetable={weekday} />
-        <TimetableTable title="土休日" timetable={saturdayHoliday} />
-      </div>
+      <>
+        {/* Mobile */}
+        <div className="lg:hidden">
+          <div className="mb-5 flex overflow-hidden rounded-xl border border-[#30363d] bg-[#161b22]">
+            <button
+              onClick={() => setTab("weekday")}
+              className={`flex-1 py-3 text-sm font-medium transition ${
+                tab === "weekday"
+                  ? "bg-[#1f6feb] text-white"
+                  : "text-gray-400 hover:bg-[#21262d]"
+              }`}
+            >
+              平日
+            </button>
+
+            <button
+              onClick={() => setTab("saturdayHoliday")}
+              className={`flex-1 py-3 text-sm font-medium transition ${
+                tab === "saturdayHoliday"
+                  ? "bg-[#1f6feb] text-white"
+                  : "text-gray-400 hover:bg-[#21262d]"
+              }`}
+            >
+              土休日
+            </button>
+          </div>
+
+          {tab === "weekday" && (
+            <TimetableCard title="平日" timetable={weekday} />
+          )}
+
+          {tab === "saturdayHoliday" && (
+            <TimetableCard title="土休日" timetable={saturdayHoliday} />
+          )}
+        </div>
+
+        {/* Desktop */}
+        <div className="hidden gap-6 lg:grid lg:grid-cols-2">
+          <TimetableCard title="平日" timetable={weekday} />
+          <TimetableCard title="土休日" timetable={saturdayHoliday} />
+        </div>
+      </>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-      <TimetableTable title="平日" timetable={weekday} />
-      <TimetableTable title="土曜" timetable={saturday} />
-      <TimetableTable title="休日" timetable={holiday} />
-    </div>
+    <>
+      {/* Mobile */}
+      <div className="lg:hidden">
+        <div className="mb-5 flex overflow-hidden rounded-xl border border-[#30363d] bg-[#161b22]">
+          <button
+            onClick={() => setTab("weekday")}
+            className={`flex-1 py-3 text-sm font-medium transition ${
+              tab === "weekday"
+                ? "bg-[#1f6feb] text-white"
+                : "text-gray-400 hover:bg-[#21262d]"
+            }`}
+          >
+            平日
+          </button>
+
+          <button
+            onClick={() => setTab("saturday")}
+            className={`flex-1 py-3 text-sm font-medium transition ${
+              tab === "saturday"
+                ? "bg-[#1f6feb] text-white"
+                : "text-gray-400 hover:bg-[#21262d]"
+            }`}
+          >
+            土曜
+          </button>
+
+          <button
+            onClick={() => setTab("holiday")}
+            className={`flex-1 py-3 text-sm font-medium transition ${
+              tab === "holiday"
+                ? "bg-[#1f6feb] text-white"
+                : "text-gray-400 hover:bg-[#21262d]"
+            }`}
+          >
+            休日
+          </button>
+        </div>
+
+        {tab === "weekday" && (
+          <TimetableCard title="平日" timetable={weekday} />
+        )}
+
+        {tab === "saturday" && (
+          <TimetableCard title="土曜" timetable={saturday} />
+        )}
+
+        {tab === "holiday" && (
+          <TimetableCard title="休日" timetable={holiday} />
+        )}
+      </div>
+
+      {/* Desktop */}
+      <div className="hidden gap-6 lg:grid lg:grid-cols-3">
+        <TimetableCard title="平日" timetable={weekday} />
+        <TimetableCard title="土曜" timetable={saturday} />
+        <TimetableCard title="休日" timetable={holiday} />
+      </div>
+    </>
   );
 }

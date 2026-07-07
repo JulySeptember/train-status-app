@@ -7,7 +7,7 @@ import type {
   TrainStatus,
 } from "./types";
 
-const API = import.meta.env.VITE_API_BASE_URL ?? "/api";
+const API = "/api";
 
 async function request<T>(url: string): Promise<T> {
   const res = await fetch(`${API}${url}`);
