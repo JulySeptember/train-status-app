@@ -12,7 +12,6 @@ import (
 var (
 	ErrExternalAPI     = errors.New("external api error")
 	ErrStationNotFound = errors.New("station not found")
-	ErrTrainNotFound   = errors.New("train not found")
 	ErrFareNotFound    = errors.New("fare not found")
 )
 
@@ -186,9 +185,15 @@ type StationDetail struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 
-	Timetable []Timetable `json:"timetable"`
+	Timetables []DirectionTimetable `json:"timetables"`
 
 	Passengers []Passenger `json:"passengers"`
+}
+
+type DirectionTimetable struct {
+	Calendar      string      `json:"calendar"`
+	RailDirection string      `json:"railDirection"`
+	Timetables    []Timetable `json:"timetables"`
 }
 
 type Timetable struct {
@@ -255,11 +260,26 @@ func (s *Service) GetStationDetail(
 	}
 
 	detail := &StationDetail{
-		ID:   station.SameAs,
-		Name: station.StationTitle.Ja,
+		ID:         station.SameAs,
+		Name:       station.StationTitle.Ja,
+		Timetables: make([]DirectionTimetable, 0),
+		Passengers: make([]Passenger, 0),
 	}
 
+	groups := make(map[string]*DirectionTimetable)
+
 	for _, tt := range stationTables {
+
+		key := tt.Calendar + "|" + tt.RailDirection
+
+		group, ok := groups[key]
+		if !ok {
+			group = &DirectionTimetable{
+				Calendar:      tt.Calendar,
+				RailDirection: tt.RailDirection,
+			}
+			groups[key] = group
+		}
 
 		for _, obj := range tt.StationTimetableObject {
 
@@ -270,23 +290,22 @@ func (s *Service) GetStationDetail(
 
 			destination := ""
 			if len(obj.DestinationStation) > 0 {
-
 				if st, ok := stationMap[obj.DestinationStation[0]]; ok {
 					destination = st.StationTitle.Ja
 				}
 			}
 
-			detail.Timetable = append(
-				detail.Timetable,
-				Timetable{
-					Time:        time,
-					TrainNumber: obj.TrainNumber,
-					Destination: destination,
-				},
-			)
+			group.Timetables = append(group.Timetables, Timetable{
+				Time:        time,
+				TrainNumber: obj.TrainNumber,
+				Destination: destination,
+			})
 		}
 	}
 
+	for _, g := range groups {
+		detail.Timetables = append(detail.Timetables, *g)
+	}
 	for _, survey := range passengers {
 
 		for _, p := range survey.PassengerSurveyObject {
@@ -318,6 +337,9 @@ type TrainLocation struct {
 	ToStation   string `json:"toStation"`
 
 	Delay int `json:"delay"`
+
+	Available bool   `json:"available"`
+	Message   string `json:"message"`
 }
 
 // =========================
@@ -360,6 +382,7 @@ func (s *Service) GetTrainLocation(
 		item := &TrainLocation{
 			TrainNumber: train.TrainNumber,
 			Delay:       train.Delay,
+			Available:   true,
 		}
 
 		if railway, ok := railwayMap[train.Railway]; ok {
@@ -381,7 +404,12 @@ func (s *Service) GetTrainLocation(
 		return item, nil
 	}
 
-	return nil, ErrTrainNotFound
+	return &TrainLocation{
+		TrainNumber: trainNumber,
+		Available:   false,
+		Message:     "現在この列車の運行情報は取得できません",
+	}, nil
+
 }
 
 // =========================

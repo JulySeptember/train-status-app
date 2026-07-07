@@ -310,6 +310,23 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "service.DirectionTimetable": {
+            "type": "object",
+            "properties": {
+                "calendar": {
+                    "type": "string"
+                },
+                "railDirection": {
+                    "type": "string"
+                },
+                "timetables": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/service.Timetable"
+                    }
+                }
+            }
+        },
         "service.Fare": {
             "type": "object",
             "properties": {
@@ -375,10 +392,10 @@ const docTemplate = `{
                         "$ref": "#/definitions/service.Passenger"
                     }
                 },
-                "timetable": {
+                "timetables": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/service.Timetable"
+                        "$ref": "#/definitions/service.DirectionTimetable"
                     }
                 }
             }
@@ -400,10 +417,16 @@ const docTemplate = `{
         "service.TrainLocation": {
             "type": "object",
             "properties": {
+                "available": {
+                    "type": "boolean"
+                },
                 "delay": {
                     "type": "integer"
                 },
                 "fromStation": {
+                    "type": "string"
+                },
+                "message": {
                     "type": "string"
                 },
                 "railway": {

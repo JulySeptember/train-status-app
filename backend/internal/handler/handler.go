@@ -282,17 +282,6 @@ func (h *Handler) TrainLocation(
 			return
 		}
 
-		if errors.Is(err, service.ErrTrainNotFound) {
-			writeJSON(
-				w,
-				http.StatusNotFound,
-				map[string]string{
-					"error": err.Error(),
-				},
-			)
-			return
-		}
-
 		writeError(w, err)
 		return
 	}

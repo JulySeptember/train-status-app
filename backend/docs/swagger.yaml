@@ -1,5 +1,16 @@
 basePath: /
 definitions:
+  service.DirectionTimetable:
+    properties:
+      calendar:
+        type: string
+      railDirection:
+        type: string
+      timetables:
+        items:
+          $ref: '#/definitions/service.Timetable'
+        type: array
+    type: object
   service.Fare:
     properties:
       from:
@@ -42,9 +53,9 @@ definitions:
         items:
           $ref: '#/definitions/service.Passenger'
         type: array
-      timetable:
+      timetables:
         items:
-          $ref: '#/definitions/service.Timetable'
+          $ref: '#/definitions/service.DirectionTimetable'
         type: array
     type: object
   service.Timetable:
@@ -58,9 +69,13 @@ definitions:
     type: object
   service.TrainLocation:
     properties:
+      available:
+        type: boolean
       delay:
         type: integer
       fromStation:
+        type: string
+      message:
         type: string
       railway:
         type: string

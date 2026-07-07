@@ -1,10 +1,10 @@
 # Train Status App
 
-東京都交通局が公開するオープンデータを利用した駅運行情報Webアプリです。
+東京都交通局が公開するオープンデータを利用した鉄道運行情報Webアプリです。
 
-運行情報・列車位置・駅時刻表・運賃・乗降者数などを取得し、リアルタイムな駅情報を閲覧できます。
+運行情報や列車位置などのリアルタイムデータと、駅時刻表・運賃・乗降者数などの静的データを取得し、各路線・駅の情報を閲覧できます。
 
-以下の路線の運行情報・列車位置・駅情報・時刻表・運賃・乗降者数を閲覧できます。
+以下の路線に対応しています。
 
 - 都営浅草線
 - 都営三田線
@@ -13,7 +13,7 @@
 - 東京さくらトラム（都電荒川線）
 - 日暮里・舎人ライナー
 
-本プロジェクトは、AWSのサーバーレスアーキテクチャを採用し、TerraformによるIaC、GoによるREST API、React + TypeScriptによるSPAとして構築しています。
+本プロジェクトは、AWSのサーバーレスアーキテクチャを採用し、TerraformによるInfrastructure as Code（IaC）、GoによるREST API、React + TypeScriptによるSPAとして構築しています。
 
 ---
 
@@ -23,25 +23,25 @@
 - 路線一覧
 - 路線ごとの駅一覧
 - 駅詳細
-  - 時刻表
+  - 時刻表（方面・平日・土休日別）
   - 乗降者数
-- 列車現在位置
+- 列車現在位置検索
 - 運賃検索
 
 ---
 
 # システム構成
 
-```
+```text
 Browser
    │
 CloudFront
    ├── S3 (Frontend)
    └── API Gateway
             │
-         Lambda
-      ├── 東京都交通局API
-      └── Assets(JSON)
+         AWS Lambda
+      ├── 東京都交通局オープンデータAPI
+      └── Static Assets (JSON)
 ```
 
 ---
@@ -63,13 +63,12 @@ CloudFront
 
 - Go
 - net/http
-- Go Generics
 
 ## Infrastructure
 
 - AWS Lambda
-- API Gateway
-- CloudFront
+- Amazon API Gateway
+- Amazon CloudFront
 - Amazon S3
 - Terraform
 
@@ -78,25 +77,25 @@ CloudFront
 # 設計方針
 
 - サーバーレスアーキテクチャを採用
-- TerraformによるInfrastructure as Code
+- TerraformによるInfrastructure as Code（IaC）
 - Handler / Service / Client の責務分離
-- Service層でデータ加工・集約を実施
-- Go Genericsを利用し共通処理を抽象化
-- TypeScript + Zodによる型安全
-- 将来的なGTFS・GTFS Realtime対応を考慮
+- Service層でデータの加工・集約を実施
+- Go Genericsを利用した共通処理の抽象化
+- TypeScript + Zodによる型安全なデータ管理
+- 将来的なGTFS / GTFS Realtimeへの拡張を考慮した設計
 
 ---
 
 # API
 
-| Method | Endpoint |
-|---------|----------|
-| GET | /api/status |
-| GET | /api/routes |
-| GET | /api/routes/{routeId}/stations |
-| GET | /api/stations/{stationId} |
-| GET | /api/trains/{trainNumber}/location |
-| GET | /api/fares |
+| Method | Endpoint | Description |
+|---------|----------|-------------|
+| GET | `/api/status` | 運行情報一覧 |
+| GET | `/api/routes` | 路線一覧 |
+| GET | `/api/routes/{routeId}/stations` | 路線ごとの駅一覧 |
+| GET | `/api/stations/{stationId}` | 駅詳細（時刻表・乗降者数） |
+| GET | `/api/trains/{trainNumber}/location` | 列車現在位置 |
+| GET | `/api/fares?from={fromStation}&to={toStation}` | 運賃検索 |
 
 ---
 
@@ -104,17 +103,17 @@ CloudFront
 
 本アプリは東京都交通局が提供するオープンデータを利用しています。
 
-このアプリは東京都交通局が提供するオープンデータを加工して利用しています。
+このアプリでは東京都交通局が提供するオープンデータを加工して利用しています。
 
 **提供者**
 
-東京都交通局
+- 東京都交通局
 
 **利用データ**
 
 - 運行情報
-- 駅情報
 - 路線情報
+- 駅情報
 - 列車ロケーション情報
 - 駅時刻表
 - 列車時刻表
@@ -123,6 +122,6 @@ CloudFront
 
 **ライセンス**
 
-Creative Commons Attribution 4.0 International (CC BY 4.0)
+Creative Commons Attribution 4.0 International（CC BY 4.0）
 
-https://creativecommons.org/licenses/by/4.0/deed.ja
+<https://creativecommons.org/licenses/by/4.0/deed.ja>
