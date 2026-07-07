@@ -30,19 +30,6 @@ func (m *mockClient) GetTrainLocations(
 	return m.trainLocations, m.locErr
 }
 
-func newTestService() *Service {
-
-	loader, err := assets.New()
-	if err != nil {
-		panic(err)
-	}
-
-	return New(
-		&mockClient{},
-		loader,
-	)
-}
-
 func TestAssociateBy(t *testing.T) {
 
 	type sample struct {
@@ -337,8 +324,8 @@ func TestGetStationDetail(t *testing.T) {
 		)
 	}
 
-	if result.Timetable == nil {
-		t.Fatal("timetable is nil")
+	if result.Timetables == nil {
+		t.Fatal("timetables is nil")
 	}
 
 	if result.Passengers == nil {
@@ -408,8 +395,8 @@ func TestGetStationDetailTimetable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(result.Timetable) == 0 {
-		t.Fatal("expected timetable")
+	if len(result.Timetables) == 0 {
+		t.Fatal("expected timetables")
 	}
 }
 
@@ -518,16 +505,21 @@ func TestGetTrainLocationNotFound(t *testing.T) {
 		loader,
 	)
 
-	_, err = svc.GetTrainLocation(
+	result, err := svc.GetTrainLocation(
 		context.Background(),
 		"99999",
 	)
 
-	if !errors.Is(err, ErrTrainNotFound) {
-		t.Fatalf(
-			"expected ErrTrainNotFound, got %v",
-			err,
-		)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if result.Available {
+		t.Fatal("expected unavailable train")
+	}
+
+	if result.Message == "" {
+		t.Fatal("expected message")
 	}
 }
 

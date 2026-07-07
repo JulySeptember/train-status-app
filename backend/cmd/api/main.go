@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+
 	_ "train-status-app/backend/docs"
 
 	"train-status-app/backend/assets"
@@ -50,7 +51,9 @@ func main() {
 		return
 	}
 
-	// Local
+	// LocalのみCORSを有効化
+	app = middleware.CORS(app)
+
 	addr := ":" + cfg.Port
 
 	log.Printf("Server started on %s", addr)
