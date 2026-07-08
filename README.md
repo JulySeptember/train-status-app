@@ -2,9 +2,18 @@
 
 東京都交通局が公開するオープンデータを利用した鉄道運行情報Webアプリです。
 
+# 🌍 Live Demo
+
+| Service | URL |
+| --- | --- |
+| Application | https://d2ck0n8si4rgsn.cloudfront.net |
+| Swagger UI | https://a2y4udf8gb.execute-api.ap-northeast-1.amazonaws.com/swagger/index.html |
+
+---
+
 運行情報や列車位置などの動的データと、駅時刻表・運賃・乗降者数などの静的データを取得し、各路線・駅の情報を閲覧できます。
 
-以下の路線に対応しています。
+# 対応路線
 
 - 都営浅草線
 - 都営三田線
@@ -27,6 +36,7 @@
   - 乗降者数
 - 列車現在位置検索
 - 運賃検索
+- SwaggerによるAPIドキュメント
 
 ---
 
@@ -38,15 +48,15 @@ Browser
 CloudFront
    ├── Default (*)
    │       │
-   │       └── S3
+   │       └── Amazon S3
    │
    └── /api/*
            │
-       API Gateway
+     Amazon API Gateway
            │
        AWS Lambda
            │
-       東京都交通局API
+東京都交通局オープンデータAPI
 ```
 
 ---
@@ -62,33 +72,34 @@ CloudFront
 - shadcn/ui
 - React Router
 - TanStack Query
-- Zod
 
 ## Backend
 
-- Go
+- Go 1.26
 - net/http
 - REST API
 - JSON API
+- swaggo (Swagger/OpenAPI)
 
 ## Infrastructure
 
+- Terraform
 - AWS Lambda
-- Amazon API Gateway
+- Amazon API Gateway (HTTP API)
 - Amazon CloudFront
 - Amazon S3
-- Terraform
+- IAM
 
 ---
 
 # 設計方針
 
-- サーバーレスアーキテクチャを採用
+- AWS Lambdaを利用したサーバーレスアーキテクチャ
 - TerraformによるInfrastructure as Code（IaC）
-- Handler / Service / Client の責務分離
+- Handler / Service / Clientによる責務分離
 - Service層でデータの加工・集約を実施
 - Go Genericsを利用した共通処理の抽象化
-- TypeScript + Zodによる型安全なデータ管理
+- TypeScriptによる型安全なデータ管理
 - Docker Composeによるローカル開発環境の統一
 - 将来的なGTFS / GTFS Realtimeへの拡張を考慮した設計
 
@@ -104,6 +115,8 @@ CloudFront
 | GET | `/api/stations/{stationId}` | 駅詳細（時刻表・乗降者数） |
 | GET | `/api/trains/{trainNumber}/location` | 列車現在位置 |
 | GET | `/api/fares?from={fromStation}&to={toStation}` | 運賃検索 |
+
+詳細なAPI仕様はSwagger UIから確認できます。
 
 ---
 
@@ -123,13 +136,15 @@ frontend
 backend
  └── Go REST API
       :8080
-
 ```
 
-起動: make up
+起動
+
+```bash
+make up
+```
 
 ---
-
 
 # ライセンス
 
@@ -155,3 +170,5 @@ backend
 Creative Commons Attribution 4.0 International（CC BY 4.0）
 
 <https://creativecommons.org/licenses/by/4.0/deed.ja>
+
+本アプリで利用している東京都交通局オープンデータの著作権は東京都交通局に帰属します。

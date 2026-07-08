@@ -46,7 +46,7 @@ func main() {
 
 	// AWS Lambda
 	if _, ok := os.LookupEnv("AWS_LAMBDA_RUNTIME_API"); ok {
-		adapter := httpadapter.New(app)
+		adapter := httpadapter.NewV2(app)
 		lambda.Start(adapter.ProxyWithContext)
 		return
 	}
