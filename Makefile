@@ -6,14 +6,17 @@ FRONTEND_DIR := frontend
 BACKEND_DIR := backend
 
 BOOTSTRAP_DIR := infra/bootstrap
-INFRA_DIR := infra/main
+MAIN_DIR := infra/main
+
 TF_ENV_FILE := ../env/dev.tfvars
 
 LAMBDA_BINARY := bootstrap
 LAMBDA_ZIP := lambda.zip
 
-LAMBDA_ARTIFACT_BUCKET := train-status-app-july-backend-artifacts
-LAMBDA_ARTIFACT_KEY := lambda/train-status-app.zip
+FRONTEND_BUCKET := train-status-app-dev-frontend-assets
+
+LAMBDA_ARTIFACT_BUCKET := train-status-app-dev-lambda-artifacts
+LAMBDA_ARTIFACT_KEY := lambda/bootstrap.zip
 
 # ============================
 # Docker
@@ -42,10 +45,12 @@ frontend-shell:
 backend-shell:
 	docker exec -it train-status-backend sh
 
-
 # ============================
 # Frontend
 # ============================
+
+frontend-lint:
+	cd $(FRONTEND_DIR) && npm run lint
 
 frontend-dev:
 	cd $(FRONTEND_DIR) && npm run dev
@@ -53,9 +58,22 @@ frontend-dev:
 frontend-build:
 	cd $(FRONTEND_DIR) && npm run build
 
-frontend-lint:
-	cd $(FRONTEND_DIR) && npm run lint
+frontend-upload:
+	aws s3 sync \
+		$(FRONTEND_DIR)/dist/ \
+		s3://$(FRONTEND_BUCKET) \
+		--delete
 
+frontend-invalidate:
+	cd $(MAIN_DIR) && \
+	aws cloudfront create-invalidation \
+		--distribution-id "$$(terraform output -raw cloudfront_distribution_id)" \
+		--paths "/*"		
+
+frontend-deploy:
+	$(MAKE) frontend-build
+	$(MAKE) frontend-upload
+	$(MAKE) frontend-invalidate
 # ============================
 # Backend
 # ============================
@@ -107,38 +125,43 @@ tf-bootstrap-validate:
 	cd $(BOOTSTRAP_DIR) && terraform validate
 
 tf-bootstrap-plan:
-	cd $(BOOTSTRAP_DIR) && terraform plan
+	cd $(BOOTSTRAP_DIR) && terraform plan \
+	-var-file=$(TF_ENV_FILE)
 
 tf-bootstrap-apply:
-	cd $(BOOTSTRAP_DIR) && terraform apply -auto-approve
+	cd $(BOOTSTRAP_DIR) && terraform apply \
+	-auto-approve \
+	-var-file=$(TF_ENV_FILE)
 
 tf-bootstrap-destroy:
-	cd $(BOOTSTRAP_DIR) && terraform destroy -auto-approve
+	cd $(BOOTSTRAP_DIR) && terraform destroy \
+	-auto-approve \
+	-var-file=$(TF_ENV_FILE)
 
 # ============================
 # Terraform Main
 # ============================
 
-tf-init:
-	cd $(INFRA_DIR) && terraform init
+tf-main-init:
+	cd $(MAIN_DIR) && terraform init
 
-tf-fmt:
-	cd $(INFRA_DIR) && terraform fmt -recursive
+tf-main-fmt:
+	cd $(MAIN_DIR) && terraform fmt -recursive
 
-tf-validate:
-	cd $(INFRA_DIR) && terraform validate
+tf-main-validate:
+	cd $(MAIN_DIR) && terraform validate
 
-tf-plan:
-	cd $(INFRA_DIR) && terraform plan \
+tf-main-plan:
+	cd $(MAIN_DIR) && terraform plan \
 	-var-file=$(TF_ENV_FILE)
 
-tf-apply:
-	cd $(INFRA_DIR) && terraform apply \
+tf-main-apply:
+	cd $(MAIN_DIR) && terraform apply \
 	-auto-approve \
 	-var-file=$(TF_ENV_FILE)
 
-tf-destroy:
-	cd $(INFRA_DIR) && terraform destroy \
+tf-main-destroy:
+	cd $(MAIN_DIR) && terraform destroy \
 	-auto-approve \
 	-var-file=$(TF_ENV_FILE)
 

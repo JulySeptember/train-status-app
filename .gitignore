@@ -30,7 +30,7 @@ frontend/dist/
 # ============================
 backend/*.exe
 backend/*.out
-bootstrap
+backend/bootstrap
 lambda.zip
 
 # ============================
