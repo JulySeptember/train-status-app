@@ -75,7 +75,7 @@ CloudFront
 
 ## Backend
 
-- Go 1.26
+- Go 
 - net/http
 - REST API
 - JSON API
@@ -99,9 +99,7 @@ CloudFront
 - Handler / Service / Clientによる責務分離
 - Service層でデータの加工・集約を実施
 - Go Genericsを利用した共通処理の抽象化
-- TypeScriptによる型安全なデータ管理
 - Docker Composeによるローカル開発環境の統一
-- 将来的なGTFS / GTFS Realtimeへの拡張を考慮した設計
 
 ---
 
