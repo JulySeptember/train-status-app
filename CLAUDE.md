@@ -48,6 +48,18 @@ cd backend && swag init -g cmd/api/main.go -o docs
 - `make tf-main-plan` / `tf-main-apply`: `infra/main` を `infra/env/dev.tfvars` で適用する。`tf-*-apply` / `destroy` は `-auto-approve` 付き
 - `infra/bootstrap`: tfstate 用 S3・DynamoDB と Lambda アーティファクト用 S3 を作る
 
+### 本番 Lambda の調査（読み取りのみ）
+
+```bash
+aws logs filter-log-events --region ap-northeast-1 \
+  --log-group-name /aws/lambda/train-status-app-dev-api \
+  --filter-pattern '"REPORT"'   # Init Duration / Max Memory Used を確認
+```
+
+### Git / PR
+
+ブランチを切る・PR を作る前に `git fetch` と `gh pr list --state all` で main と PR の状態を確認する（`gh` は導入済み）。
+
 ## アーキテクチャ
 
 ### バックエンド（`backend/`, Go 1.25, 標準 `net/http`）
