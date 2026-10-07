@@ -1,0 +1,74 @@
+name: Deploy
+
+# ci.yml から、main への push で検証が通ったあとに呼ばれる。
+# 変更のあった領域を backend（S3 へアップロード）→ terraform apply（Lambda に反映）→ frontend の順に反映する。
+on:
+  workflow_call:
+    inputs:
+      backend:
+        type: boolean
+        required: true
+      frontend:
+        type: boolean
+        required: true
+      infra:
+        type: boolean
+        required: true
+
+env:
+  AWS_REGION: ap-northeast-1
+  # ロールは infra/bootstrap/github_oidc.tf で作っている。ARN は秘密の値ではない
+  AWS_DEPLOY_ROLE_ARN: arn:aws:iam::015060879504:role/train-status-app-dev-github-deploy
+  # ci.yml の TERRAFORM_VERSION と合わせる
+  TERRAFORM_VERSION: 1.15.7
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "0"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ env.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: actions/setup-go@v7
+        if: inputs.backend
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - uses: actions/setup-node@v7
+        if: inputs.frontend
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # frontend の invalidate でも terraform output を使うので、常に init する
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - run: make tf-main-init
+
+      - name: backend
+        if: inputs.backend
+        run: make backend-deploy
+
+      - name: terraform apply
+        if: inputs.backend || inputs.infra
+        run: make tf-main-apply
+
+      - name: frontend
+        if: inputs.frontend
+        run: |
+          (cd frontend && npm ci)
+          make frontend-deploy

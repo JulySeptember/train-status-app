@@ -45,6 +45,8 @@ crash.log
 # Terraform variable files
 *.tfvars
 !infra/env/*.example.tfvars
+# CD が参照する。秘密の値は入れない
+!infra/env/dev.tfvars
 
 # Terraform plan artifacts
 infra/plan.tfplan
