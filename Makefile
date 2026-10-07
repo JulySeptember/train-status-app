@@ -87,6 +87,9 @@ backend-test:
 backend-vet:
 	cd $(BACKEND_DIR) && go vet ./...
 
+backend-generate:
+	cd $(BACKEND_DIR) && go generate ./assets
+
 backend-build:
 	cd $(BACKEND_DIR) && \
 	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 \
