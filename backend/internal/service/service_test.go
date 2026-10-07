@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -484,6 +485,72 @@ func TestGetStationDetailTimetable(t *testing.T) {
 
 	if len(result.Timetables) == 0 {
 		t.Fatal("expected timetables")
+	}
+}
+
+// 方面は上り → 下り → それ以外、ダイヤ種別は平日 → 土曜 → 休日 → 土休日の順に返す
+func TestGetStationDetailTimetableOrder(t *testing.T) {
+
+	loader, err := assets.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	svc := New(
+		&mockClient{},
+		loader,
+	)
+
+	cases := map[string][]string{
+		"odpt.Station:Toei.Mita.Kasuga": {
+			"Northbound|Weekday",
+			"Northbound|SaturdayHoliday",
+			"Southbound|Weekday",
+			"Southbound|SaturdayHoliday",
+		},
+		// 荒川線は土曜・休日が別ダイヤ
+		"odpt.Station:Toei.Arakawa.Minowabashi": {
+			"Toei.Waseda|Weekday",
+			"Toei.Waseda|Saturday",
+			"Toei.Waseda|Holiday",
+		},
+		// 都庁前は上り・下り以外の方面（光が丘方面）を持つ
+		"odpt.Station:Toei.Oedo.Tochomae": {
+			"OuterLoop|Weekday",
+			"OuterLoop|SaturdayHoliday",
+			"InnerLoop|Weekday",
+			"InnerLoop|SaturdayHoliday",
+			"Toei.Hikarigaoka|Weekday",
+			"Toei.Hikarigaoka|SaturdayHoliday",
+		},
+	}
+
+	short := func(id string) string {
+		return id[strings.Index(id, ":")+1:]
+	}
+
+	for stationID, want := range cases {
+
+		// map の反復順に依存していないことを確かめるため、複数回取得する
+		for range 20 {
+
+			result, err := svc.GetStationDetail(
+				context.Background(),
+				stationID,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			got := make([]string, 0, len(result.Timetables))
+			for _, tt := range result.Timetables {
+				got = append(got, short(tt.RailDirection)+"|"+short(tt.Calendar))
+			}
+
+			if !slices.Equal(got, want) {
+				t.Fatalf("%s: expected %v, got %v", stationID, want, got)
+			}
+		}
 	}
 }
 
