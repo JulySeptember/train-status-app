@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"maps"
 	"slices"
 	"time"
 
@@ -190,30 +191,59 @@ func (s *Service) GetStations(
 	routeID string,
 ) ([]Station, error) {
 
-	found := false
+	idx := slices.IndexFunc(
+		s.assets.Railways(),
+		func(r model.Railway) bool {
+			return r.SameAs == routeID
+		},
+	)
 
-	for _, railway := range s.assets.Railways() {
-		if railway.SameAs == routeID {
-			found = true
-			break
-		}
-	}
-
-	if !found {
+	if idx < 0 {
 		return nil, ErrStationNotFound
 	}
 
-	items := make([]Station, 0)
+	railway := s.assets.Railways()[idx]
+
+	stationMap := make(map[string]model.Station)
 
 	for _, station := range s.assets.Stations() {
+		if station.Railway == routeID {
+			stationMap[station.SameAs] = station
+		}
+	}
 
-		if station.Railway != routeID {
+	order := slices.Clone(railway.StationOrder)
+
+	slices.SortStableFunc(order, func(a, b model.StationOrder) int {
+		return a.Index - b.Index
+	})
+
+	items := make([]Station, 0, len(stationMap))
+
+	// 路線上の駅順に並べる。
+	// 大江戸線は環状部と放射部の分岐点（都庁前）が2回現れるため、最初の出現だけを使う
+	for _, o := range order {
+
+		station, ok := stationMap[o.Station]
+		if !ok {
 			continue
 		}
 
 		items = append(items, Station{
 			ID:   station.SameAs,
 			Name: station.StationTitle.Ja,
+		})
+
+		delete(stationMap, o.Station)
+	}
+
+	// 駅順に含まれない駅があれば、ID 順で末尾に加える
+	rest := slices.Sorted(maps.Keys(stationMap))
+
+	for _, id := range rest {
+		items = append(items, Station{
+			ID:   id,
+			Name: stationMap[id].StationTitle.Ja,
 		})
 	}
 
