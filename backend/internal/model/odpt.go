@@ -145,12 +145,12 @@ type StationTimetable struct {
 	StationTimetableObject []StationTimetableEntry `json:"odpt:stationTimetableObject"`
 }
 
+// StationTimetableEntry は駅時刻表の1列車分。
+// 約12万件をメモリに常駐させるため、アプリで使う項目だけを持つ
+// （番線・始発/終着フラグ・備考などは持たない）。
 type StationTimetableEntry struct {
 	ArrivalTime   string `json:"odpt:arrivalTime,omitempty"`
 	DepartureTime string `json:"odpt:departureTime,omitempty"`
-
-	ArrivalPlatform   string `json:"odpt:arrivalPlatform,omitempty"`
-	DeparturePlatform string `json:"odpt:departurePlatform,omitempty"`
 
 	Train string `json:"odpt:train,omitempty"`
 
@@ -159,11 +159,6 @@ type StationTimetableEntry struct {
 	TrainNumber string `json:"odpt:trainNumber,omitempty"`
 
 	DestinationStation []string `json:"odpt:destinationStation,omitempty"`
-
-	IsOrigin bool `json:"odpt:isOrigin,omitempty"`
-	IsLast   bool `json:"odpt:isLast,omitempty"`
-
-	Note string `json:"odpt:note,omitempty"`
 }
 
 // =========================

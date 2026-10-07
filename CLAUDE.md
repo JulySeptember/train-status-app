@@ -39,7 +39,11 @@ cd backend && swag init -g cmd/api/main.go -o docs
 
 ### 静的データの更新
 
-`backend/scripts/update_assets.sh` が ODPT から `backend/assets/*.json` を取り直す。
+`backend/scripts/update_assets.sh` が ODPT から `backend/assets/*.json` を取り直す。`station_timetable.json` を更新したら、埋め込み用の軽量データを再生成する（忘れると `assets` のテストが失敗する）:
+
+```bash
+make backend-generate   # = cd backend && go generate ./assets
+```
 
 ### デプロイ（AWS に反映される操作。実行前にユーザーへ確認する）
 
@@ -71,7 +75,7 @@ PR では `.github/workflows/ci.yml` が変更のあった領域だけを検証�
   - `handler` は service のセンチネルエラー（`ErrStationNotFound`、`ErrTrainNotFound`、`ErrExternalAPI` など）を HTTP ステータスに変換する
   - `service` はデータの加工・集約を担い、`model`（ODPT JSON-LD そのままの型）をフロント向けの DTO に変換する。DTO は service.go に定義する
   - `client` で外部 API を呼ぶのは運行情報（`odpt:TrainInformation`）と列車位置（`odpt:Train`）だけ。共通処理はジェネリクスの `fetch[T]`
-- `assets/`: ODPT の静的データ（路線・駅・運賃・駅時刻表・列車時刻表・乗降人員）を `go:embed` で埋め込み、起動時に全件 `json.Unmarshal` する。`station_timetable.json` は約25MBあり、Lambda のコールドスタートの主な要因になっている
+- `assets/`: ODPT の静的データ（路線・駅・運賃・駅時刻表・列車時刻表・乗降人員・列車種別）を `go:embed` で埋め込み、起動時に全件読み込む。駅時刻表だけは約25MBの `station_timetable.json` を埋め込まず、使う項目に絞って文字列表にまとめた `station_timetable.gob`（`assets/slim`、`cmd/gen-assets` で生成）を埋め込む。Lambda のコールドスタートを短くするため。`model.StationTimetableEntry` も約12万件が常駐するので、使う項目以外を足さない
 - `internal/calendar`: 運行日（3時前は前日扱い）と、その日に適用されるダイヤ種別（`odpt.Calendar:*`）を判定する。祝日は祝日法に基づいて計算する
 - テストは `service` と `calendar` にあり、service のテストは `mockClient` と実際の embed アセットを使う
 
