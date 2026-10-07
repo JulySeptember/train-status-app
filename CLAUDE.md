@@ -37,6 +37,8 @@ cd backend && go test ./internal/service -run TestGetTrainLocation -v
 cd backend && swag init -g cmd/api/main.go -o docs
 ```
 
+手元の `swag` が go.mod の swaggo/swag と違うバージョンだと CI で差分が出る。`go run github.com/swaggo/swag/cmd/swag@<go.mod のバージョン> init -g cmd/api/main.go -o docs` で実行する。
+
 ### 静的データの更新
 
 `backend/scripts/update_assets.sh` が ODPT から `backend/assets/*.json` を取り直す。`station_timetable.json` / `train_timetable.json` を更新したら、埋め込み用の軽量データを再生成する（忘れると `assets` のテストが失敗する）:
@@ -91,6 +93,7 @@ PR では `.github/workflows/ci.yml` が変更のあった領域だけを検証�
 - `odpt:Train` で `toStation` が null の列車は `fromStation` に停車中
 - 路線によって「土曜・休日」が別ダイヤのものと「土休日」にまとめられたものがある（フロントの `Timetable.tsx` も両方に対応している）
 - 時刻表の行先には直通運転先（京急・京成・東急など他社）の駅が含まれるが、他社の駅データは公開 API から取れない。駅名は `service/through_service.go` の辞書で引く。assets 更新後に起動ログへ `unknown destination station` が出たら辞書に追加する
+- 駅データ（`station.json`）には乗り換え先の情報がない。経路探索の乗り換えは同じ名前の駅から作り、名前が違う乗り換え駅は `service/transfer.go` の `differentNameTransfers` に手で足す
 - 大江戸線の環状部（外回り・内回り）は、駅時刻表に行先（`odpt:destinationStation`）が入っていない
 - ODPT 公開 API は1回の取得で最大1,000件しか返さない。`railway_fare.json` はちょうど1,000件で、途中までしか取れていない。列車時刻表は全件ダウンロード用の URL（`odpt:TrainTimetable.json`、リダイレクトされる）から取っている
 - ODPT のデータの一覧は `https://ckan.odpt.org/dataset/?_organization_limit=0&tags=%E9%89%84%E9%81%93-railway`（鉄道）。CKAN の API は使えないので HTML から読む。都営は JSON のほかに GTFS / GTFS-RT もあるが使っていない（理由は `docs/design/route-search.md` 3章）
