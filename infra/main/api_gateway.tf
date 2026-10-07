@@ -39,6 +39,12 @@ resource "aws_apigatewayv2_stage" "default" {
 
   auto_deploy = true
 
+  # 連打による無料枠の超過を防ぐ。API Gateway のエンドポイントは CloudFront を通さずにも呼べる
+  default_route_settings {
+    throttling_rate_limit  = 10
+    throttling_burst_limit = 20
+  }
+
   tags = local.common_tags
 }
 
