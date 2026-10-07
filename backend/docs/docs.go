@@ -230,7 +230,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/trains/{trainNumber}/location": {
+        "/api/trains/{trainId}/location": {
             "get": {
                 "produces": [
                     "application/json"
@@ -242,9 +242,9 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "example": "1965Ka",
-                        "description": "Train Number",
-                        "name": "trainNumber",
+                        "example": "odpt.Train:Toei.Mita.1740T",
+                        "description": "Train ID",
+                        "name": "trainId",
                         "in": "path",
                         "required": true
                     }
@@ -315,6 +315,10 @@ const docTemplate = `{
             "properties": {
                 "calendar": {
                     "type": "string"
+                },
+                "isToday": {
+                    "description": "現在の運行日に適用されるダイヤか",
+                    "type": "boolean"
                 },
                 "railDirection": {
                     "type": "string"
@@ -397,6 +401,10 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/service.DirectionTimetable"
                     }
+                },
+                "trainLocationAvailable": {
+                    "description": "この駅の路線で列車位置情報が配信されているか",
+                    "type": "boolean"
                 }
             }
         },
@@ -407,6 +415,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "time": {
+                    "type": "string"
+                },
+                "trainId": {
                     "type": "string"
                 },
                 "trainNumber": {
@@ -432,7 +443,14 @@ const docTemplate = `{
                 "railway": {
                     "type": "string"
                 },
+                "stopped": {
+                    "description": "true の場合は fromStation に停車中（toStation は空）",
+                    "type": "boolean"
+                },
                 "toStation": {
+                    "type": "string"
+                },
+                "trainId": {
                     "type": "string"
                 },
                 "trainNumber": {

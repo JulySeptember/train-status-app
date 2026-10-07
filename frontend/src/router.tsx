@@ -27,7 +27,7 @@ export const router = createBrowserRouter([
         element: <Station />,
       },
       {
-        path: "/trains/:trainNumber",
+        path: "/trains/:trainId",
         element: <Train />,
       },
       {

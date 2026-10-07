@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"train-status-app/backend/assets"
 	"train-status-app/backend/internal/client"
@@ -400,6 +401,82 @@ func TestGetStationDetailTimetable(t *testing.T) {
 	}
 }
 
+func TestGetStationDetailToday(t *testing.T) {
+
+	loader, err := assets.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	svc := New(
+		&mockClient{},
+		loader,
+	)
+
+	// 2026-10-12（月）はスポーツの日
+	svc.now = func() time.Time {
+		return time.Date(2026, time.October, 12, 12, 0, 0, 0, time.FixedZone("JST", 9*60*60))
+	}
+
+	result, err := svc.GetStationDetail(
+		context.Background(),
+		"odpt.Station:Toei.Mita.Kasuga",
+	)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !result.TrainLocationAvailable {
+		t.Fatal("expected train location available")
+	}
+
+	for _, tt := range result.Timetables {
+
+		want := tt.Calendar == "odpt.Calendar:SaturdayHoliday"
+
+		if tt.IsToday != want {
+			t.Fatalf(
+				"%s: expected isToday %v",
+				tt.Calendar,
+				want,
+			)
+		}
+
+		for _, row := range tt.Timetables {
+			if row.TrainID == "" {
+				t.Fatal("expected train id")
+			}
+		}
+	}
+}
+
+func TestGetStationDetailTrainLocationUnsupported(t *testing.T) {
+
+	loader, err := assets.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	svc := New(
+		&mockClient{},
+		loader,
+	)
+
+	result, err := svc.GetStationDetail(
+		context.Background(),
+		"odpt.Station:Toei.NipporiToneri.Nippori",
+	)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if result.TrainLocationAvailable {
+		t.Fatal("expected train location unavailable")
+	}
+}
+
 func TestGetStationDetailPassengers(t *testing.T) {
 
 	loader, err := assets.New()
@@ -440,6 +517,29 @@ OUT:
 	}
 }
 
+// findTrain は指定路線の時刻表から列車ID・列車番号を1件取り出す
+func findTrain(
+	t *testing.T,
+	loader *assets.Loader,
+	railway string,
+) (string, string) {
+
+	t.Helper()
+
+	for _, tt := range loader.StationTimetables() {
+		if tt.Railway != railway {
+			continue
+		}
+
+		for _, obj := range tt.StationTimetableObject {
+			return obj.Train, obj.TrainNumber
+		}
+	}
+
+	t.Fatalf("no train found on %s", railway)
+	return "", ""
+}
+
 func TestGetTrainLocation(t *testing.T) {
 
 	loader, err := assets.New()
@@ -447,13 +547,20 @@ func TestGetTrainLocation(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	railway := "odpt.Railway:Toei.Mita"
+	trainID, trainNumber := findTrain(t, loader, railway)
+
+	from := "odpt.Station:Toei.Mita.Kasuga"
+	to := "odpt.Station:Toei.Mita.Hakusan"
+
 	mock := &mockClient{
 		trainLocations: []model.TrainLocation{
 			{
-				TrainNumber: "5301",
-				Railway:     loader.Railways()[0].SameAs,
-				FromStation: &loader.Stations()[0].SameAs,
-				ToStation:   &loader.Stations()[1].SameAs,
+				SameAs:      trainID,
+				TrainNumber: trainNumber,
+				Railway:     railway,
+				FromStation: &from,
+				ToStation:   &to,
 				Delay:       60,
 			},
 		},
@@ -465,14 +572,18 @@ func TestGetTrainLocation(t *testing.T) {
 
 	result, err := svc.GetTrainLocation(
 		context.Background(),
-		"5301",
+		trainID,
 	)
 
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if result.TrainNumber != "5301" {
+	if result.TrainID != trainID {
+		t.Fatal("unexpected train id")
+	}
+
+	if result.TrainNumber != trainNumber {
 		t.Fatal("unexpected train number")
 	}
 
@@ -480,16 +591,153 @@ func TestGetTrainLocation(t *testing.T) {
 		t.Fatal("unexpected delay")
 	}
 
-	if result.Railway == "" {
-		t.Fatal("railway should not be empty")
+	if result.Railway != "三田線" {
+		t.Fatalf("unexpected railway %s", result.Railway)
 	}
 
-	if result.FromStation == "" {
-		t.Fatal("from station should not be empty")
+	if result.FromStation != "春日" {
+		t.Fatalf("unexpected from station %s", result.FromStation)
 	}
 
-	if result.ToStation == "" {
-		t.Fatal("to station should not be empty")
+	if result.ToStation != "白山" {
+		t.Fatalf("unexpected to station %s", result.ToStation)
+	}
+
+	if result.Stopped {
+		t.Fatal("expected running train")
+	}
+}
+
+// 同じ列車番号が別路線で走っていても、指定した列車IDの列車を返す
+func TestGetTrainLocationSameNumberOnOtherRailway(t *testing.T) {
+
+	loader, err := assets.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	trainID, trainNumber := findTrain(t, loader, "odpt.Railway:Toei.Mita")
+
+	asakusaFrom := "odpt.Station:Toei.Asakusa.Ningyocho"
+	mitaFrom := "odpt.Station:Toei.Mita.Kasuga"
+
+	mock := &mockClient{
+		trainLocations: []model.TrainLocation{
+			{
+				SameAs:      "odpt.Train:Toei.Asakusa." + trainNumber,
+				TrainNumber: trainNumber,
+				Railway:     "odpt.Railway:Toei.Asakusa",
+				FromStation: &asakusaFrom,
+			},
+			{
+				SameAs:      trainID,
+				TrainNumber: trainNumber,
+				Railway:     "odpt.Railway:Toei.Mita",
+				FromStation: &mitaFrom,
+			},
+		},
+	}
+
+	svc := New(
+		mock,
+		loader,
+	)
+
+	result, err := svc.GetTrainLocation(
+		context.Background(),
+		trainID,
+	)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if result.Railway != "三田線" {
+		t.Fatalf("unexpected railway %s", result.Railway)
+	}
+
+	if result.FromStation != "春日" {
+		t.Fatalf("unexpected from station %s", result.FromStation)
+	}
+}
+
+func TestGetTrainLocationStopped(t *testing.T) {
+
+	loader, err := assets.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	trainID, trainNumber := findTrain(t, loader, "odpt.Railway:Toei.Mita")
+
+	from := "odpt.Station:Toei.Mita.Kasuga"
+
+	svc := New(
+		&mockClient{
+			trainLocations: []model.TrainLocation{
+				{
+					SameAs:      trainID,
+					TrainNumber: trainNumber,
+					Railway:     "odpt.Railway:Toei.Mita",
+					FromStation: &from,
+					ToStation:   nil,
+				},
+			},
+		},
+		loader,
+	)
+
+	result, err := svc.GetTrainLocation(
+		context.Background(),
+		trainID,
+	)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !result.Stopped {
+		t.Fatal("expected stopped train")
+	}
+
+	if result.FromStation != "春日" {
+		t.Fatalf("unexpected from station %s", result.FromStation)
+	}
+
+	if result.ToStation != "" {
+		t.Fatalf("unexpected to station %s", result.ToStation)
+	}
+}
+
+func TestGetTrainLocationNotRunning(t *testing.T) {
+
+	loader, err := assets.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	trainID, _ := findTrain(t, loader, "odpt.Railway:Toei.Mita")
+
+	svc := New(
+		&mockClient{},
+		loader,
+	)
+
+	result, err := svc.GetTrainLocation(
+		context.Background(),
+		trainID,
+	)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if result.Available {
+		t.Fatal("expected unavailable train")
+	}
+
+	if result.Message == "" {
+		t.Fatal("expected message")
 	}
 }
 
@@ -505,9 +753,39 @@ func TestGetTrainLocationNotFound(t *testing.T) {
 		loader,
 	)
 
+	_, err = svc.GetTrainLocation(
+		context.Background(),
+		"odpt.Train:Toei.Mita.dummy",
+	)
+
+	if !errors.Is(err, ErrTrainNotFound) {
+		t.Fatalf(
+			"expected ErrTrainNotFound, got %v",
+			err,
+		)
+	}
+}
+
+// 列車位置が配信されない路線では外部APIを呼ばずに案内を返す
+func TestGetTrainLocationUnsupportedRailway(t *testing.T) {
+
+	loader, err := assets.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	trainID, _ := findTrain(t, loader, "odpt.Railway:Toei.NipporiToneri")
+
+	svc := New(
+		&mockClient{
+			locErr: errors.New("should not be called"),
+		},
+		loader,
+	)
+
 	result, err := svc.GetTrainLocation(
 		context.Background(),
-		"99999",
+		trainID,
 	)
 
 	if err != nil {
@@ -530,6 +808,8 @@ func TestGetTrainLocationExternalAPI(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	trainID, _ := findTrain(t, loader, "odpt.Railway:Toei.Mita")
+
 	svc := New(
 		&mockClient{
 			locErr: client.ErrExternalAPI,
@@ -538,7 +818,7 @@ func TestGetTrainLocationExternalAPI(t *testing.T) {
 	)
 	_, err = svc.GetTrainLocation(
 		context.Background(),
-		"5301",
+		trainID,
 	)
 
 	if !errors.Is(err, ErrExternalAPI) {

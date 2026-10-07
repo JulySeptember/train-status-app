@@ -16,7 +16,9 @@ export default function TrainLocation({ train }: Props) {
           <div>
             <h2 className="text-lg font-semibold text-white">列車現在位置</h2>
 
-            <p className="text-sm text-gray-400">リアルタイム運行情報</p>
+            <p className="text-sm text-gray-400">
+              列車番号 {train.trainNumber}
+            </p>
           </div>
         </div>
       </div>
@@ -31,25 +33,41 @@ export default function TrainLocation({ train }: Props) {
         </div>
 
         <div className="rounded-xl border border-[#30363d] bg-[#0d1117] p-6">
-          <div className="mb-6 flex items-center justify-between text-sm text-gray-400">
-            <span>{train.fromStation}</span>
+          {train.stopped ? (
+            <div className="flex flex-col items-center gap-3">
+              <div className="h-5 w-5 rounded-full border-4 border-[#161b22] bg-[#58a6ff]" />
 
-            <span>{train.toStation}</span>
-          </div>
+              <div className="flex items-center gap-2 text-[#58a6ff]">
+                <MapPin size={18} />
 
-          <div className="relative">
-            <div className="h-1 rounded-full bg-[#30363d]" />
+                <span className="font-medium">
+                  {train.fromStation} に停車中
+                </span>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="mb-6 flex items-center justify-between text-sm text-gray-400">
+                <span>{train.fromStation}</span>
 
-            <div className="absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-[#161b22] bg-[#58a6ff]" />
-          </div>
+                <span>{train.toStation}</span>
+              </div>
 
-          <div className="mt-5 flex items-center justify-center gap-2 text-[#58a6ff]">
-            <MapPin size={18} />
+              <div className="relative">
+                <div className="h-1 rounded-full bg-[#30363d]" />
 
-            <span className="font-medium">
-              {train.fromStation} → {train.toStation}
-            </span>
-          </div>
+                <div className="absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-[#161b22] bg-[#58a6ff]" />
+              </div>
+
+              <div className="mt-5 flex items-center justify-center gap-2 text-[#58a6ff]">
+                <MapPin size={18} />
+
+                <span className="font-medium">
+                  {train.fromStation} → {train.toStation} を走行中
+                </span>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="rounded-xl border border-[#30363d] bg-[#0d1117] p-5">

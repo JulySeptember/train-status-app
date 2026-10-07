@@ -8,11 +8,11 @@ import Error from "@/components/Error";
 import TrainLocation from "@/components/TrainLocation";
 
 export default function Train() {
-  const { trainNumber = "" } = useParams();
+  const { trainId = "" } = useParams();
 
   const { data, isPending, error } = useQuery({
-    queryKey: ["train", trainNumber],
-    queryFn: () => api.getTrain(trainNumber),
+    queryKey: ["train", trainId],
+    queryFn: () => api.getTrain(trainId),
 
     staleTime: 15_000,
 
