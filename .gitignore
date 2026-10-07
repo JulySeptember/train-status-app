@@ -68,3 +68,5 @@ local_*
 # Playwright MCP
 # ============================
 .playwright-mcp/
+
+.claude/settings.local.json

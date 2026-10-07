@@ -7,6 +7,7 @@ import Route from "@/pages/Route";
 import Station from "@/pages/Station";
 import Train from "@/pages/Train";
 import Fare from "@/pages/Fare";
+import Journey from "@/pages/Journey";
 import NotFound from "@/pages/NotFound";
 import License from "./pages/License";
 
@@ -29,6 +30,10 @@ export const router = createBrowserRouter([
       {
         path: "/trains/:trainId",
         element: <Train />,
+      },
+      {
+        path: "/journeys",
+        element: <Journey />,
       },
       {
         path: "/fares",
