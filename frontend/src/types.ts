@@ -18,6 +18,8 @@ export interface Timetable {
   trainId: string;
   trainNumber: string;
   destination: string;
+  trainTypeId: string;
+  trainType: string;
 }
 
 export interface Passenger {

@@ -415,6 +415,13 @@
                 },
                 "trainNumber": {
                     "type": "string"
+                },
+                "trainType": {
+                    "type": "string"
+                },
+                "trainTypeId": {
+                    "description": "列車種別（例: 普通、急行、エアポート快特）",
+                    "type": "string"
                 }
             }
         },

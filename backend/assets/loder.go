@@ -18,6 +18,7 @@ type Loader struct {
 	stationTimetables []model.StationTimetable
 	trainTimetables   []model.TrainTimetable
 	passengerSurveys  []model.PassengerSurvey
+	trainTypes        []model.TrainType
 }
 
 func New() (*Loader, error) {
@@ -44,6 +45,10 @@ func New() (*Loader, error) {
 	}
 
 	if err := load("passenger_survey.json", &l.passengerSurveys); err != nil {
+		return nil, err
+	}
+
+	if err := load("train_type.json", &l.trainTypes); err != nil {
 		return nil, err
 	}
 
@@ -85,4 +90,8 @@ func (l *Loader) TrainTimetables() []model.TrainTimetable {
 
 func (l *Loader) PassengerSurveys() []model.PassengerSurvey {
 	return l.passengerSurveys
+}
+
+func (l *Loader) TrainTypes() []model.TrainType {
+	return l.trainTypes
 }

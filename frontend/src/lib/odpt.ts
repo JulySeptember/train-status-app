@@ -30,6 +30,9 @@ export function directionLabel(value: string) {
     case "odpt.RailDirection:Toei.Minowabashi":
       return "三ノ輪橋方面";
 
+    case "odpt.RailDirection:Toei.Hikarigaoka":
+      return "光が丘方面";
+
     default:
       return value.replace("odpt.RailDirection:", "");
   }

@@ -276,3 +276,18 @@ type TrainView struct {
 
 	Delay int `json:"delay"`
 }
+
+type TrainType struct {
+	ID      string `json:"@id"`
+	Type    string `json:"@type"`
+	Context string `json:"@context"`
+
+	Date  string `json:"dc:date"`
+	Title string `json:"dc:title"`
+
+	SameAs string `json:"owl:sameAs"`
+
+	Operator string `json:"odpt:operator"`
+
+	TrainTypeTitle LocalizedString `json:"odpt:trainTypeTitle"`
+}
