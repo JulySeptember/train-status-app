@@ -2,9 +2,12 @@ package service
 
 import (
 	"context"
-
 	"errors"
+	"slices"
+	"time"
+
 	"train-status-app/backend/assets"
+	"train-status-app/backend/internal/calendar"
 	"train-status-app/backend/internal/client"
 	"train-status-app/backend/internal/model"
 )
@@ -13,7 +16,13 @@ var (
 	ErrExternalAPI     = errors.New("external api error")
 	ErrStationNotFound = errors.New("station not found")
 	ErrFareNotFound    = errors.New("fare not found")
+	ErrTrainNotFound   = errors.New("train not found")
 )
+
+// 列車位置情報（odpt:Train）が配信されていない路線
+var trainLocationUnsupported = map[string]bool{
+	"odpt.Railway:Toei.NipporiToneri": true,
+}
 
 type TrainClient interface {
 	GetTrainStatus(ctx context.Context) ([]model.TrainStatus, error)
@@ -23,6 +32,16 @@ type TrainClient interface {
 type Service struct {
 	client TrainClient
 	assets *assets.Loader
+
+	// 列車ID（odpt.Train:...）から路線・列車番号を引くための索引
+	trains map[string]trainRef
+
+	now func() time.Time
+}
+
+type trainRef struct {
+	railway     string
+	trainNumber string
 }
 
 func New(
@@ -32,7 +51,31 @@ func New(
 	return &Service{
 		client: c,
 		assets: a,
+		trains: indexTrains(a.StationTimetables()),
+		now:    time.Now,
 	}
+}
+
+func indexTrains(
+	timetables []model.StationTimetable,
+) map[string]trainRef {
+
+	result := make(map[string]trainRef)
+
+	for _, tt := range timetables {
+		for _, obj := range tt.StationTimetableObject {
+			if obj.Train == "" {
+				continue
+			}
+
+			result[obj.Train] = trainRef{
+				railway:     tt.Railway,
+				trainNumber: obj.TrainNumber,
+			}
+		}
+	}
+
+	return result
 }
 
 // =========================
@@ -185,6 +228,9 @@ type StationDetail struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 
+	// この駅の路線で列車位置情報が配信されているか
+	TrainLocationAvailable bool `json:"trainLocationAvailable"`
+
 	Timetables []DirectionTimetable `json:"timetables"`
 
 	Passengers []Passenger `json:"passengers"`
@@ -194,10 +240,14 @@ type DirectionTimetable struct {
 	Calendar      string      `json:"calendar"`
 	RailDirection string      `json:"railDirection"`
 	Timetables    []Timetable `json:"timetables"`
+
+	// 現在の運行日に適用されるダイヤか
+	IsToday bool `json:"isToday"`
 }
 
 type Timetable struct {
 	Time        string `json:"time"`
+	TrainID     string `json:"trainId"`
 	TrainNumber string `json:"trainNumber"`
 	Destination string `json:"destination"`
 }
@@ -260,11 +310,14 @@ func (s *Service) GetStationDetail(
 	}
 
 	detail := &StationDetail{
-		ID:         station.SameAs,
-		Name:       station.StationTitle.Ja,
-		Timetables: make([]DirectionTimetable, 0),
-		Passengers: make([]Passenger, 0),
+		ID:                     station.SameAs,
+		Name:                   station.StationTitle.Ja,
+		TrainLocationAvailable: !trainLocationUnsupported[station.Railway],
+		Timetables:             make([]DirectionTimetable, 0),
+		Passengers:             make([]Passenger, 0),
 	}
+
+	todayCalendars := calendar.Calendars(s.now())
 
 	groups := make(map[string]*DirectionTimetable)
 
@@ -277,6 +330,7 @@ func (s *Service) GetStationDetail(
 			group = &DirectionTimetable{
 				Calendar:      tt.Calendar,
 				RailDirection: tt.RailDirection,
+				IsToday:       slices.Contains(todayCalendars, tt.Calendar),
 			}
 			groups[key] = group
 		}
@@ -297,6 +351,7 @@ func (s *Service) GetStationDetail(
 
 			group.Timetables = append(group.Timetables, Timetable{
 				Time:        time,
+				TrainID:     obj.Train,
 				TrainNumber: obj.TrainNumber,
 				Destination: destination,
 			})
@@ -329,12 +384,16 @@ func (s *Service) GetStationDetail(
 // =========================
 
 type TrainLocation struct {
+	TrainID     string `json:"trainId"`
 	TrainNumber string `json:"trainNumber"`
 
 	Railway string `json:"railway"`
 
 	FromStation string `json:"fromStation"`
 	ToStation   string `json:"toStation"`
+
+	// true の場合は fromStation に停車中（toStation は空）
+	Stopped bool `json:"stopped"`
 
 	Delay int `json:"delay"`
 
@@ -348,8 +407,22 @@ type TrainLocation struct {
 
 func (s *Service) GetTrainLocation(
 	ctx context.Context,
-	trainNumber string,
+	trainID string,
 ) (*TrainLocation, error) {
+
+	ref, ok := s.trains[trainID]
+	if !ok {
+		return nil, ErrTrainNotFound
+	}
+
+	if trainLocationUnsupported[ref.railway] {
+		return &TrainLocation{
+			TrainID:     trainID,
+			TrainNumber: ref.trainNumber,
+			Available:   false,
+			Message:     "この路線は列車位置情報が提供されていません",
+		}, nil
+	}
 
 	trains, err := s.client.GetTrainLocations(ctx)
 	if err != nil {
@@ -375,12 +448,15 @@ func (s *Service) GetTrainLocation(
 
 	for _, train := range trains {
 
-		if train.TrainNumber != trainNumber {
+		// 列車番号は路線間で重複するため、路線を含む列車IDで照合する
+		if train.SameAs != trainID {
 			continue
 		}
 
 		item := &TrainLocation{
+			TrainID:     trainID,
 			TrainNumber: train.TrainNumber,
+			Stopped:     train.ToStation == nil,
 			Delay:       train.Delay,
 			Available:   true,
 		}
@@ -405,7 +481,8 @@ func (s *Service) GetTrainLocation(
 	}
 
 	return &TrainLocation{
-		TrainNumber: trainNumber,
+		TrainID:     trainID,
+		TrainNumber: ref.trainNumber,
 		Available:   false,
 		Message:     "現在この列車の運行情報は取得できません",
 	}, nil

@@ -4,6 +4,9 @@ definitions:
     properties:
       calendar:
         type: string
+      isToday:
+        description: 現在の運行日に適用されるダイヤか
+        type: boolean
       railDirection:
         type: string
       timetables:
@@ -57,12 +60,17 @@ definitions:
         items:
           $ref: '#/definitions/service.DirectionTimetable'
         type: array
+      trainLocationAvailable:
+        description: この駅の路線で列車位置情報が配信されているか
+        type: boolean
     type: object
   service.Timetable:
     properties:
       destination:
         type: string
       time:
+        type: string
+      trainId:
         type: string
       trainNumber:
         type: string
@@ -79,7 +87,12 @@ definitions:
         type: string
       railway:
         type: string
+      stopped:
+        description: true の場合は fromStation に停車中（toStation は空）
+        type: boolean
       toStation:
+        type: string
+      trainId:
         type: string
       trainNumber:
         type: string
@@ -239,13 +252,13 @@ paths:
       summary: Get Train Status
       tags:
       - Status
-  /api/trains/{trainNumber}/location:
+  /api/trains/{trainId}/location:
     get:
       parameters:
-      - description: Train Number
-        example: 1965Ka
+      - description: Train ID
+        example: odpt.Train:Toei.Mita.1740T
         in: path
-        name: trainNumber
+        name: trainId
         required: true
         type: string
       produces:

@@ -48,9 +48,9 @@ export const api = {
     return request<StationDetail>(`/stations/${encodeURIComponent(stationId)}`);
   },
 
-  getTrain(trainNumber: string) {
+  getTrain(trainId: string) {
     return request<TrainLocation>(
-      `/trains/${encodeURIComponent(trainNumber)}/location`,
+      `/trains/${encodeURIComponent(trainId)}/location`,
     );
   },
 

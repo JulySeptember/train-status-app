@@ -111,7 +111,7 @@ CloudFront
 | GET | `/api/routes` | 路線一覧 |
 | GET | `/api/routes/{routeId}/stations` | 路線ごとの駅一覧 |
 | GET | `/api/stations/{stationId}` | 駅詳細（時刻表・乗降者数） |
-| GET | `/api/trains/{trainNumber}/location` | 列車現在位置 |
+| GET | `/api/trains/{trainId}/location` | 列車現在位置 |
 | GET | `/api/fares?from={fromStation}&to={toStation}` | 運賃検索 |
 
 詳細なAPI仕様はSwagger UIから確認できます。

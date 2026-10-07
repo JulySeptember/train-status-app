@@ -72,6 +72,12 @@ export default function Station() {
       <section className="space-y-4">
         <h2 className="text-xl font-semibold text-white">時刻表</h2>
 
+        <p className="text-sm text-gray-400">
+          {data.trainLocationAvailable
+            ? "本日のダイヤの列車を選択すると、現在位置を確認できます。"
+            : "この路線は列車位置情報が提供されていません。"}
+        </p>
+
         <Tabs value={selectedDirection} onValueChange={setDirection}>
           <TabsList>
             {directions.map((d) => (
@@ -87,6 +93,7 @@ export default function Station() {
           saturday={saturday}
           holiday={holiday}
           saturdayHoliday={saturdayHoliday}
+          trainLocationAvailable={data.trainLocationAvailable}
         />
       </section>
 

@@ -9,31 +9,39 @@ type Props = {
   saturday?: DirectionTimetable;
   holiday?: DirectionTimetable;
   saturdayHoliday?: DirectionTimetable;
+  trainLocationAvailable: boolean;
 };
 
 function TimetableCard({
   title,
   timetable,
+  trainLocationAvailable,
 }: {
   title: string;
   timetable?: DirectionTimetable;
+  trainLocationAvailable: boolean;
 }) {
+  // 列車番号は平日・土休日ダイヤで使い回されるため、列車位置へのリンクは本日のダイヤに限る
+  const linkable = trainLocationAvailable && !!timetable?.isToday;
+
   return (
     <div className="overflow-hidden rounded-xl border border-[#30363d] bg-[#0d1117]">
       <div className="flex items-center gap-2 border-b border-[#30363d] px-5 py-4">
         <Clock3 size={18} className="text-[#2ea043]" />
 
         <h3 className="font-semibold text-white">{title}</h3>
+
+        {timetable?.isToday && (
+          <span className="rounded-full bg-[#1f6feb]/20 px-2 py-0.5 text-xs text-[#58a6ff]">
+            本日
+          </span>
+        )}
       </div>
 
       <div className="divide-y divide-[#30363d]">
         {timetable?.timetables?.length ? (
-          timetable.timetables.map((train) => (
-            <Link
-              key={`${train.time}-${train.trainNumber}`}
-              to={`/trains/${train.trainNumber}`}
-              className="flex items-center justify-between px-5 py-4 transition hover:bg-[#161b22]"
-            >
+          timetable.timetables.map((train) => {
+            const content = (
               <div>
                 <p className="text-2xl font-bold text-white">{train.time}</p>
 
@@ -41,10 +49,31 @@ function TimetableCard({
                   列車番号 {train.trainNumber}
                 </p>
               </div>
+            );
 
-              <ArrowRight size={18} className="text-gray-500" />
-            </Link>
-          ))
+            if (!linkable) {
+              return (
+                <div
+                  key={`${train.time}-${train.trainId}`}
+                  className="px-5 py-4"
+                >
+                  {content}
+                </div>
+              );
+            }
+
+            return (
+              <Link
+                key={`${train.time}-${train.trainId}`}
+                to={`/trains/${encodeURIComponent(train.trainId)}`}
+                className="flex items-center justify-between px-5 py-4 transition hover:bg-[#161b22]"
+              >
+                {content}
+
+                <ArrowRight size={18} className="text-gray-500" />
+              </Link>
+            );
+          })
         ) : (
           <div className="py-10 text-center text-gray-500">
             データがありません
@@ -60,6 +89,7 @@ export default function Timetable({
   saturday,
   holiday,
   saturdayHoliday,
+  trainLocationAvailable,
 }: Props) {
   const [tab, setTab] = useState<
     "weekday" | "saturday" | "holiday" | "saturdayHoliday"
@@ -95,18 +125,34 @@ export default function Timetable({
           </div>
 
           {tab === "weekday" && (
-            <TimetableCard title="平日" timetable={weekday} />
+            <TimetableCard
+              title="平日"
+              timetable={weekday}
+              trainLocationAvailable={trainLocationAvailable}
+            />
           )}
 
           {tab === "saturdayHoliday" && (
-            <TimetableCard title="土休日" timetable={saturdayHoliday} />
+            <TimetableCard
+              title="土休日"
+              timetable={saturdayHoliday}
+              trainLocationAvailable={trainLocationAvailable}
+            />
           )}
         </div>
 
         {/* Desktop */}
         <div className="hidden gap-6 lg:grid lg:grid-cols-2">
-          <TimetableCard title="平日" timetable={weekday} />
-          <TimetableCard title="土休日" timetable={saturdayHoliday} />
+          <TimetableCard
+            title="平日"
+            timetable={weekday}
+            trainLocationAvailable={trainLocationAvailable}
+          />
+          <TimetableCard
+            title="土休日"
+            timetable={saturdayHoliday}
+            trainLocationAvailable={trainLocationAvailable}
+          />
         </div>
       </>
     );
@@ -152,23 +198,47 @@ export default function Timetable({
         </div>
 
         {tab === "weekday" && (
-          <TimetableCard title="平日" timetable={weekday} />
+          <TimetableCard
+            title="平日"
+            timetable={weekday}
+            trainLocationAvailable={trainLocationAvailable}
+          />
         )}
 
         {tab === "saturday" && (
-          <TimetableCard title="土曜" timetable={saturday} />
+          <TimetableCard
+            title="土曜"
+            timetable={saturday}
+            trainLocationAvailable={trainLocationAvailable}
+          />
         )}
 
         {tab === "holiday" && (
-          <TimetableCard title="休日" timetable={holiday} />
+          <TimetableCard
+            title="休日"
+            timetable={holiday}
+            trainLocationAvailable={trainLocationAvailable}
+          />
         )}
       </div>
 
       {/* Desktop */}
       <div className="hidden gap-6 lg:grid lg:grid-cols-3">
-        <TimetableCard title="平日" timetable={weekday} />
-        <TimetableCard title="土曜" timetable={saturday} />
-        <TimetableCard title="休日" timetable={holiday} />
+        <TimetableCard
+          title="平日"
+          timetable={weekday}
+          trainLocationAvailable={trainLocationAvailable}
+        />
+        <TimetableCard
+          title="土曜"
+          timetable={saturday}
+          trainLocationAvailable={trainLocationAvailable}
+        />
+        <TimetableCard
+          title="休日"
+          timetable={holiday}
+          trainLocationAvailable={trainLocationAvailable}
+        />
       </div>
     </>
   );

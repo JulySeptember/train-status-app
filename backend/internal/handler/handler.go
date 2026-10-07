@@ -241,24 +241,24 @@ func (h *Handler) StationDetail(
 //	@Summary	Get train location
 //	@Tags		Train
 //	@Produce	json
-//	@Param		trainNumber	path	string	true	"Train Number"	example(1965Ka)
+//	@Param		trainId	path	string	true	"Train ID"	example(odpt.Train:Toei.Mita.1740T)
 //	@Success	200		{object}	service.TrainLocation
 //	@Failure	400		{object}	map[string]string
 //	@Failure	404		{object}	map[string]string
 //	@Failure	502		{object}	map[string]string
-//	@Router		/api/trains/{trainNumber}/location [get]
+//	@Router		/api/trains/{trainId}/location [get]
 func (h *Handler) TrainLocation(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	trainNumber := r.PathValue("trainNumber")
+	trainID := r.PathValue("trainId")
 
-	if trainNumber == "" {
+	if trainID == "" {
 		writeJSON(
 			w,
 			http.StatusBadRequest,
 			map[string]string{
-				"error": "trainNumber is required",
+				"error": "trainId is required",
 			},
 		)
 		return
@@ -266,10 +266,21 @@ func (h *Handler) TrainLocation(
 
 	data, err := h.service.GetTrainLocation(
 		r.Context(),
-		trainNumber,
+		trainID,
 	)
 
 	if err != nil {
+
+		if errors.Is(err, service.ErrTrainNotFound) {
+			writeJSON(
+				w,
+				http.StatusNotFound,
+				map[string]string{
+					"error": err.Error(),
+				},
+			)
+			return
+		}
 
 		if errors.Is(err, service.ErrExternalAPI) {
 			writeJSON(
