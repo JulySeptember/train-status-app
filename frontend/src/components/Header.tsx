@@ -34,6 +34,15 @@ export default function Header() {
 
             <NavigationMenuItem>
               <NavigationMenuLink
+                render={<Link to="/journeys" />}
+                className="rounded-md px-4 py-2 text-gray-300 transition hover:bg-[#21262d] hover:text-white"
+              >
+                経路検索
+              </NavigationMenuLink>
+            </NavigationMenuItem>
+
+            <NavigationMenuItem>
+              <NavigationMenuLink
                 render={<Link to="/fares" />}
                 className="rounded-md px-4 py-2 text-gray-300 transition hover:bg-[#21262d] hover:text-white"
               >
