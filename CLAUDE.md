@@ -49,12 +49,16 @@ make backend-generate   # = cd backend && go generate ./assets
 
 ### デプロイ（AWS に反映される操作。実行前にユーザーへ確認する）
 
+main へのマージで CI（`.github/workflows/ci.yml` の `deploy` ジョブ）が自動でデプロイする。検証が通ったあと、変更のあった領域だけを backend → `terraform apply` → frontend の順に反映する。全領域をやり直すときは Actions から CI を main で手動実行する（`workflow_dispatch`）。手元の make は、CD が失敗したときや bootstrap の適用に使う。
+
+main への push が続くと、待機中の実行は新しいものに置き換わり、その push の変更が反映されないことがある（変更の判定は push 単位のため）。その場合も手動実行で反映する。
+
 - `make backend-deploy`: linux/arm64 でビルドして zip にし、S3 にアップロードする。Lambda への反映は `make tf-main-apply`（`s3_object_version` を参照している）
 - `make frontend-deploy`: ビルドして S3 に sync し、CloudFront を invalidate する
 - `make tf-main-plan` / `tf-main-apply`: `infra/main` を `infra/env/dev.tfvars` で適用する。`tf-*-apply` / `destroy` は `-auto-approve` 付き
 - `infra/bootstrap`: tfstate 用 S3・DynamoDB、Lambda アーティファクト用 S3、GitHub Actions 用の OIDC プロバイダと IAM ロール（PR の plan 用・main のデプロイ用）を作る。state はローカルにあるので、手元から `make tf-bootstrap-apply` で適用する
 
-デプロイの make は1つずつ順に実行し、前のコマンドが成功したのを確かめてから次に進む（同時に実行すると、途中で止まったときに片方だけ反映される）。
+手元でデプロイするときは、make を1つずつ順に実行し、前のコマンドが成功したのを確かめてから次に進む（同時に実行すると、途中で止まったときに片方だけ反映される）。
 
 バックエンドの DTO（`service.go`）とフロントの `src/types.ts` を合わせて変えた変更は、`backend-deploy` → `tf-main-apply` のあとに `frontend-deploy` も行う。片方だけ反映すると本番でフロントとバックの型がずれる。
 
@@ -70,7 +74,7 @@ aws logs filter-log-events --region ap-northeast-1 \
 
 ブランチを切る・PR を作る前に `git fetch` と `gh pr list --state all` で main と PR の状態を確認する（`gh` は導入済み）。
 
-PR では `.github/workflows/ci.yml` が変更のあった領域だけを検証する（backend: gofmt・vet・test・Swagger が最新か / frontend: lint・build / infra: terraform fmt・validate）。Swagger のチェックは go.mod の swaggo/swag と同じバージョンの CLI で再生成して差分を見る。
+PR では `.github/workflows/ci.yml` が変更のあった領域だけを検証する（backend: gofmt・vet・test・Swagger が最新か / frontend: lint・build / infra: terraform fmt・validate と、PR への `terraform plan` の結果のコメント）。Swagger のチェックは go.mod の swaggo/swag と同じバージョンの CLI で再生成して差分を見る。
 
 `gh pr edit` は Projects (classic) 廃止の GraphQL エラーで失敗する。PR の題名・説明は `gh api -X PATCH repos/JulySeptember/train-status-app/pulls/<番号> -f title=... -F body=@<ファイル>` で更新する。
 

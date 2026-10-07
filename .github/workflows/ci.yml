@@ -1,17 +1,30 @@
 name: CI
 
+# PR では検証と terraform plan、main への push では検証のあとにデプロイする。
+# workflow_dispatch（main で手動実行）は、変更の有無にかかわらず全領域を検証・デプロイする。
 on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
   pull-requests: read
 
+env:
+  AWS_REGION: ap-northeast-1
+  # ロールは infra/bootstrap/github_oidc.tf で作っている。ARN は秘密の値ではない
+  AWS_PLAN_ROLE_ARN: arn:aws:iam::015060879504:role/train-status-app-dev-github-plan
+  AWS_DEPLOY_ROLE_ARN: arn:aws:iam::015060879504:role/train-status-app-dev-github-deploy
+  TERRAFORM_VERSION: 1.15.7
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "0"
+
+# main ではデプロイを途中で止めないように、実行中のものは取り消さない
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # 変更のあったディレクトリだけジョブを実行する。
@@ -19,23 +32,27 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
-      backend: ${{ steps.filter.outputs.backend }}
-      frontend: ${{ steps.filter.outputs.frontend }}
-      infra: ${{ steps.filter.outputs.infra }}
+      backend: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.backend }}
+      frontend: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.frontend }}
+      infra: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.infra }}
     steps:
       - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v4
+        if: github.event_name != 'workflow_dispatch'
         id: filter
         with:
           filters: |
             backend:
               - 'backend/**'
+              - 'Makefile'
               - '.github/workflows/ci.yml'
             frontend:
               - 'frontend/**'
+              - 'Makefile'
               - '.github/workflows/ci.yml'
             infra:
               - 'infra/**'
+              - 'Makefile'
               - '.github/workflows/ci.yml'
 
   backend:
@@ -108,7 +125,7 @@ jobs:
 
       - uses: hashicorp/setup-terraform@v4
         with:
-          terraform_version: 1.15.7
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
 
       - name: terraform fmt
         run: terraform fmt -check -recursive infra
@@ -122,3 +139,141 @@ jobs:
             terraform -chdir="${dir}" validate
             echo "::endgroup::"
           done
+
+  # PR に terraform plan の結果をコメントする（同じコメントを更新する）。
+  # plan 用のロールは読み取り専用なので、ロックは取らない。
+  # フォークからの PR には ID トークンが発行されず、ロールを使えないので実行しない。
+  infra-plan:
+    needs: [changes, infra]
+    if: >-
+      github.event_name == 'pull_request' &&
+      needs.changes.outputs.infra == 'true' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ env.AWS_PLAN_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: terraform plan
+        id: plan
+        run: |
+          terraform -chdir=infra/main init -input=false
+          set +e
+          terraform -chdir=infra/main plan -input=false -lock=false -no-color \
+            -var-file=../env/dev.tfvars > plan.txt 2>&1
+          echo "exitcode=$?" >> "$GITHUB_OUTPUT"
+          cat plan.txt
+
+      - name: plan の結果を PR にコメントする
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          EXITCODE: ${{ steps.plan.outputs.exitcode }}
+        run: |
+          marker='<!-- terraform-plan -->'
+          if [ "$EXITCODE" = 0 ]; then
+            summary="$(grep -E '^(Plan:|No changes\.)' plan.txt || true)"
+          else
+            summary='plan に失敗しました'
+          fi
+          {
+            echo "$marker"
+            echo "### terraform plan（infra/main）"
+            echo
+            echo "**${summary}**（${{ github.event.pull_request.head.sha }}）"
+            echo
+            echo '<details><summary>詳細</summary>'
+            echo
+            echo '```'
+            # コメントの上限（65,536文字）を超えないように切り詰める
+            head -c 60000 plan.txt
+            echo
+            echo '```'
+            echo '</details>'
+          } > comment.md
+
+          id="$(gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" --paginate \
+            --jq "[.[] | select(.body | startswith(\"${marker}\"))][0].id // empty" | head -n1)"
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/${{ github.repository }}/issues/comments/${id}" -F body=@comment.md > /dev/null
+          else
+            gh api -X POST "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" -F body=@comment.md > /dev/null
+          fi
+          exit "$EXITCODE"
+
+  # main への push（マージ）で、変更のあった領域を反映する。
+  # 順番は backend（S3 へアップロード）→ terraform apply（Lambda に反映）→ frontend。
+  # 検証のジョブが1つでも失敗したら実行しない。
+  deploy:
+    needs: [changes, backend, frontend, infra]
+    if: >-
+      github.event_name != 'pull_request' &&
+      github.ref == 'refs/heads/main' &&
+      !cancelled() &&
+      !contains(needs.*.result, 'failure') &&
+      (needs.changes.outputs.backend == 'true' ||
+       needs.changes.outputs.frontend == 'true' ||
+       needs.changes.outputs.infra == 'true')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      BACKEND: ${{ needs.changes.outputs.backend }}
+      FRONTEND: ${{ needs.changes.outputs.frontend }}
+      INFRA: ${{ needs.changes.outputs.infra }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ env.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: actions/setup-go@v7
+        if: env.BACKEND == 'true'
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - uses: actions/setup-node@v7
+        if: env.FRONTEND == 'true'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # frontend の invalidate でも terraform output を使うので、常に init する
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - run: make tf-main-init
+
+      - name: backend
+        if: env.BACKEND == 'true'
+        run: make backend-deploy
+
+      - name: terraform apply
+        if: env.BACKEND == 'true' || env.INFRA == 'true'
+        run: make tf-main-apply
+
+      - name: frontend
+        if: env.FRONTEND == 'true'
+        run: |
+          (cd frontend && npm ci)
+          make frontend-deploy
