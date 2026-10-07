@@ -10,13 +10,14 @@ import (
 	"train-status-app/backend/internal/model"
 )
 
-// 駅時刻表は station_timetable.json（約25MB）を埋め込まず、
-// 必要な項目だけに絞った station_timetable.gob を埋め込む（起動を速くするため）。
-// station_timetable.json を更新したら go generate ./assets で再生成する。
+// 駅時刻表と列車時刻表は JSON（それぞれ約25MB）を埋め込まず、
+// 必要な項目だけに絞った gob を埋め込む（起動を速くするため）。
+// station_timetable.json / train_timetable.json を更新したら go generate ./assets で再生成する。
 //
-//go:generate go run ../cmd/gen-assets -in station_timetable.json -out station_timetable.gob
+//go:generate go run ../cmd/gen-assets -kind station -in station_timetable.json -out station_timetable.gob
+//go:generate go run ../cmd/gen-assets -kind train -in train_timetable.json -out train_timetable.gob
 
-//go:embed railway.json station.json railway_fare.json train_timetable.json passenger_survey.json train_type.json station_timetable.gob
+//go:embed railway.json station.json railway_fare.json passenger_survey.json train_type.json station_timetable.gob train_timetable.gob
 var fs embed.FS
 
 type Loader struct {
@@ -24,7 +25,7 @@ type Loader struct {
 	stations          []model.Station
 	fares             []model.RailwayFare
 	stationTimetables []model.StationTimetable
-	trainTimetables   []model.TrainTimetable
+	trainTimetables   *slim.TrainTimetables
 	passengerSurveys  []model.PassengerSurvey
 	trainTypes        []model.TrainType
 }
@@ -48,7 +49,7 @@ func New() (*Loader, error) {
 		return nil, err
 	}
 
-	if err := load("train_timetable.json", &l.trainTimetables); err != nil {
+	if err := loadTrainTimetables(&l.trainTimetables); err != nil {
 		return nil, err
 	}
 
@@ -94,6 +95,24 @@ func loadStationTimetables(v *[]model.StationTimetable) error {
 	return nil
 }
 
+func loadTrainTimetables(v **slim.TrainTimetables) error {
+	const name = "train_timetable.gob"
+
+	data, err := fs.ReadFile(name)
+	if err != nil {
+		return fmt.Errorf("%s: %w", name, err)
+	}
+
+	timetables, err := slim.DecodeTrainTimetables(bytes.NewReader(data))
+	if err != nil {
+		return fmt.Errorf("%s: %w", name, err)
+	}
+
+	*v = timetables
+
+	return nil
+}
+
 func (l *Loader) Railways() []model.Railway {
 	return l.railways
 }
@@ -110,7 +129,8 @@ func (l *Loader) StationTimetables() []model.StationTimetable {
 	return l.stationTimetables
 }
 
-func (l *Loader) TrainTimetables() []model.TrainTimetable {
+// TrainTimetables は経路探索用の列車時刻表を返す。呼び出し側で書き換えてはいけない。
+func (l *Loader) TrainTimetables() *slim.TrainTimetables {
 	return l.trainTimetables
 }
 

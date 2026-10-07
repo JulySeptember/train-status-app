@@ -1,13 +1,14 @@
-// Package slim は、駅時刻表（odpt:StationTimetable）をアプリが使う項目だけに絞った
-// 軽量な形式に変換する。
+// Package slim は、駅時刻表（odpt:StationTimetable）と列車時刻表（odpt:TrainTimetable）を
+// アプリが使う項目だけに絞った軽量な形式に変換する。
 //
 // station_timetable.json（約25MB、約12万件）をそのまま json.Unmarshal すると、
 // Lambda のコールドスタートで数百ms と数十MB を使う。そこで、繰り返し現れる文字列
 // （路線・駅・列車ID・時刻など）を文字列表にまとめ、各項目をその番号で持つ形にして
-// gob で保存する。
+// gob で保存する。列車時刻表（約25MB、5,600本）も同じ。
 //
-// 保持する項目は、service が使うものだけ（路線・駅・ダイヤ種別・方面・発着時刻・
+// 駅時刻表で保持する項目は、service が使うものだけ（路線・駅・ダイヤ種別・方面・発着時刻・
 // 列車ID・列車番号・列車種別・行先）。それ以外（@id、dc:date、番線など）は捨てる。
+// 列車時刻表は経路探索で使うため、時刻を分の整数にして持つ（train.go）。
 package slim
 
 import (

@@ -29,9 +29,20 @@ download "odpt:RailwayFare"      "railway_fare.json"
 download "odpt:PassengerSurvey"  "passenger_survey.json"
 download "odpt:TrainType"        "train_type.json"
 download "odpt:StationTimetable" "station_timetable.json"
-download "odpt:TrainTimetable"   "train_timetable.json"
+
+# 列車時刻表は 1,000 件を超えて途中で切れるため、全件ダウンロード用の URL から取得する
+# （公開 API の全件版は都営のデータだけを含む）。保存先へのリダイレクトを返すので --location を付ける
+echo "Downloading train_timetable.json..."
+
+curl \
+    --fail \
+    --location \
+    --silent \
+    --show-error \
+    "${BASE_URL}/odpt:TrainTimetable.json" \
+    -o "${ASSETS_DIR}/train_timetable.json"
 
 echo
-echo "Assets updated successfully."
+echo "Assets updated successfully. Run 'go generate ./assets' to regenerate the gob files."
 
 ls -lh "${ASSETS_DIR}"
