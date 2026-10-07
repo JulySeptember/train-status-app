@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -249,6 +250,91 @@ func TestGetStations(t *testing.T) {
 			t.Fatalf(
 				"station %s not found",
 				st.ID,
+			)
+		}
+	}
+}
+
+// 駅一覧は路線の駅順（odpt:stationOrder）で返す
+func TestGetStationsOrder(t *testing.T) {
+
+	loader, err := assets.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	svc := New(
+		&mockClient{},
+		loader,
+	)
+
+	names := func(routeID string) []string {
+		t.Helper()
+
+		result, err := svc.GetStations(context.Background(), routeID)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		items := make([]string, 0, len(result))
+		for _, st := range result {
+			items = append(items, st.Name)
+		}
+
+		return items
+	}
+
+	mita := names("odpt.Railway:Toei.Mita")
+
+	if want := []string{"目黒", "白金台", "白金高輪"}; !slices.Equal(mita[:3], want) {
+		t.Fatalf("expected %v, got %v", want, mita[:3])
+	}
+
+	if mita[len(mita)-1] != "西高島平" {
+		t.Fatalf("unexpected last station %s", mita[len(mita)-1])
+	}
+
+	// 大江戸線は都庁前が駅順に2回現れるが、一覧には1回だけ含める
+	oedo := names("odpt.Railway:Toei.Oedo")
+
+	if len(oedo) != 38 {
+		t.Fatalf("expected 38 stations, got %d", len(oedo))
+	}
+
+	if oedo[0] != "都庁前" || oedo[len(oedo)-1] != "光が丘" {
+		t.Fatalf("unexpected oedo order %v", oedo)
+	}
+
+	// 全路線で、路線に属する駅をすべて重複なく返す
+	for _, railway := range loader.Railways() {
+
+		result, err := svc.GetStations(context.Background(), railway.SameAs)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		seen := make(map[string]bool)
+
+		for _, st := range result {
+			if seen[st.ID] {
+				t.Fatalf("%s: duplicated station %s", railway.SameAs, st.ID)
+			}
+			seen[st.ID] = true
+		}
+
+		count := 0
+		for _, st := range loader.Stations() {
+			if st.Railway == railway.SameAs {
+				count++
+			}
+		}
+
+		if len(result) != count {
+			t.Fatalf(
+				"%s: expected %d stations, got %d",
+				railway.SameAs,
+				count,
+				len(result),
 			)
 		}
 	}
