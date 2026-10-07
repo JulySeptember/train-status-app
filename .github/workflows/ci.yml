@@ -1,6 +1,6 @@
 name: CI
 
-# PR では検証と terraform plan、main への push では検証のあとにデプロイする。
+# PR では検証と terraform plan、main への push では検証のあとにデプロイ（deploy.yml）する。
 # workflow_dispatch（main で手動実行）は、変更の有無にかかわらず全領域を検証・デプロイする。
 on:
   pull_request:
@@ -16,7 +16,7 @@ env:
   AWS_REGION: ap-northeast-1
   # ロールは infra/bootstrap/github_oidc.tf で作っている。ARN は秘密の値ではない
   AWS_PLAN_ROLE_ARN: arn:aws:iam::015060879504:role/train-status-app-dev-github-plan
-  AWS_DEPLOY_ROLE_ARN: arn:aws:iam::015060879504:role/train-status-app-dev-github-deploy
+  # deploy.yml の TERRAFORM_VERSION と合わせる
   TERRAFORM_VERSION: 1.15.7
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "0"
@@ -46,14 +46,17 @@ jobs:
               - 'backend/**'
               - 'Makefile'
               - '.github/workflows/ci.yml'
+              - '.github/workflows/deploy.yml'
             frontend:
               - 'frontend/**'
               - 'Makefile'
               - '.github/workflows/ci.yml'
+              - '.github/workflows/deploy.yml'
             infra:
               - 'infra/**'
               - 'Makefile'
               - '.github/workflows/ci.yml'
+              - '.github/workflows/deploy.yml'
 
   backend:
     needs: changes
@@ -214,9 +217,7 @@ jobs:
           fi
           exit "$EXITCODE"
 
-  # main への push（マージ）で、変更のあった領域を反映する。
-  # 順番は backend（S3 へアップロード）→ terraform apply（Lambda に反映）→ frontend。
-  # 検証のジョブが1つでも失敗したら実行しない。
+  # main への push（マージ）で、検証のジョブが1つも失敗していなければデプロイする（deploy.yml）
   deploy:
     needs: [changes, backend, frontend, infra]
     if: >-
@@ -227,53 +228,11 @@ jobs:
       (needs.changes.outputs.backend == 'true' ||
        needs.changes.outputs.frontend == 'true' ||
        needs.changes.outputs.infra == 'true')
-    runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
-    env:
-      BACKEND: ${{ needs.changes.outputs.backend }}
-      FRONTEND: ${{ needs.changes.outputs.frontend }}
-      INFRA: ${{ needs.changes.outputs.infra }}
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: aws-actions/configure-aws-credentials@v6
-        with:
-          role-to-assume: ${{ env.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - uses: actions/setup-go@v7
-        if: env.BACKEND == 'true'
-        with:
-          go-version-file: backend/go.mod
-          cache-dependency-path: backend/go.sum
-
-      - uses: actions/setup-node@v7
-        if: env.FRONTEND == 'true'
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      # frontend の invalidate でも terraform output を使うので、常に init する
-      - uses: hashicorp/setup-terraform@v4
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
-          terraform_wrapper: false
-
-      - run: make tf-main-init
-
-      - name: backend
-        if: env.BACKEND == 'true'
-        run: make backend-deploy
-
-      - name: terraform apply
-        if: env.BACKEND == 'true' || env.INFRA == 'true'
-        run: make tf-main-apply
-
-      - name: frontend
-        if: env.FRONTEND == 'true'
-        run: |
-          (cd frontend && npm ci)
-          make frontend-deploy
+    uses: ./.github/workflows/deploy.yml
+    with:
+      backend: ${{ needs.changes.outputs.backend == 'true' }}
+      frontend: ${{ needs.changes.outputs.frontend == 'true' }}
+      infra: ${{ needs.changes.outputs.infra == 'true' }}

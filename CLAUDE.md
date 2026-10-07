@@ -49,7 +49,7 @@ make backend-generate   # = cd backend && go generate ./assets
 
 ### デプロイ（AWS に反映される操作。実行前にユーザーへ確認する）
 
-main へのマージで CI（`.github/workflows/ci.yml` の `deploy` ジョブ）が自動でデプロイする。検証が通ったあと、変更のあった領域だけを backend → `terraform apply` → frontend の順に反映する。全領域をやり直すときは Actions から CI を main で手動実行する（`workflow_dispatch`）。手元の make は、CD が失敗したときや bootstrap の適用に使う。
+main へのマージで CI（`.github/workflows/ci.yml`）が、検証が通ったあとに `deploy.yml` を呼んで自動でデプロイする。変更のあった領域だけを backend → `terraform apply` → frontend の順に反映する。全領域をやり直すときは Actions から CI を main で手動実行する（`workflow_dispatch`）。手元の make は、CD が失敗したときや bootstrap の適用に使う。
 
 main への push が続くと、待機中の実行は新しいものに置き換わり、その push の変更が反映されないことがある（変更の判定は push 単位のため）。その場合も手動実行で反映する。
 
