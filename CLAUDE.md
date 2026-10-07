@@ -54,6 +54,8 @@ make backend-generate   # = cd backend && go generate ./assets
 - `make tf-main-plan` / `tf-main-apply`: `infra/main` を `infra/env/dev.tfvars` で適用する。`tf-*-apply` / `destroy` は `-auto-approve` 付き
 - `infra/bootstrap`: tfstate 用 S3・DynamoDB と Lambda アーティファクト用 S3 を作る
 
+デプロイの make は1つずつ順に実行し、前のコマンドが成功したのを確かめてから次に進む（同時に実行すると、途中で止まったときに片方だけ反映される）。
+
 バックエンドの DTO（`service.go`）とフロントの `src/types.ts` を合わせて変えた変更は、`backend-deploy` → `tf-main-apply` のあとに `frontend-deploy` も行う。片方だけ反映すると本番でフロントとバックの型がずれる。
 
 ### 本番 Lambda の調査（読み取りのみ）
@@ -104,6 +106,7 @@ PR では `.github/workflows/ci.yml` が変更のあった領域だけを検証�
 - API 呼び出しは `src/api.ts`、レスポンス型は `src/types.ts` に集約している。バックエンドの DTO を変えたらこの2ファイルも合わせる
 - ODPT の ID を日本語ラベルに変換する処理は `src/lib/odpt.ts`
 - ID は `odpt.Station:...` のように `:` や `.` を含むので、URL に入れるときは `encodeURIComponent` する
+- `components/ui` は base-ui ベース。`PopoverTrigger` などのトリガーに `Button` を使うときは、子要素にせず `render={<Button ... />}` で渡す（子にすると button が入れ子になる）
 
 ### インフラ（`infra/`）
 
