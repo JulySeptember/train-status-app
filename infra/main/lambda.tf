@@ -30,7 +30,7 @@ resource "aws_lambda_function" "this" {
 
   architectures = ["arm64"]
 
-  memory_size = 512
+  memory_size = 256
   timeout     = 30
 
   publish = false

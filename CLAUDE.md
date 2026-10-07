@@ -100,7 +100,7 @@ PR では `.github/workflows/ci.yml` が変更のあった領域だけを検証�
 
 ### インフラ（`infra/`）
 
-CloudFront が `/api/*` を API Gateway（HTTP API）→ Lambda（`provided.al2023`, arm64, 512MB）に流し、それ以外を S3 に流す。リージョンは `ap-northeast-1`。
+CloudFront が `/api/*` を API Gateway（HTTP API）→ Lambda（`provided.al2023`, arm64, 256MB）に流し、それ以外を S3 に流す。リージョンは `ap-northeast-1`。
 
 SPA のルーティングは CloudFront Function（`infra/main/functions/spa_rewrite.js`）で `/index.html` に書き換えている。`custom_error_response` は `/api/*` のエラーまで `index.html` の 200 にしてしまうので使わない。
 
