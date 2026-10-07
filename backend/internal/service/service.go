@@ -1,6 +1,7 @@
 package service
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"slices"
@@ -261,6 +262,59 @@ type Passenger struct {
 // Station Detail
 // =========================
 
+// ダイヤ種別の表示順
+var calendarOrder = []string{
+	calendar.Weekday,
+	calendar.Saturday,
+	calendar.Holiday,
+	calendar.SaturdayHoliday,
+}
+
+// railwayDirections は路線の上り・下り方面を、表示する順に返す
+func (s *Service) railwayDirections(railwayID string) []string {
+
+	for _, r := range s.assets.Railways() {
+		if r.SameAs == railwayID {
+			return []string{
+				r.AscendingRailDirection,
+				r.DescendingRailDirection,
+			}
+		}
+	}
+
+	return nil
+}
+
+// sortDirectionTimetables は、方面（directions の順 → それ以外は ID 順）、
+// ダイヤ種別（calendarOrder の順 → それ以外は ID 順）の順に並べる
+func sortDirectionTimetables(
+	items []DirectionTimetable,
+	directions []string,
+) {
+
+	rank := func(order []string, v string) int {
+		if i := slices.Index(order, v); i >= 0 {
+			return i
+		}
+		return len(order)
+	}
+
+	slices.SortFunc(items, func(a, b DirectionTimetable) int {
+		return cmp.Or(
+			cmp.Compare(
+				rank(directions, a.RailDirection),
+				rank(directions, b.RailDirection),
+			),
+			cmp.Compare(a.RailDirection, b.RailDirection),
+			cmp.Compare(
+				rank(calendarOrder, a.Calendar),
+				rank(calendarOrder, b.Calendar),
+			),
+			cmp.Compare(a.Calendar, b.Calendar),
+		)
+	})
+}
+
 func (s *Service) GetStationDetail(
 	ctx context.Context,
 	stationID string,
@@ -361,6 +415,13 @@ func (s *Service) GetStationDetail(
 	for _, g := range groups {
 		detail.Timetables = append(detail.Timetables, *g)
 	}
+
+	// map の反復順は不定なので、方面・ダイヤ種別の順に並べ直す
+	sortDirectionTimetables(
+		detail.Timetables,
+		s.railwayDirections(station.Railway),
+	)
+
 	for _, survey := range passengers {
 
 		for _, p := range survey.PassengerSurveyObject {
