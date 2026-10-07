@@ -12,8 +12,8 @@ const (
 	SaturdayHoliday = "odpt.Calendar:SaturdayHoliday"
 )
 
-// serviceDayStartHour より前の時刻は前日の運行日として扱う（終電は0時台まで走るため）
-const serviceDayStartHour = 3
+// ServiceDayStartHour より前の時刻は前日の運行日として扱う（終電は0時台まで走るため）
+const ServiceDayStartHour = 3
 
 var jst = time.FixedZone("Asia/Tokyo", 9*60*60)
 
@@ -21,7 +21,7 @@ var jst = time.FixedZone("Asia/Tokyo", 9*60*60)
 func ServiceDate(t time.Time) time.Time {
 	t = t.In(jst)
 
-	if t.Hour() < serviceDayStartHour {
+	if t.Hour() < ServiceDayStartHour {
 		t = t.AddDate(0, 0, -1)
 	}
 
