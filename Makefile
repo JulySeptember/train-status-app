@@ -58,7 +58,20 @@ frontend-dev:
 frontend-build:
 	cd $(FRONTEND_DIR) && npm run build
 
+# ファイル名にハッシュが付く assets/ は長期キャッシュし、index.html などは毎回再検証させる。
+# Cache-Control を確実に付けるため cp で全件上げ直し、最後の sync で不要になったファイルを消す
 frontend-upload:
+	aws s3 cp \
+		$(FRONTEND_DIR)/dist/assets/ \
+		s3://$(FRONTEND_BUCKET)/assets/ \
+		--recursive \
+		--cache-control "public, max-age=31536000, immutable"
+	aws s3 cp \
+		$(FRONTEND_DIR)/dist/ \
+		s3://$(FRONTEND_BUCKET) \
+		--recursive \
+		--exclude "assets/*" \
+		--cache-control "no-cache"
 	aws s3 sync \
 		$(FRONTEND_DIR)/dist/ \
 		s3://$(FRONTEND_BUCKET) \

@@ -23,6 +23,16 @@ resource "aws_cloudfront_origin_access_control" "frontend" {
   signing_protocol = "sigv4"
 }
 
+# API（/api/*）のエラーを index.html で上書きしないよう、custom_error_response ではなく
+# S3 向けの振る舞いだけに関数を付けて SPA のルーティングに対応する
+resource "aws_cloudfront_function" "spa_rewrite" {
+  name    = "${local.name_prefix}-spa-rewrite"
+  runtime = "cloudfront-js-2.0"
+  comment = "Rewrite SPA routes to /index.html"
+  publish = true
+  code    = file("${path.module}/functions/spa_rewrite.js")
+}
+
 resource "aws_cloudfront_distribution" "this" {
 
   enabled             = true
@@ -84,6 +94,10 @@ resource "aws_cloudfront_distribution" "this" {
     cache_policy_id            = data.aws_cloudfront_cache_policy.caching_optimized.id
     response_headers_policy_id = data.aws_cloudfront_response_headers_policy.security_headers.id
 
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.spa_rewrite.arn
+    }
   }
 
   ordered_cache_behavior {
@@ -113,20 +127,6 @@ resource "aws_cloudfront_distribution" "this" {
     cache_policy_id            = data.aws_cloudfront_cache_policy.caching_disabled.id
     origin_request_policy_id   = data.aws_cloudfront_origin_request_policy.all_viewer_except_host_header.id
     response_headers_policy_id = data.aws_cloudfront_response_headers_policy.security_headers.id
-  }
-
-  custom_error_response {
-    error_code            = 403
-    response_code         = 200
-    response_page_path    = "/index.html"
-    error_caching_min_ttl = 0
-  }
-
-  custom_error_response {
-    error_code            = 404
-    response_code         = 200
-    response_page_path    = "/index.html"
-    error_caching_min_ttl = 0
   }
 
   restrictions {
