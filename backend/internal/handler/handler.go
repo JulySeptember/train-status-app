@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
+	"strings"
 
+	"train-status-app/backend/internal/route"
 	"train-status-app/backend/internal/service"
 )
 
@@ -341,6 +344,107 @@ func (h *Handler) Fare(
 	if err != nil {
 
 		if errors.Is(err, service.ErrFareNotFound) {
+			writeJSON(
+				w,
+				http.StatusNotFound,
+				map[string]string{
+					"error": err.Error(),
+				},
+			)
+			return
+		}
+
+		writeError(w, err)
+		return
+	}
+
+	writeJSON(
+		w,
+		http.StatusOK,
+		data,
+	)
+}
+
+// Journeys godoc
+//
+//	@Summary		Search journeys
+//	@Description	Search journeys between two stations. Returns the earliest journey for each number of transfers.
+//	@Description	Stations with the same name on different lines (e.g. Shinjuku) are treated as one station.
+//	@Description	Times are on the current service day (before 03:00 belongs to the previous day).
+//	@Tags			Journey
+//	@Produce		json
+//	@Param			from			query		string	true	"From station ID"							example(odpt.Station:Toei.Mita.Kasuga)
+//	@Param			to				query		string	true	"To station ID"								example(odpt.Station:Toei.Asakusa.Asakusa)
+//	@Param			departAt		query		string	false	"Departure time (HH:MM). Defaults to now"	example(10:00)
+//	@Param			arriveBy		query		string	false	"Arrival time (HH:MM). Cannot be used with departAt"
+//	@Param			maxTransfers	query		int		false	"Maximum number of transfers (0-3)"			default(3)
+//	@Param			avoid			query		string	false	"Comma-separated railway IDs to avoid"		example(odpt.Railway:Toei.Oedo)
+//	@Success		200				{object}	service.JourneySearch
+//	@Failure		400				{object}	map[string]string
+//	@Failure		404				{object}	map[string]string
+//	@Router			/api/journeys [get]
+func (h *Handler) Journeys(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	params := r.URL.Query()
+
+	q := service.JourneyQuery{
+		From:         params.Get("from"),
+		To:           params.Get("to"),
+		DepartAt:     params.Get("departAt"),
+		ArriveBy:     params.Get("arriveBy"),
+		MaxTransfers: route.DefaultMaxTransfers,
+	}
+
+	if q.From == "" || q.To == "" {
+		writeJSON(
+			w,
+			http.StatusBadRequest,
+			map[string]string{
+				"error": "from and to are required",
+			},
+		)
+		return
+	}
+
+	if v := params.Get("maxTransfers"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			writeJSON(
+				w,
+				http.StatusBadRequest,
+				map[string]string{
+					"error": "maxTransfers must be an integer",
+				},
+			)
+			return
+		}
+		q.MaxTransfers = n
+	}
+
+	if v := params.Get("avoid"); v != "" {
+		q.Avoid = strings.Split(v, ",")
+	}
+
+	data, err := h.service.SearchJourneys(
+		r.Context(),
+		q,
+	)
+	if err != nil {
+
+		if errors.Is(err, service.ErrInvalidJourneyQuery) {
+			writeJSON(
+				w,
+				http.StatusBadRequest,
+				map[string]string{
+					"error": err.Error(),
+				},
+			)
+			return
+		}
+
+		if errors.Is(err, service.ErrStationNotFound) {
 			writeJSON(
 				w,
 				http.StatusNotFound,

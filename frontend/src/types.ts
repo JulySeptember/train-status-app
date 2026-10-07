@@ -60,3 +60,42 @@ export interface Fare {
   icFare: number;
   ticketFare: number;
 }
+
+export interface JourneyLeg {
+  railway: string;
+  railwayName: string;
+  train: string;
+  trainNumber: string;
+  trainType: string;
+  trainTypeName: string;
+  // 大江戸線の環状部などでは行先が無く、空になる
+  destination: string;
+  destinationName: string;
+  from: string;
+  fromName: string;
+  to: string;
+  toName: string;
+  departureTime: string;
+  arrivalTime: string;
+}
+
+export interface Journey {
+  departureTime: string;
+  arrivalTime: string;
+  transfers: number;
+  legs: JourneyLeg[];
+}
+
+export interface JourneySearch {
+  journeys: Journey[];
+}
+
+// departAt と arriveBy（HH:MM）はどちらか一方だけ。どちらも無ければ現在時刻に出発する
+export interface JourneyQuery {
+  from: string;
+  to: string;
+  departAt?: string;
+  arriveBy?: string;
+  maxTransfers?: number;
+  avoid?: string[];
+}

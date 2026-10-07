@@ -64,6 +64,89 @@
                 }
             }
         },
+        "/api/journeys": {
+            "get": {
+                "description": "Search journeys between two stations. Returns the earliest journey for each number of transfers.\nStations with the same name on different lines (e.g. Shinjuku) are treated as one station.\nTimes are on the current service day (before 03:00 belongs to the previous day).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Journey"
+                ],
+                "summary": "Search journeys",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "odpt.Station:Toei.Mita.Kasuga",
+                        "description": "From station ID",
+                        "name": "from",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "example": "odpt.Station:Toei.Asakusa.Asakusa",
+                        "description": "To station ID",
+                        "name": "to",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "example": "10:00",
+                        "description": "Departure time (HH:MM). Defaults to now",
+                        "name": "departAt",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Arrival time (HH:MM). Cannot be used with departAt",
+                        "name": "arriveBy",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 3,
+                        "description": "Maximum number of transfers (0-3)",
+                        "name": "maxTransfers",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "example": "odpt.Railway:Toei.Oedo",
+                        "description": "Comma-separated railway IDs to avoid",
+                        "name": "avoid",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/service.JourneySearch"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/routes": {
             "get": {
                 "produces": [
@@ -338,6 +421,85 @@
                 },
                 "to": {
                     "type": "string"
+                }
+            }
+        },
+        "service.Journey": {
+            "type": "object",
+            "properties": {
+                "arrivalTime": {
+                    "type": "string"
+                },
+                "departureTime": {
+                    "type": "string"
+                },
+                "legs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/service.JourneyLeg"
+                    }
+                },
+                "transfers": {
+                    "type": "integer"
+                }
+            }
+        },
+        "service.JourneyLeg": {
+            "type": "object",
+            "properties": {
+                "arrivalTime": {
+                    "type": "string"
+                },
+                "departureTime": {
+                    "type": "string"
+                },
+                "destination": {
+                    "description": "大江戸線の環状部などでは行先が無く、空になる",
+                    "type": "string"
+                },
+                "destinationName": {
+                    "type": "string"
+                },
+                "from": {
+                    "type": "string"
+                },
+                "fromName": {
+                    "type": "string"
+                },
+                "railway": {
+                    "type": "string"
+                },
+                "railwayName": {
+                    "type": "string"
+                },
+                "to": {
+                    "type": "string"
+                },
+                "toName": {
+                    "type": "string"
+                },
+                "train": {
+                    "type": "string"
+                },
+                "trainNumber": {
+                    "type": "string"
+                },
+                "trainType": {
+                    "type": "string"
+                },
+                "trainTypeName": {
+                    "type": "string"
+                }
+            }
+        },
+        "service.JourneySearch": {
+            "type": "object",
+            "properties": {
+                "journeys": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/service.Journey"
+                    }
                 }
             }
         },
