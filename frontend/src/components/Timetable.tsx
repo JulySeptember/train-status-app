@@ -41,9 +41,32 @@ function TimetableCard({
       <div className="divide-y divide-[#30363d]">
         {timetable?.timetables?.length ? (
           timetable.timetables.map((train) => {
+            // 各停（普通）以外の種別は色を変えて目立たせる
+            const isLocal = train.trainTypeId.endsWith(".Local");
+
             const content = (
               <div>
-                <p className="text-2xl font-bold text-white">{train.time}</p>
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  <p className="text-2xl font-bold text-white">{train.time}</p>
+
+                  {train.trainType && (
+                    <span
+                      className={
+                        isLocal
+                          ? "rounded border border-[#30363d] px-1.5 py-0.5 text-xs text-gray-400"
+                          : "rounded border border-[#f0883e]/60 bg-[#f0883e]/15 px-1.5 py-0.5 text-xs font-semibold text-[#f0883e]"
+                      }
+                    >
+                      {train.trainType}
+                    </span>
+                  )}
+
+                  {train.destination && (
+                    <p className="font-medium text-white">
+                      {train.destination}行
+                    </p>
+                  )}
+                </div>
 
                 <p className="mt-1 text-sm text-gray-400">
                   列車番号 {train.trainNumber}

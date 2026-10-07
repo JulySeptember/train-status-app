@@ -4,8 +4,10 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"log"
 	"maps"
 	"slices"
+	"strings"
 	"time"
 
 	"train-status-app/backend/assets"
@@ -38,6 +40,12 @@ type Service struct {
 	// 列車ID（odpt.Train:...）から路線・列車番号を引くための索引
 	trains map[string]trainRef
 
+	// 駅ID → 駅名（都営の駅と直通運転先の駅）
+	stationNames map[string]string
+
+	// 列車種別ID → 種別名
+	trainTypeNames map[string]string
+
 	now func() time.Time
 }
 
@@ -50,12 +58,102 @@ func New(
 	c TrainClient,
 	a *assets.Loader,
 ) *Service {
-	return &Service{
-		client: c,
-		assets: a,
-		trains: indexTrains(a.StationTimetables()),
-		now:    time.Now,
+	s := &Service{
+		client:         c,
+		assets:         a,
+		trains:         indexTrains(a.StationTimetables()),
+		stationNames:   indexStationNames(a.Stations()),
+		trainTypeNames: indexTrainTypeNames(a.TrainTypes()),
+		now:            time.Now,
 	}
+
+	s.warnUnknownNames()
+
+	return s
+}
+
+func indexStationNames(
+	stations []model.Station,
+) map[string]string {
+
+	result := make(map[string]string, len(stations)+len(throughServiceStations))
+
+	maps.Copy(result, throughServiceStations)
+
+	for _, st := range stations {
+		result[st.SameAs] = st.StationTitle.Ja
+	}
+
+	return result
+}
+
+func indexTrainTypeNames(
+	types []model.TrainType,
+) map[string]string {
+
+	result := make(map[string]string, len(types))
+
+	for _, t := range types {
+		result[t.SameAs] = t.TrainTypeTitle.Ja
+	}
+
+	return result
+}
+
+// warnUnknownNames は、駅名・種別名が分からない行先や種別が時刻表にあればログに出す。
+// assets を更新して直通運転先の駅が増えたときに気付けるようにするため。
+func (s *Service) warnUnknownNames() {
+
+	unknownStations := make(map[string]bool)
+	unknownTypes := make(map[string]bool)
+
+	for _, tt := range s.assets.StationTimetables() {
+		for _, obj := range tt.StationTimetableObject {
+
+			for _, id := range obj.DestinationStation {
+				if _, ok := s.stationNames[id]; !ok {
+					unknownStations[id] = true
+				}
+			}
+
+			if obj.TrainType != "" {
+				if _, ok := s.trainTypeNames[obj.TrainType]; !ok {
+					unknownTypes[obj.TrainType] = true
+				}
+			}
+		}
+	}
+
+	for _, id := range slices.Sorted(maps.Keys(unknownStations)) {
+		log.Printf("unknown destination station: %s", id)
+	}
+
+	for _, id := range slices.Sorted(maps.Keys(unknownTypes)) {
+		log.Printf("unknown train type: %s", id)
+	}
+}
+
+// stationName は駅名を返す。分からない場合は ID の末尾（例: Sasazuka）を返す
+func (s *Service) stationName(id string) string {
+	if name, ok := s.stationNames[id]; ok {
+		return name
+	}
+	return lastSegment(id)
+}
+
+// trainTypeName は列車種別名を返す。分からない場合は ID の末尾を返す
+func (s *Service) trainTypeName(id string) string {
+	if id == "" {
+		return ""
+	}
+	if name, ok := s.trainTypeNames[id]; ok {
+		return name
+	}
+	return lastSegment(id)
+}
+
+func lastSegment(id string) string {
+	return id[strings.LastIndex(id, ".")+1:]
 }
 
 func indexTrains(
@@ -281,6 +379,10 @@ type Timetable struct {
 	TrainID     string `json:"trainId"`
 	TrainNumber string `json:"trainNumber"`
 	Destination string `json:"destination"`
+
+	// 列車種別（例: 普通、急行、エアポート快特）
+	TrainTypeID string `json:"trainTypeId"`
+	TrainType   string `json:"trainType"`
 }
 
 type Passenger struct {
@@ -428,9 +530,7 @@ func (s *Service) GetStationDetail(
 
 			destination := ""
 			if len(obj.DestinationStation) > 0 {
-				if st, ok := stationMap[obj.DestinationStation[0]]; ok {
-					destination = st.StationTitle.Ja
-				}
+				destination = s.stationName(obj.DestinationStation[0])
 			}
 
 			group.Timetables = append(group.Timetables, Timetable{
@@ -438,6 +538,8 @@ func (s *Service) GetStationDetail(
 				TrainID:     obj.Train,
 				TrainNumber: obj.TrainNumber,
 				Destination: destination,
+				TrainTypeID: obj.TrainType,
+				TrainType:   s.trainTypeName(obj.TrainType),
 			})
 		}
 	}

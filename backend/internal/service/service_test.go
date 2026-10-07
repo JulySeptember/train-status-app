@@ -554,6 +554,92 @@ func TestGetStationDetailTimetableOrder(t *testing.T) {
 	}
 }
 
+// 全駅の時刻表で、行先（直通運転先を含む）と列車種別に日本語名が付く
+func TestGetStationDetailDestinationAndTrainType(t *testing.T) {
+
+	loader, err := assets.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	svc := New(
+		&mockClient{},
+		loader,
+	)
+
+	// 名前が見つからず ID の末尾にフォールバックした値は ASCII だけになる
+	isASCII := func(s string) bool {
+		for _, r := range s {
+			if r > 127 {
+				return false
+			}
+		}
+		return true
+	}
+
+	destinations := make(map[string]bool)
+	trainTypes := make(map[string]bool)
+
+	for _, station := range loader.Stations() {
+
+		result, err := svc.GetStationDetail(
+			context.Background(),
+			station.SameAs,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for _, tt := range result.Timetables {
+			for _, row := range tt.Timetables {
+
+				// 大江戸線の環状部（外回り・内回り）は、駅時刻表の元データに行先が無い
+				noDestination := station.Railway == "odpt.Railway:Toei.Oedo" &&
+					(tt.RailDirection == "odpt.RailDirection:OuterLoop" ||
+						tt.RailDirection == "odpt.RailDirection:InnerLoop")
+
+				switch {
+				case row.Destination == "" && noDestination:
+					// 環状部は行先が空でよい
+				case row.Destination == "" || isASCII(row.Destination):
+					t.Fatalf(
+						"%s %s: unresolved destination %q",
+						station.SameAs,
+						row.Time,
+						row.Destination,
+					)
+				}
+
+				if row.TrainTypeID == "" || isASCII(row.TrainType) {
+					t.Fatalf(
+						"%s %s: unresolved train type %q (%s)",
+						station.SameAs,
+						row.Time,
+						row.TrainType,
+						row.TrainTypeID,
+					)
+				}
+
+				destinations[row.Destination] = true
+				trainTypes[row.TrainType] = true
+			}
+		}
+	}
+
+	// 直通運転先の行先と、各停以外の種別が含まれている
+	for _, want := range []string{"日吉", "羽田空港第1・第2ターミナル", "成田空港", "笹塚"} {
+		if !destinations[want] {
+			t.Fatalf("expected destination %s", want)
+		}
+	}
+
+	for _, want := range []string{"普通", "急行", "エアポート快特", "アクセス特急"} {
+		if !trainTypes[want] {
+			t.Fatalf("expected train type %s", want)
+		}
+	}
+}
+
 func TestGetStationDetailToday(t *testing.T) {
 
 	loader, err := assets.New()

@@ -81,6 +81,9 @@ PR では `.github/workflows/ci.yml` が変更のあった領域だけを検証�
 - 日暮里・舎人ライナーは `odpt:Train` が配信されない（`trainLocationUnsupported`）
 - `odpt:Train` で `toStation` が null の列車は `fromStation` に停車中
 - 路線によって「土曜・休日」が別ダイヤのものと「土休日」にまとめられたものがある（フロントの `Timetable.tsx` も両方に対応している）
+- 時刻表の行先には直通運転先（京急・京成・東急など他社）の駅が含まれるが、他社の駅データは公開 API から取れない。駅名は `service/through_service.go` の辞書で引く。assets 更新後に起動ログへ `unknown destination station` が出たら辞書に追加する
+- 大江戸線の環状部（外回り・内回り）は、駅時刻表に行先（`odpt:destinationStation`）が入っていない
+- ODPT 公開 API は1回の取得で最大1,000件しか返さない。`railway_fare.json` と `train_timetable.json` はちょうど1,000件で、途中までしか取れていない
 
 ### フロントエンド（`frontend/`）
 
