@@ -60,6 +60,8 @@ aws logs filter-log-events --region ap-northeast-1 \
 
 ブランチを切る・PR を作る前に `git fetch` と `gh pr list --state all` で main と PR の状態を確認する（`gh` は導入済み）。
 
+PR では `.github/workflows/ci.yml` が変更のあった領域だけを検証する（backend: gofmt・vet・test・Swagger が最新か / frontend: lint・build / infra: terraform fmt・validate）。Swagger のチェックは go.mod の swaggo/swag と同じバージョンの CLI で再生成して差分を見る。
+
 ## アーキテクチャ
 
 ### バックエンド（`backend/`, Go 1.25, 標準 `net/http`）
