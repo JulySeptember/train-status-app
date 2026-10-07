@@ -80,8 +80,9 @@ PR では `.github/workflows/ci.yml` が変更のあった領域だけを検証�
   - `service` はデータの加工・集約を担い、`model`（ODPT JSON-LD そのままの型）をフロント向けの DTO に変換する。DTO は service.go に定義する
   - `client` で外部 API を呼ぶのは運行情報（`odpt:TrainInformation`）と列車位置（`odpt:Train`）だけ。共通処理はジェネリクスの `fetch[T]`
 - `assets/`: ODPT の静的データ（路線・駅・運賃・駅時刻表・列車時刻表・乗降人員・列車種別）を `go:embed` で埋め込み、起動時に全件読み込む。駅時刻表と列車時刻表は、それぞれ約25MBの JSON を埋め込まず、使う項目に絞って文字列表にまとめた `station_timetable.gob` / `train_timetable.gob`（`assets/slim`、`cmd/gen-assets` で生成）を埋め込む。Lambda のコールドスタートを短くするため。`model.StationTimetableEntry` も約12万件が常駐するので、使う項目以外を足さない。列車時刻表は経路探索用で、`model` の型に戻さず、文字列表の番号と分（3時前は +24時間）のまま `slim.TrainTimetables` で持つ
+- `internal/route`: 経路探索エンジン（RAPTOR）。`GET /api/journeys` から使う。`slim.TrainTimetables` を数値のまま使い、駅・路線は ID の文字列で扱う（都営に決め打ちしない）。乗り換えの対応表（`route.Transfer`）は service（`service/transfer.go`）が作って渡す: 同じ名前の駅どうし（一律5分）と、名前が違う駅の組（東日本橋 ⇔ 馬喰横山）。同じ名前の駅は、出発駅・到着駅としては1つの駅にまとめる。設計は `docs/design/route-search.md`
 - `internal/calendar`: 運行日（3時前は前日扱い）と、その日に適用されるダイヤ種別（`odpt.Calendar:*`）を判定する。祝日は祝日法に基づいて計算する
-- テストは `service` と `calendar` にあり、service のテストは `mockClient` と実際の embed アセットを使う
+- テストは `service`・`route`・`handler`・`calendar`・`assets` にある。service のテストは `mockClient` と実際の embed アセットを使う。route のテストは小さな架空の路線網で確かめる
 
 ### ODPT データの注意点
 

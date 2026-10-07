@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"maps"
 	"slices"
@@ -14,6 +15,7 @@ import (
 	"train-status-app/backend/internal/calendar"
 	"train-status-app/backend/internal/client"
 	"train-status-app/backend/internal/model"
+	"train-status-app/backend/internal/route"
 )
 
 var (
@@ -21,6 +23,9 @@ var (
 	ErrStationNotFound = errors.New("station not found")
 	ErrFareNotFound    = errors.New("fare not found")
 	ErrTrainNotFound   = errors.New("train not found")
+
+	// ErrInvalidJourneyQuery は経路検索の条件が不正なこと。メッセージに理由を含めて wrap する
+	ErrInvalidJourneyQuery = errors.New("invalid journey query")
 )
 
 // 列車位置情報（odpt:Train）が配信されていない路線
@@ -46,6 +51,14 @@ type Service struct {
 	// 列車種別ID → 種別名
 	trainTypeNames map[string]string
 
+	// 路線ID → 路線名
+	railwayNames map[string]string
+
+	// 駅ID → 同じ名前の駅の ID（経路検索の出発駅・到着駅をまとめるため）
+	stationGroups map[string][]string
+
+	routes *route.Engine
+
 	now func() time.Time
 }
 
@@ -58,13 +71,22 @@ func New(
 	c TrainClient,
 	a *assets.Loader,
 ) *Service {
+	groups := sameNameStations(a.Stations())
+
 	s := &Service{
 		client:         c,
 		assets:         a,
 		trains:         indexTrains(a.StationTimetables()),
 		stationNames:   indexStationNames(a.Stations()),
 		trainTypeNames: indexTrainTypeNames(a.TrainTypes()),
-		now:            time.Now,
+		railwayNames:   indexRailwayNames(a.Railways()),
+		stationGroups:  groups,
+		routes: route.New(
+			a.TrainTimetables(),
+			transfers(groups, transferMinutes),
+			route.DefaultConfig(),
+		),
+		now: time.Now,
 	}
 
 	s.warnUnknownNames()
@@ -95,6 +117,19 @@ func indexTrainTypeNames(
 
 	for _, t := range types {
 		result[t.SameAs] = t.TrainTypeTitle.Ja
+	}
+
+	return result
+}
+
+func indexRailwayNames(
+	railways []model.Railway,
+) map[string]string {
+
+	result := make(map[string]string, len(railways))
+
+	for _, r := range railways {
+		result[r.SameAs] = r.RailwayTitle.Ja
 	}
 
 	return result
@@ -719,4 +754,204 @@ func (s *Service) GetFare(
 	}
 
 	return nil, ErrFareNotFound
+}
+
+// =========================
+// Journey DTO
+// =========================
+
+type JourneySearch struct {
+	Journeys []Journey `json:"journeys"`
+}
+
+type Journey struct {
+	DepartureTime string       `json:"departureTime"`
+	ArrivalTime   string       `json:"arrivalTime"`
+	Transfers     int          `json:"transfers"`
+	Legs          []JourneyLeg `json:"legs"`
+}
+
+// JourneyLeg は1本の列車に乗る区間。ID と日本語の名前を両方返す
+type JourneyLeg struct {
+	Railway     string `json:"railway"`
+	RailwayName string `json:"railwayName"`
+
+	Train       string `json:"train"`
+	TrainNumber string `json:"trainNumber"`
+
+	TrainType     string `json:"trainType"`
+	TrainTypeName string `json:"trainTypeName"`
+
+	// 大江戸線の環状部などでは行先が無く、空になる
+	Destination     string `json:"destination"`
+	DestinationName string `json:"destinationName"`
+
+	From     string `json:"from"`
+	FromName string `json:"fromName"`
+	To       string `json:"to"`
+	ToName   string `json:"toName"`
+
+	DepartureTime string `json:"departureTime"`
+	ArrivalTime   string `json:"arrivalTime"`
+}
+
+// JourneyQuery は経路検索の条件。
+// 同じ名前の駅（新宿・春日など）は、路線が違ってもまとめて1つの駅として扱う
+// （三田線の春日を指定しても、大江戸線の春日から乗る経路を返す）。
+// DepartAt と ArriveBy（"HH:MM"）はどちらか一方だけ指定でき、どちらも無ければ現在時刻に出発する。
+// 時刻は現在の運行日のものとして扱う（3時前は前日の運行日。例: 23時台に "00:30" を指定すると、その夜の 0:30）。
+type JourneyQuery struct {
+	From string
+	To   string
+
+	DepartAt string
+	ArriveBy string
+
+	MaxTransfers int
+	Avoid        []string
+}
+
+// =========================
+// Journey
+// =========================
+
+func (s *Service) SearchJourneys(
+	ctx context.Context,
+	q JourneyQuery,
+) (*JourneySearch, error) {
+
+	for _, id := range []string{q.From, q.To} {
+		if _, ok := s.stationGroups[id]; !ok || !s.routes.HasStation(id) {
+			return nil, fmt.Errorf("%w: %s", ErrStationNotFound, id)
+		}
+	}
+
+	from, to := s.stationGroups[q.From], s.stationGroups[q.To]
+
+	if slices.Contains(from, q.To) {
+		return nil, fmt.Errorf("%w: from and to must be different stations", ErrInvalidJourneyQuery)
+	}
+
+	if q.DepartAt != "" && q.ArriveBy != "" {
+		return nil, fmt.Errorf("%w: specify either departAt or arriveBy", ErrInvalidJourneyQuery)
+	}
+
+	if q.MaxTransfers < 0 || q.MaxTransfers > route.DefaultMaxTransfers {
+		return nil, fmt.Errorf(
+			"%w: maxTransfers must be between 0 and %d",
+			ErrInvalidJourneyQuery,
+			route.DefaultMaxTransfers,
+		)
+	}
+
+	for _, id := range q.Avoid {
+		if _, ok := s.railwayNames[id]; !ok {
+			return nil, fmt.Errorf("%w: unknown railway %s", ErrInvalidJourneyQuery, id)
+		}
+	}
+
+	now := s.now()
+
+	rq := route.Query{
+		From:         from,
+		To:           to,
+		Calendars:    calendar.Calendars(now),
+		MaxTransfers: q.MaxTransfers,
+		Avoid:        q.Avoid,
+	}
+
+	switch {
+	case q.DepartAt != "":
+		m, err := parseClock(q.DepartAt)
+		if err != nil {
+			return nil, fmt.Errorf("%w: departAt: %v", ErrInvalidJourneyQuery, err)
+		}
+		rq.Time = m
+
+	case q.ArriveBy != "":
+		m, err := parseClock(q.ArriveBy)
+		if err != nil {
+			return nil, fmt.Errorf("%w: arriveBy: %v", ErrInvalidJourneyQuery, err)
+		}
+		rq.Time = m
+		rq.ArriveBy = true
+
+	default:
+		rq.Time = serviceDayMinutes(now)
+	}
+
+	journeys, err := s.routes.Search(rq)
+	if err != nil {
+		return nil, err
+	}
+
+	result := &JourneySearch{
+		Journeys: make([]Journey, 0, len(journeys)),
+	}
+
+	for _, j := range journeys {
+
+		item := Journey{
+			DepartureTime: formatClock(j.Departure),
+			ArrivalTime:   formatClock(j.Arrival),
+			Transfers:     j.Transfers(),
+			Legs:          make([]JourneyLeg, 0, len(j.Legs)),
+		}
+
+		for _, l := range j.Legs {
+
+			destinationName := ""
+			if l.Destination != "" {
+				destinationName = s.stationName(l.Destination)
+			}
+
+			item.Legs = append(item.Legs, JourneyLeg{
+				Railway:         l.Railway,
+				RailwayName:     s.railwayNames[l.Railway],
+				Train:           l.Train,
+				TrainNumber:     l.TrainNumber,
+				TrainType:       l.TrainType,
+				TrainTypeName:   s.trainTypeName(l.TrainType),
+				Destination:     l.Destination,
+				DestinationName: destinationName,
+				From:            l.From,
+				FromName:        s.stationName(l.From),
+				To:              l.To,
+				ToName:          s.stationName(l.To),
+				DepartureTime:   formatClock(l.Departure),
+				ArrivalTime:     formatClock(l.Arrival),
+			})
+		}
+
+		result.Journeys = append(result.Journeys, item)
+	}
+
+	return result, nil
+}
+
+// parseClock は "HH:MM" を運行日の0時からの分にする（3時前は +24時間）。
+func parseClock(v string) (int, error) {
+
+	t, err := time.Parse("15:04", v)
+	if err != nil || len(v) != 5 {
+		return 0, fmt.Errorf("invalid time %q (expected HH:MM)", v)
+	}
+
+	h, m := t.Hour(), t.Minute()
+	if h < calendar.ServiceDayStartHour {
+		h += 24
+	}
+
+	return h*60 + m, nil
+}
+
+// serviceDayMinutes は時刻 t を、その運行日の0時からの分にする。
+func serviceDayMinutes(t time.Time) int {
+	return int(t.Sub(calendar.ServiceDate(t)) / time.Minute)
+}
+
+// formatClock は運行日の0時からの分を "HH:MM" にする（24時以降は 00:15 のように戻す）。
+func formatClock(m int) string {
+	m %= 24 * 60
+	return fmt.Sprintf("%02d:%02d", m/60, m%60)
 }

@@ -25,6 +25,58 @@ definitions:
       to:
         type: string
     type: object
+  service.Journey:
+    properties:
+      arrivalTime:
+        type: string
+      departureTime:
+        type: string
+      legs:
+        items:
+          $ref: '#/definitions/service.JourneyLeg'
+        type: array
+      transfers:
+        type: integer
+    type: object
+  service.JourneyLeg:
+    properties:
+      arrivalTime:
+        type: string
+      departureTime:
+        type: string
+      destination:
+        description: 大江戸線の環状部などでは行先が無く、空になる
+        type: string
+      destinationName:
+        type: string
+      from:
+        type: string
+      fromName:
+        type: string
+      railway:
+        type: string
+      railwayName:
+        type: string
+      to:
+        type: string
+      toName:
+        type: string
+      train:
+        type: string
+      trainNumber:
+        type: string
+      trainType:
+        type: string
+      trainTypeName:
+        type: string
+    type: object
+  service.JourneySearch:
+    properties:
+      journeys:
+        items:
+          $ref: '#/definitions/service.Journey'
+        type: array
+    type: object
   service.Passenger:
     properties:
       count:
@@ -153,6 +205,66 @@ paths:
       summary: Get fare
       tags:
       - Fare
+  /api/journeys:
+    get:
+      description: |-
+        Search journeys between two stations. Returns the earliest journey for each number of transfers.
+        Stations with the same name on different lines (e.g. Shinjuku) are treated as one station.
+        Times are on the current service day (before 03:00 belongs to the previous day).
+      parameters:
+      - description: From station ID
+        example: odpt.Station:Toei.Mita.Kasuga
+        in: query
+        name: from
+        required: true
+        type: string
+      - description: To station ID
+        example: odpt.Station:Toei.Asakusa.Asakusa
+        in: query
+        name: to
+        required: true
+        type: string
+      - description: Departure time (HH:MM). Defaults to now
+        example: "10:00"
+        in: query
+        name: departAt
+        type: string
+      - description: Arrival time (HH:MM). Cannot be used with departAt
+        in: query
+        name: arriveBy
+        type: string
+      - default: 3
+        description: Maximum number of transfers (0-3)
+        in: query
+        name: maxTransfers
+        type: integer
+      - description: Comma-separated railway IDs to avoid
+        example: odpt.Railway:Toei.Oedo
+        in: query
+        name: avoid
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/service.JourneySearch'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Search journeys
+      tags:
+      - Journey
   /api/routes:
     get:
       produces:

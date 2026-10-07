@@ -1,5 +1,7 @@
 import type {
   Fare,
+  JourneyQuery,
+  JourneySearch,
   Railway,
   Station,
   StationDetail,
@@ -58,5 +60,18 @@ export const api = {
     return request<Fare>(
       `/fares?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
     );
+  },
+
+  searchJourneys(query: JourneyQuery) {
+    const params = new URLSearchParams({ from: query.from, to: query.to });
+
+    if (query.departAt) params.set("departAt", query.departAt);
+    if (query.arriveBy) params.set("arriveBy", query.arriveBy);
+    if (query.maxTransfers !== undefined) {
+      params.set("maxTransfers", String(query.maxTransfers));
+    }
+    if (query.avoid?.length) params.set("avoid", query.avoid.join(","));
+
+    return request<JourneySearch>(`/journeys?${params}`);
   },
 };
