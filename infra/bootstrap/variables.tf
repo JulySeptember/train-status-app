@@ -18,3 +18,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "github_repository" {
+  description = "GitHub Actions からの AssumeRole を許可するリポジトリ（owner/name）"
+  type        = string
+  default     = "JulySeptember/train-status-app"
+}

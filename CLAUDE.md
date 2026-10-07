@@ -52,7 +52,7 @@ make backend-generate   # = cd backend && go generate ./assets
 - `make backend-deploy`: linux/arm64 でビルドして zip にし、S3 にアップロードする。Lambda への反映は `make tf-main-apply`（`s3_object_version` を参照している）
 - `make frontend-deploy`: ビルドして S3 に sync し、CloudFront を invalidate する
 - `make tf-main-plan` / `tf-main-apply`: `infra/main` を `infra/env/dev.tfvars` で適用する。`tf-*-apply` / `destroy` は `-auto-approve` 付き
-- `infra/bootstrap`: tfstate 用 S3・DynamoDB と Lambda アーティファクト用 S3 を作る
+- `infra/bootstrap`: tfstate 用 S3・DynamoDB、Lambda アーティファクト用 S3、GitHub Actions 用の OIDC プロバイダと IAM ロール（PR の plan 用・main のデプロイ用）を作る。state はローカルにあるので、手元から `make tf-bootstrap-apply` で適用する
 
 デプロイの make は1つずつ順に実行し、前のコマンドが成功したのを確かめてから次に進む（同時に実行すると、途中で止まったときに片方だけ反映される）。
 
