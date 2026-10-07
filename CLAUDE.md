@@ -53,6 +53,8 @@ main へのマージで CI（`.github/workflows/ci.yml`）が、検証が通っ�
 
 main への push が続くと、待機中の実行は新しいものに置き換わり、その push の変更が反映されないことがある（変更の判定は push 単位のため）。その場合も手動実行で反映する。
 
+`deploy.yml` のジョブに GitHub Environment（`environment:`）を付けると、OIDC の `sub` が `repo:<owner>/<repo>:environment:<名前>` に変わり、deploy 用ロールを引き受けられなくなる。付けるときは `infra/bootstrap/github_oidc.tf` の条件も変える。
+
 - `make backend-deploy`: linux/arm64 でビルドして zip にし、S3 にアップロードする。Lambda への反映は `make tf-main-apply`（`s3_object_version` を参照している）
 - `make frontend-deploy`: ビルドして S3 に sync し、CloudFront を invalidate する
 - `make tf-main-plan` / `tf-main-apply`: `infra/main` を `infra/env/dev.tfvars` で適用する。`tf-*-apply` / `destroy` は `-auto-approve` 付き
