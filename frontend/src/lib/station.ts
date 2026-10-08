@@ -32,9 +32,12 @@ export function usePrefetchStation() {
     };
 
     return {
-      onPointerEnter: () => {
+      // タッチでも指を置くと pointerenter が起きるので、カーソルのときだけ待って取りにいく
+      onPointerEnter: (e: React.PointerEvent) => {
         clearTimeout(timer.current);
-        timer.current = setTimeout(prefetch, HOVER_DELAY_MS);
+        if (e.pointerType !== "touch") {
+          timer.current = setTimeout(prefetch, HOVER_DELAY_MS);
+        }
       },
       onPointerLeave: () => clearTimeout(timer.current),
       onPointerDown: (e: React.PointerEvent) => {
