@@ -29,6 +29,8 @@ type Props = {
 
   // 例: "出発駅"。ボタンの初期表示と検索欄に使う
   label: string;
+
+  disabled?: boolean;
 };
 
 export default function StationSelect({
@@ -36,6 +38,7 @@ export default function StationSelect({
   value,
   onChange,
   label,
+  disabled,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [keyword, setKeyword] = useState("");
@@ -55,7 +58,8 @@ export default function StationSelect({
           <Button
             variant="outline"
             role="combobox"
-            className="justify-between w-full"
+            disabled={disabled}
+            className="h-10 w-full justify-between text-base"
           />
         }
       >

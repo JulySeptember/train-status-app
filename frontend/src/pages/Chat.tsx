@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import {
   CircleCheck,
   Info,
   LoaderCircle,
   RotateCcw,
+  Route,
   SendHorizontal,
   TriangleAlert,
 } from "lucide-react";
@@ -24,20 +25,15 @@ import RealtimeNotice from "@/components/RealtimeNotice";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-
-// バックエンドの上限（ai.Config.MaxInputChars / MaxHistory）と合わせる
-const MAX_INPUT_CHARS = 500;
-const MAX_HISTORY_MESSAGES = 11;
+import {
+  EXAMPLES,
+  MAX_HISTORY_MESSAGES,
+  MAX_INPUT_CHARS,
+  type ChatLocationState,
+} from "@/lib/chat";
 
 // 会話は sessionStorage に置き、駅のページなどへ移動して戻っても続けられるようにする
 const STORAGE_KEY = "chatEntries";
-
-const EXAMPLES = [
-  "今春日にいる。浅草に行きたい",
-  "新宿から浅草まで、18時までに着きたい。乗り換え少なめで",
-  "浅草駅から次に出る電車は？",
-  "今遅れている路線はある？",
-];
 
 // 上限に達したときなど、AI の代わりに通常の検索を案内するエラー
 const FALLBACK_CODES = [
@@ -91,6 +87,25 @@ function Steps({ steps }: { steps: ChatStep[] }) {
   );
 }
 
+// AI が探した経路の出発駅・到着駅で、経路検索を開く（時刻などの条件を変えて探し直せるように）
+function JourneySearchLink({ journeys }: { journeys: JourneySearch }) {
+  const legs = journeys.journeys[0].legs;
+  const params = new URLSearchParams({
+    from: legs[0].from,
+    to: legs[legs.length - 1].to,
+  });
+
+  return (
+    <Link
+      to={`/journeys?${params}`}
+      className="inline-flex items-center gap-1 text-sm text-brand hover:underline"
+    >
+      <Route size={14} />
+      経路検索で条件を変えて探す
+    </Link>
+  );
+}
+
 function AssistantMessage({
   entry,
 }: {
@@ -116,6 +131,8 @@ function AssistantMessage({
           <RealtimeNotice data={journeys} realtime />
 
           <JourneyList journeys={journeys.journeys} />
+
+          <JourneySearchLink journeys={journeys} />
         </div>
       )}
     </div>
@@ -203,6 +220,25 @@ export default function Chat() {
       },
     });
   };
+
+  // ホームで入力した質問は、この画面を開いたときに一度だけ送る。
+  // 送ったら state を消し、再読み込みや戻るで同じ質問を送り直さないようにする
+  const location = useLocation();
+  const navigate = useNavigate();
+  const initialQuestion = (location.state as ChatLocationState | null)
+    ?.question;
+  const sentInitial = useRef(false);
+
+  useEffect(() => {
+    if (!initialQuestion || sentInitial.current) {
+      return;
+    }
+    sentInitial.current = true;
+    navigate(location.pathname, { replace: true, state: null });
+    send(initialQuestion);
+    // send は描画ごとに作り直されるが、ここでは最初の1回だけ呼べばよい
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialQuestion]);
 
   const reset = () => {
     setEntries([]);
