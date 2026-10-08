@@ -42,5 +42,8 @@ func New(h *handler.Handler) http.Handler {
 	// Journey
 	mux.HandleFunc("GET /api/journeys", h.Journeys)
 
+	// AI Agent
+	mux.HandleFunc("POST /api/chat", h.Chat)
+
 	return mux
 }

@@ -30,7 +30,7 @@ func TestJourneys(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h := New(service.New(nopClient{}, loader))
+	h := New(service.New(nopClient{}, loader), nil)
 
 	const (
 		kasuga  = "odpt.Station:Toei.Mita.Kasuga"

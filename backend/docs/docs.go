@@ -15,6 +15,70 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/api/chat": {
+            "post": {
+                "description": "AI エージェントに質問する。会話の履歴はブラウザが持ち、毎回送る（最後はユーザーの発言）。\n入力は AI の提供元（Google）に送信される。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Chat"
+                ],
+                "summary": "Ask the AI agent",
+                "parameters": [
+                    {
+                        "description": "Conversation",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ai.ChatRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ai.ChatResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handler.ChatError"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/handler.ChatError"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/handler.ChatError"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/handler.ChatError"
+                        }
+                    },
+                    "504": {
+                        "description": "Gateway Timeout",
+                        "schema": {
+                            "$ref": "#/definitions/handler.ChatError"
+                        }
+                    }
+                }
+            }
+        },
         "/api/fares": {
             "get": {
                 "description": "Get IC card and ticket fare between two stations",
@@ -400,6 +464,73 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "ai.ChatMessage": {
+            "type": "object",
+            "properties": {
+                "role": {
+                    "description": "\"user\" または \"assistant\"",
+                    "type": "string"
+                },
+                "text": {
+                    "type": "string"
+                }
+            }
+        },
+        "ai.ChatRequest": {
+            "type": "object",
+            "properties": {
+                "messages": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/ai.ChatMessage"
+                    }
+                }
+            }
+        },
+        "ai.ChatResponse": {
+            "type": "object",
+            "properties": {
+                "journeys": {
+                    "description": "最後に探した経路（search_route の結果そのもの）。時刻などの事実を、AI の文章ではなくアプリのデータで表示するため",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/service.JourneySearch"
+                        }
+                    ]
+                },
+                "reply": {
+                    "type": "string"
+                },
+                "steps": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/ai.Step"
+                    }
+                }
+            }
+        },
+        "ai.Step": {
+            "type": "object",
+            "properties": {
+                "label": {
+                    "type": "string"
+                },
+                "tool": {
+                    "type": "string"
+                }
+            }
+        },
+        "handler.ChatError": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "error": {
+                    "type": "string"
+                }
+            }
+        },
         "service.DirectionTimetable": {
             "type": "object",
             "properties": {

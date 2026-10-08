@@ -1,6 +1,6 @@
 # AI 鉄道エージェント 設計書
 
-- 状態: ドラフト（2026-10-08 改訂）
+- 状態: Phase 3 実装中（2026-10-08 改訂。バックエンドは #30）
 - 対象: `backend/internal/ai`、`POST /api/chat`、チャット UI
 - 関連: [経路探索エンジン 設計書](route-search.md)
 
@@ -90,7 +90,8 @@ backend/internal/ai/
 ├── tools.go       # 道具の定義（JSON Schema）と、route・既存の service への橋渡し
 ├── models.go      # 使えるモデルの一覧（設定から読み込む）
 ├── limit.go       # 利用上限の管理
-├── gemini/        # Gemini Provider（SDK の型はここから外に出さない）
+├── eval_test.go   # 評価セット（testdata/eval.yaml）を実際の AI で実行する（11.2）
+├── gemini/        # Gemini Provider（REST の generateContent を直接呼ぶ）
 └── fake/          # テスト用の Provider
 backend/internal/route/    # 経路探索エンジン（route-search.md）
 backend/internal/station/  # 駅名の特定（6.3）
@@ -189,7 +190,8 @@ type Response struct {
 ```
 
 - Provider ごとに異なる点（エンドポイント、認証、リクエストとレスポンスの形式、エラーの形式、道具の呼び出し方）は、それぞれの Provider の中で共通の形に変換する。
-- SDK を使う場合も（Gemini なら `google.golang.org/genai`）、SDK の型は `gemini/` パッケージの外に出さない。
+- Gemini は SDK（`google.golang.org/genai`）を使わず、REST の generateContent を `net/http` で直接呼ぶ。依存とバイナリを小さく保ち、Lambda のコールドスタートを悪化させないため。Gemini の形式は `gemini/` パッケージの外に出さない。
+- Gemini 3 は、道具の呼び出しに付けた署名（`thoughtSignature`）を、同じ往復の中でそのまま送り返す必要がある。そのため、Provider が返した応答そのものを `Response.ProviderContent` として返し、エージェントは履歴の `Message.ProviderContent` に入れて送り返す。
 
 ### 6.2 エラーの種類
 
@@ -212,6 +214,7 @@ API 固有のエラーメッセージは、ユーザーに表示しない。ロ�
 - モデル名はコードに直接書かない。環境変数 `AI_MODEL` か、`models.go` の一覧から選ぶ。
 - 一覧は `{ id, name, provider, freeTier bool }` の形で持つ。
 - 初期値は、無料枠が多く、function calling を複数回続けても精度が落ちないモデルにする。軽量モデル（Flash-Lite 系など）で 11.2 の評価セットを試し、手順の判断（探し直しなど）が安定しなければ、1段上のモデルにする。実際のモデル名は、導入する時点の公式ドキュメントで確認して決める。
+- 2026-10 時点の初期値は `gemini-3.5-flash-lite`。Google が新規に推奨している Flash-Lite で、無料枠がある。1段上は `gemini-3.8-flash`（[Models](https://ai.google.dev/gemini-api/docs/models)）。
 
 ---
 
@@ -235,6 +238,7 @@ API 固有のエラーメッセージは、ユーザーに表示しない。ロ�
 - 上限は API キー単位ではなく、Google Cloud のプロジェクト単位で数えられる。つまり、公開デモでは全ユーザーが1つの無料枠を共有する。
 - 1日あたりの上限は、米国太平洋時間の午前0時にリセットされる。日本時間では、夏は 16 時、冬は 17 時にあたる。
 - 上限の値（1分あたり・1日あたりの回数）は、モデルや時期で変わる。過去に大幅に引き下げられたこともある。値はコードに直接書かず、設定で持つ。導入する時点で公式の Rate limits のページを確認する。
+- 2026-10 時点で、無料枠の具体的な値は公式ドキュメントに載っておらず、AI Studio のレート制限の画面で確認する。
 - エージェントは1回の質問で AI を複数回呼ぶ（経路の推薦で最大 6 回: 道具の往復 5 回＋最後の回答）。1日に答えられる質問の数は、1日の上限の数分の一になる。
 
 ### 8.2 呼び出しを減らす工夫
@@ -348,7 +352,11 @@ CI では Fake Provider を使う。実際の AI API は呼ばない（無料枠
 
 ### 11.2 評価セット（手動）
 
-日本語の質問と、それぞれで期待する道具の呼び出しを 20〜30 件用意する（`backend/internal/ai/testdata/eval.yaml`）。プロンプトやモデルを変えたときに、手動で実行して精度を確認する。実際の API を呼ぶので、CI では実行しない。
+日本語の質問と、それぞれで期待する道具の呼び出しを 20〜30 件用意する（`backend/internal/ai/testdata/eval.yaml`）。プロンプトやモデルを変えたときに、手動で実行して精度を確認する。実際の API を呼ぶので、CI では実行しない（CI では評価セットの書き方だけを確かめる）。
+
+```bash
+cd backend && AI_EVAL=1 GEMINI_API_KEY=... go test ./internal/ai -run TestEval -v -timeout 30m
+```
 
 経路の推薦については、運行状況を固定した状態（平常・一部の路線が遅延・見合わせ）を用意し、探し直しの判断も確かめる。
 
@@ -372,8 +380,8 @@ CI では Fake Provider を使う。実際の AI API は呼ばない（無料枠
 
 | 項目 | 決める時期 |
 |---|---|
-| 初期に使うモデル名と、無料枠の実際の上限値 | Phase 3 の実装の直前（公式ドキュメントで確認し、評価セットで試す） |
-| 利用上限の具体的な値 | 無料枠の上限値が分かってから |
+| 初期に使うモデル名 | `gemini-3.5-flash-lite` に決めた（6.3）。評価セットの結果を見て見直す |
+| 無料枠の実際の上限値と、利用上限の具体的な値 | API キーを発行した Google Cloud プロジェクトの AI Studio で確認する。それまではアプリ全体の上限を 1日 200 回（`AI_LIMIT_CALLS_PER_DAY`）にしておく |
 | 「大きく遅れている」とみなす分数（10分案） | 評価セットで試して決める |
 | 現在地を位置情報（GPS）からも受け付けるか | Phase 3。対応する場合は、駅の緯度・経度から最寄り駅を求める道具（`find_nearest_station`）を足す |
 | 都営以外の駅が目的地のときに、最寄りの都営駅まで案内するか | Phase 3 |

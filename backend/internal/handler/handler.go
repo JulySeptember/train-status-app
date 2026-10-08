@@ -13,11 +13,15 @@ import (
 
 type Handler struct {
 	service *service.Service
+
+	// AI エージェント。API キーなどが設定されていなければ nil で、/api/chat は 503 を返す
+	chat ChatService
 }
 
-func New(s *service.Service) *Handler {
+func New(s *service.Service, chat ChatService) *Handler {
 	return &Handler{
 		service: s,
+		chat:    chat,
 	}
 }
 
