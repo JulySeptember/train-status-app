@@ -29,10 +29,10 @@ cd backend && go test ./internal/service -run TestGetTrainLocation -v
 
 フロントエンドにテストはない。
 
-AI エージェントの評価セット（`backend/internal/ai/testdata/eval.yaml`）は実際の Gemini を呼ぶので、手で実行する（CI では動かない）:
+AI エージェントの評価セット（`backend/internal/ai/testdata/eval.yaml`）は実際の Gemini を呼ぶので、手で実行する（CI では動かない。無料枠を数十回使い、約7分かかる）。キーは SSM から直接渡し、画面や会話に出さない:
 
 ```bash
-cd backend && AI_EVAL=1 GEMINI_API_KEY=... go test ./internal/ai -run TestEval -v -timeout 30m
+cd backend && AI_EVAL=1 GEMINI_API_KEY="$(aws ssm get-parameter --region ap-northeast-1 --name /train-status-app/dev/gemini-api-key --with-decryption --query Parameter.Value --output text)" go test ./internal/ai -run 'TestEval$' -v -timeout 30m
 ```
 
 ### Swagger
@@ -128,7 +128,7 @@ main は Ruleset（`main`）で保護している: PR 必須（承認は不要�
 
 CloudFront が `/api/*` を API Gateway（HTTP API）→ Lambda（`provided.al2023`, arm64, 256MB）に流し、それ以外を S3 に流す。リージョンは `ap-northeast-1`。
 
-AI エージェントの API キー（Gemini）は SSM Parameter Store の SecureString（`/train-status-app/dev/gemini-api-key`）に手で登録する。Terraform・tfvars・Lambda の環境変数には置かない。キーの値がこの会話に出ないよう、ユーザーに `! aws ssm put-parameter --region ap-northeast-1 --type SecureString --overwrite --name /train-status-app/dev/gemini-api-key --value '<キー>'` を実行してもらう。利用上限は DynamoDB（`train-status-app-dev-ai-usage`）で数え、アプリ全体の1日の上限は `ai_calls_per_day`（tfvars）で変える。
+AI エージェントの API キー（Gemini）は SSM Parameter Store の SecureString（`/train-status-app/dev/gemini-api-key`）に手で登録する。Terraform・tfvars・Lambda の環境変数には置かない。キーの値がこの会話に出ないよう、ユーザーに `! aws ssm put-parameter --region ap-northeast-1 --type SecureString --overwrite --name /train-status-app/dev/gemini-api-key --value 'AIza...'` を実行してもらう（引用符の中はキーだけにする。以前、例の `<キー>` の `<` `>` まで登録されて Gemini が `API_KEY_INVALID` を返した）。利用上限は DynamoDB（`train-status-app-dev-ai-usage`）で数え、アプリ全体の1日の上限は `ai_calls_per_day`（tfvars）で変える。
 
 SPA のルーティングは CloudFront Function（`infra/main/functions/spa_rewrite.js`）で `/index.html` に書き換えている。`custom_error_response` は `/api/*` のエラーまで `index.html` の 200 にしてしまうので使わない。
 
