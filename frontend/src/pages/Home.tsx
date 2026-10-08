@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { arrayMove } from "@dnd-kit/sortable";
 import {
@@ -121,11 +121,22 @@ function AskForm() {
 
 function SearchPanel() {
   const navigate = useNavigate();
+  // 選んだタブは URL に残す（経路検索の結果から戻ったとき、経路検索のタブを開いたままにする）
+  const [params, setParams] = useSearchParams();
+  const tab = params.get("tab") === "journey" ? "journey" : "ai";
 
   return (
     <Card className="[--card-spacing:--spacing(5)]">
       <CardContent>
-        <Tabs defaultValue="ai" className="gap-4">
+        <Tabs
+          value={tab}
+          onValueChange={(value) =>
+            setParams(value === "journey" ? { tab: "journey" } : {}, {
+              replace: true,
+            })
+          }
+          className="gap-4"
+        >
           <TabsList className="h-10! w-full sm:w-fit">
             <TabsTrigger value="ai" className="px-4 text-base">
               <Sparkles />
