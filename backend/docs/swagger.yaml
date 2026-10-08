@@ -1,5 +1,47 @@
 basePath: /
 definitions:
+  ai.ChatMessage:
+    properties:
+      role:
+        description: '"user" または "assistant"'
+        type: string
+      text:
+        type: string
+    type: object
+  ai.ChatRequest:
+    properties:
+      messages:
+        items:
+          $ref: '#/definitions/ai.ChatMessage'
+        type: array
+    type: object
+  ai.ChatResponse:
+    properties:
+      journeys:
+        allOf:
+        - $ref: '#/definitions/service.JourneySearch'
+        description: 最後に探した経路（search_route の結果そのもの）。時刻などの事実を、AI の文章ではなくアプリのデータで表示するため
+      reply:
+        type: string
+      steps:
+        items:
+          $ref: '#/definitions/ai.Step'
+        type: array
+    type: object
+  ai.Step:
+    properties:
+      label:
+        type: string
+      tool:
+        type: string
+    type: object
+  handler.ChatError:
+    properties:
+      code:
+        type: string
+      error:
+        type: string
+    type: object
   service.DirectionTimetable:
     properties:
       calendar:
@@ -182,6 +224,50 @@ info:
   title: Train Status API
   version: "1.0"
 paths:
+  /api/chat:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        AI エージェントに質問する。会話の履歴はブラウザが持ち、毎回送る（最後はユーザーの発言）。
+        入力は AI の提供元（Google）に送信される。
+      parameters:
+      - description: Conversation
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/ai.ChatRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/ai.ChatResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handler.ChatError'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/handler.ChatError'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/handler.ChatError'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/handler.ChatError'
+        "504":
+          description: Gateway Timeout
+          schema:
+            $ref: '#/definitions/handler.ChatError'
+      summary: Ask the AI agent
+      tags:
+      - Chat
   /api/fares:
     get:
       description: Get IC card and ticket fare between two stations

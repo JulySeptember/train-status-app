@@ -16,6 +16,7 @@ import (
 	"train-status-app/backend/internal/client"
 	"train-status-app/backend/internal/model"
 	"train-status-app/backend/internal/route"
+	"train-status-app/backend/internal/station"
 )
 
 var (
@@ -59,6 +60,9 @@ type Service struct {
 
 	routes *route.Engine
 
+	// 駅名から駅を引く索引（AI の道具で使う）
+	stationIndex *station.Index
+
 	// 経路検索に反映する運行状況のキャッシュ
 	realtime realtimeCache
 
@@ -89,7 +93,8 @@ func New(
 			transfers(groups, transferMinutes),
 			route.DefaultConfig(),
 		),
-		now: time.Now,
+		stationIndex: station.New(a.Stations()),
+		now:          time.Now,
 	}
 
 	s.warnUnknownNames()

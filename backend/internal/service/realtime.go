@@ -39,6 +39,9 @@ type railwayConditions struct {
 
 	// 運転を見合わせている路線の ID
 	suspended []string
+
+	// 路線ID → 運行情報の文章
+	texts map[string]string
 }
 
 type realtimeCache struct {
@@ -81,9 +84,11 @@ func (s *Service) railwayConditions(ctx context.Context) (*railwayConditions, er
 
 	value := &railwayConditions{
 		delays: medianDelays(trains),
+		texts:  make(map[string]string, len(statuses)),
 	}
 
 	for _, st := range statuses {
+		value.texts[st.Railway] = st.TrainInformationText.Ja
 		if isSuspended(st.TrainInformationText.Ja) {
 			value.suspended = append(value.suspended, st.Railway)
 		}

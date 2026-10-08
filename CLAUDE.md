@@ -29,6 +29,12 @@ cd backend && go test ./internal/service -run TestGetTrainLocation -v
 
 フロントエンドにテストはない。
 
+AI エージェントの評価セット（`backend/internal/ai/testdata/eval.yaml`）は実際の Gemini を呼ぶので、手で実行する（CI では動かない）:
+
+```bash
+cd backend && AI_EVAL=1 GEMINI_API_KEY=... go test ./internal/ai -run TestEval -v -timeout 30m
+```
+
 ### Swagger
 
 `backend/docs/` は swaggo が生成したファイル（手で編集しない）。handler のアノテーションや DTO を変えたら再生成する:
@@ -93,8 +99,9 @@ main は Ruleset（`main`）で保護している: PR 必須（承認は不要�
   - `client` で外部 API を呼ぶのは運行情報（`odpt:TrainInformation`）と列車位置（`odpt:Train`）だけ。共通処理はジェネリクスの `fetch[T]`
 - `assets/`: ODPT の静的データ（路線・駅・運賃・駅時刻表・列車時刻表・乗降人員・列車種別）を `go:embed` で埋め込み、起動時に全件読み込む。駅時刻表と列車時刻表は、それぞれ約25MBの JSON を埋め込まず、使う項目に絞って文字列表にまとめた `station_timetable.gob` / `train_timetable.gob`（`assets/slim`、`cmd/gen-assets` で生成）を埋め込む。Lambda のコールドスタートを短くするため。`model.StationTimetableEntry` も約12万件が常駐するので、使う項目以外を足さない。列車時刻表は経路探索用で、`model` の型に戻さず、文字列表の番号と分（3時前は +24時間）のまま `slim.TrainTimetables` で持つ
 - `internal/route`: 経路探索エンジン（RAPTOR）。遅れは `Query.Delays`（路線・方向ごと）で受け取り、パターンの時刻に足して探す（`shift`）。service（`service/realtime.go`）が `odpt:Train` の遅れの中央値と、運行情報の文章による見合わせの判定を30秒キャッシュして渡す。`GET /api/journeys` から使う。`slim.TrainTimetables` を数値のまま使い、駅・路線は ID の文字列で扱う（都営に決め打ちしない）。乗り換えの対応表（`route.Transfer`）は service（`service/transfer.go`）が作って渡す: 同じ名前の駅どうし（一律5分）と、名前が違う駅の組（東日本橋 ⇔ 馬喰横山）。同じ名前の駅は、出発駅・到着駅としては1つの駅にまとめる。設計は `docs/design/route-search.md`
+- `internal/ai`: AI エージェント（`POST /api/chat`）。AI が道具（`tools.go`）を呼び、アプリが service の照会（`service/assistant.go`）を実行して結果を返す、を最大5往復繰り返す。Provider は Gemini（`ai/gemini`、REST を直接呼ぶ）とテスト用の `ai/fake`。駅名の特定は `internal/station`。API キーが無いとき（手元で `GEMINI_API_KEY` を設定していないとき、Lambda では SSM の準備ができるまで）は `/api/chat` が 503 を返す。ログに入力・応答の本文を残さない。設計は `docs/design/ai-api.md`
 - `internal/calendar`: 運行日（3時前は前日扱い）と、その日に適用されるダイヤ種別（`odpt.Calendar:*`）を判定する。祝日は祝日法に基づいて計算する
-- テストは `service`・`route`・`handler`・`calendar`・`assets` にある。service のテストは `mockClient` と実際の embed アセットを使う。route のテストは小さな架空の路線網で確かめる
+- テストは `service`・`route`・`handler`・`calendar`・`assets`・`ai`・`station` にある。service のテストは `mockClient` と実際の embed アセットを使う。route のテストは小さな架空の路線網で確かめる
 
 ### ODPT データの注意点
 
