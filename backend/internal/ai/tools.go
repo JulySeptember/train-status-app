@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"train-status-app/backend/internal/calendar"
@@ -86,7 +87,8 @@ func (t *Tools) Definitions() []Tool {
 		{
 			Name: "search_route",
 			Description: "2つの駅の間の経路を探す。現在の遅れと運転見合わせは反映済み（見合わせ中の路線は使わない）。" +
-				"結果は乗り換え回数ごとの候補。時刻は HH:MM、durationMinutes は所要時間（分）。",
+				"結果は乗り換え回数ごとの候補。時刻は HH:MM、durationMinutes は所要時間（分）。" +
+				"10分以上遅れている路線が関わるときは、その路線を使う経路と避けた経路をアプリが比べ、comparison に返す（faster が到着の早い方）。",
 			Parameters: json.RawMessage(`{
 				"type": "object",
 				"properties": {
@@ -298,11 +300,35 @@ func departureError(err error) error {
 	return errors.New("時刻表を取得できませんでした")
 }
 
+// bigDelayMinutes 以上遅れている路線は、使う経路と避けた経路を比べる（設計書 5.2 の「大きく遅れている」）
+const bigDelayMinutes = 10
+
 // 経路の結果を、AI に必要な項目に絞った形
 type routeResult struct {
 	DelayApplied      bool           `json:"delayApplied"`
 	SuspendedRailways []string       `json:"suspendedRailways"`
 	Journeys          []routeJourney `json:"journeys"`
+
+	// 10分以上遅れている路線が関わるときの比較（アプリが探して計算したもの）
+	Comparison *routeComparison `json:"comparison,omitempty"`
+}
+
+// routeComparison は、遅れている路線を使う場合と避けた場合の比較
+type routeComparison struct {
+	// 遅れている路線（id）
+	DelayedRailways []string `json:"delayedRailways"`
+
+	// journeys が遅れている路線を使う経路なら "uses_delayed"、避けた経路なら "avoids_delayed"
+	Journeys string `json:"journeys"`
+
+	// もう一方の経路
+	Alternative []routeJourney `json:"alternative"`
+
+	// もう一方の最も早い到着が、journeys の最も早い到着より何分遅いか（負なら早い）
+	AlternativeArrivesLaterMinutes int `json:"alternativeArrivesLaterMinutes"`
+
+	// 到着が早いのはどちらか（"journeys" または "alternative"）
+	Faster string `json:"faster"`
 }
 
 type routeJourney struct {
@@ -341,11 +367,7 @@ func (t *Tools) searchRoute(ctx context.Context, raw json.RawMessage) (ToolOutpu
 
 	label := fmt.Sprintf("%s → %s の経路を検索", t.backend.StationName(args.From), t.backend.StationName(args.To))
 	if len(args.AvoidRailways) > 0 {
-		names := make([]string, 0, len(args.AvoidRailways))
-		for _, id := range args.AvoidRailways {
-			names = append(names, t.backend.RailwayName(id))
-		}
-		label += fmt.Sprintf("（%sを除外）", strings.Join(names, "・"))
+		label += fmt.Sprintf("（%sを除外）", t.railwayNames(args.AvoidRailways))
 	}
 	out := ToolOutput{Label: label}
 
@@ -374,14 +396,122 @@ func (t *Tools) searchRoute(ctx context.Context, raw json.RawMessage) (ToolOutpu
 	result := routeResult{
 		DelayApplied:      search.DelayApplied,
 		SuspendedRailways: []string{},
-		Journeys:          []routeJourney{},
+		Journeys:          trimJourneys(search.Journeys),
 	}
-
 	for _, r := range search.SuspendedRailways {
 		result.SuspendedRailways = append(result.SuspendedRailways, r.ID)
 	}
 
-	for i, j := range search.Journeys {
+	out.Journeys = search
+
+	// 遅れている路線が関わるなら、使う場合と避けた場合を比べる。
+	// AI に探し直しを任せると、比べずに避けた経路だけを探すことがあるため（評価セットで確認）
+	if search.DelayApplied {
+		if cmp, alt := t.compareDelayed(ctx, q, search); cmp != nil {
+			result.Comparison = cmp
+			out.Label += fmt.Sprintf("（遅れている%sを使う経路と比較）", t.railwayNames(cmp.DelayedRailways))
+			// 画面には到着の早い方を表示する（AI もそちらを推薦する）
+			if cmp.Faster == "alternative" {
+				out.Journeys = alt
+			}
+		}
+	}
+
+	out.Content = result
+	return out, nil
+}
+
+// compareDelayed は、10分以上遅れている路線について、もう一方の経路（避けていれば使う経路、使っていれば避けた経路）を探して比べる
+func (t *Tools) compareDelayed(ctx context.Context, q service.JourneyQuery, search *service.JourneySearch) (*routeComparison, *service.JourneySearch) {
+
+	conds, err := t.backend.GetRailwayConditions(ctx)
+	if err != nil {
+		return nil, nil
+	}
+
+	delayed := make(map[string]bool)
+	for _, c := range conds {
+		if c.State == service.RailwayDelayed && c.DelayMinutes >= bigDelayMinutes {
+			delayed[c.Railway] = true
+		}
+	}
+	if len(delayed) == 0 {
+		return nil, nil
+	}
+
+	alt := q
+	cmp := &routeComparison{}
+
+	// 遅れている路線を避けて探していたら、使う経路と比べる
+	var keep []string
+	for _, id := range q.Avoid {
+		if delayed[id] {
+			cmp.DelayedRailways = append(cmp.DelayedRailways, id)
+		} else {
+			keep = append(keep, id)
+		}
+	}
+
+	if len(cmp.DelayedRailways) > 0 {
+		cmp.Journeys = "avoids_delayed"
+		alt.Avoid = keep
+	} else {
+		// 遅れている路線を使う経路なら、避けた経路と比べる
+		used := make(map[string]bool)
+		for _, j := range search.Journeys {
+			for _, l := range j.Legs {
+				if delayed[l.Railway] && !used[l.Railway] {
+					used[l.Railway] = true
+					cmp.DelayedRailways = append(cmp.DelayedRailways, l.Railway)
+				}
+			}
+		}
+		if len(cmp.DelayedRailways) == 0 {
+			return nil, nil
+		}
+		cmp.Journeys = "uses_delayed"
+		alt.Avoid = append(slices.Clone(q.Avoid), cmp.DelayedRailways...)
+	}
+
+	altSearch, err := t.backend.SearchJourneys(ctx, alt)
+	if err != nil {
+		return nil, nil
+	}
+
+	cmp.Alternative = trimJourneys(altSearch.Journeys)
+
+	main, okMain := earliestArrival(search.Journeys)
+	other, okOther := earliestArrival(altSearch.Journeys)
+
+	switch {
+	case okMain && okOther:
+		cmp.AlternativeArrivesLaterMinutes = other - main
+		cmp.Faster = "journeys"
+		if other < main {
+			cmp.Faster = "alternative"
+		}
+	case okOther:
+		cmp.Faster = "alternative"
+	default:
+		cmp.Faster = "journeys"
+	}
+
+	return cmp, altSearch
+}
+
+func (t *Tools) railwayNames(ids []string) string {
+	names := make([]string, 0, len(ids))
+	for _, id := range ids {
+		names = append(names, t.backend.RailwayName(id))
+	}
+	return strings.Join(names, "・")
+}
+
+func trimJourneys(journeys []service.Journey) []routeJourney {
+
+	result := []routeJourney{}
+
+	for i, j := range journeys {
 		if i >= maxJourneys {
 			break
 		}
@@ -407,12 +537,21 @@ func (t *Tools) searchRoute(ctx context.Context, raw json.RawMessage) (ToolOutpu
 			})
 		}
 
-		result.Journeys = append(result.Journeys, item)
+		result = append(result, item)
 	}
 
-	out.Content = result
-	out.Journeys = search
-	return out, nil
+	return result
+}
+
+// earliestArrival は、経路のうち最も早い到着（運行日の0時からの分）
+func earliestArrival(journeys []service.Journey) (int, bool) {
+	best, ok := 0, false
+	for _, j := range journeys {
+		if m, valid := serviceMinutes(j.ArrivalTime); valid && (!ok || m < best) {
+			best, ok = m, true
+		}
+	}
+	return best, ok
 }
 
 // clockDiff は "HH:MM" の2つの時刻の差（分）。日をまたぐ場合は翌日として数える
@@ -427,6 +566,15 @@ func clockDiff(from, to string) int {
 		d += 24 * 60
 	}
 	return d
+}
+
+// serviceMinutes は "HH:MM" を運行日の0時からの分にする（3時前は +24時間）
+func serviceMinutes(v string) (int, bool) {
+	m, ok := clockMinutes(v)
+	if ok && m < calendar.ServiceDayStartHour*60 {
+		m += 24 * 60
+	}
+	return m, ok
 }
 
 func clockMinutes(v string) (int, bool) {

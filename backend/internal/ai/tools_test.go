@@ -192,3 +192,76 @@ func TestToolDepartures(t *testing.T) {
 		t.Fatalf("unexpected calendar %v", content["calendarName"])
 	}
 }
+
+// 10分以上遅れている路線が関わるときは、使う経路と避けた経路をアプリが比べる
+func TestToolSearchRouteComparesDelayed(t *testing.T) {
+
+	loader, err := assets.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 浅草線が20分遅れ（三田 → 大門 は浅草線なら直通、避けると三田線・大江戸線で遠回り）
+	c := &trainClient{}
+	for _, r := range loader.Railways() {
+		text := "現在、１５分以上の遅延はありません。"
+		if r.SameAs == "odpt.Railway:Toei.Asakusa" {
+			text = "浅草線は、車両故障の影響で、遅れが出ています。"
+			for _, dir := range []string{r.AscendingRailDirection, r.DescendingRailDirection} {
+				c.locations = append(c.locations, model.TrainLocation{Railway: r.SameAs, RailDirection: dir, Delay: 20 * 60})
+			}
+		}
+		c.statuses = append(c.statuses, model.TrainStatus{Railway: r.SameAs, TrainInformationText: model.LocalizedString{Ja: text}})
+	}
+	tools := ai.NewTools(service.New(c, loader))
+
+	args := map[string]any{
+		"from":     "odpt.Station:Toei.Mita.Mita",
+		"to":       "odpt.Station:Toei.Oedo.Daimon",
+		"departAt": "10:00",
+	}
+
+	// 遅れている浅草線を使う経路 → 避けた経路と比べる
+	out, content := call(t, tools, "search_route", args)
+	cmp, ok := content["comparison"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected comparison: %v", content)
+	}
+	if cmp["journeys"] != "uses_delayed" || len(cmp["alternative"].([]any)) == 0 {
+		t.Fatalf("unexpected comparison %v", cmp)
+	}
+	if !strings.Contains(out.Label, "比較") {
+		t.Fatalf("unexpected label %q", out.Label)
+	}
+
+	// AI が浅草線を避けて探しても、使う経路と比べ、早い方を画面に出す
+	args["avoidRailways"] = []string{"odpt.Railway:Toei.Asakusa"}
+	out, content = call(t, tools, "search_route", args)
+	cmp = content["comparison"].(map[string]any)
+	if cmp["journeys"] != "avoids_delayed" {
+		t.Fatalf("unexpected comparison %v", cmp)
+	}
+
+	usesAsakusa := false
+	for _, j := range out.Journeys.Journeys {
+		for _, l := range j.Legs {
+			usesAsakusa = usesAsakusa || l.Railway == "odpt.Railway:Toei.Asakusa"
+		}
+	}
+	if (cmp["faster"] == "alternative") != usesAsakusa {
+		t.Fatalf("the screen must show the faster journeys: faster=%v usesAsakusa=%v", cmp["faster"], usesAsakusa)
+	}
+	t.Logf("faster=%v later=%v", cmp["faster"], cmp["alternativeArrivesLaterMinutes"])
+}
+
+// 遅れている路線が関わらなければ比べない
+func TestToolSearchRouteNoComparison(t *testing.T) {
+	tools := newTools(t, &trainClient{})
+
+	_, content := call(t, tools, "search_route", map[string]any{
+		"from": "odpt.Station:Toei.Mita.Mita", "to": "odpt.Station:Toei.Oedo.Daimon", "departAt": "10:00",
+	})
+	if _, ok := content["comparison"]; ok {
+		t.Fatalf("unexpected comparison %v", content["comparison"])
+	}
+}
