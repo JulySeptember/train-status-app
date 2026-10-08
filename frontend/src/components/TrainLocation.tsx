@@ -327,7 +327,7 @@ export function TrainNotRunning({ train }: Props) {
         {(notRunning === "beforeDeparture" || notRunning === "noData") && (
           <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Clock size={14} />
-            15秒ごとに確かめ、出発したら位置を表示します。
+            出発したら、自動で位置を表示します。
           </p>
         )}
       </section>
