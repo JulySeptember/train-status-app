@@ -112,6 +112,13 @@ func TestGetTrainStatus(t *testing.T) {
 		)
 	}
 
+	if result[0].RailwayID != railway.SameAs {
+		t.Fatalf(
+			"unexpected railway id %s",
+			result[0].RailwayID,
+		)
+	}
+
 	if result[0].Railway != railway.RailwayTitle.Ja {
 		t.Fatalf(
 			"unexpected railway %s",

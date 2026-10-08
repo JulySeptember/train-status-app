@@ -656,6 +656,10 @@ const docTemplate = `{
                 "railway": {
                     "type": "string"
                 },
+                "railwayId": {
+                    "description": "路線ID（例: odpt.Railway:Toei.Asakusa）。フロントで路線一覧と並び順を揃えるのに使う",
+                    "type": "string"
+                },
                 "status": {
                     "type": "string"
                 }

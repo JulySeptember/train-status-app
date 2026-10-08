@@ -239,8 +239,10 @@ func associateBy[T any, K comparable](
 // =========================
 
 type TrainStatus struct {
-	Railway string `json:"railway"`
-	Status  string `json:"status"`
+	// 路線ID（例: odpt.Railway:Toei.Asakusa）。フロントで路線一覧と並び順を揃えるのに使う
+	RailwayID string `json:"railwayId"`
+	Railway   string `json:"railway"`
+	Status    string `json:"status"`
 }
 
 // =========================
@@ -277,8 +279,9 @@ func (s *Service) GetTrainStatus(
 		}
 
 		items = append(items, TrainStatus{
-			Railway: name,
-			Status:  status.TrainInformationText.Ja,
+			RailwayID: status.Railway,
+			Railway:   name,
+			Status:    status.TrainInformationText.Ja,
 		})
 	}
 
