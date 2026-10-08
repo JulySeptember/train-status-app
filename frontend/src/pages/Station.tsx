@@ -66,13 +66,13 @@ export default function Station() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold text-white">{data.name}</h1>
+        <h1 className="text-3xl font-bold text-foreground">{data.name}</h1>
       </div>
 
       <section className="space-y-4">
-        <h2 className="text-xl font-semibold text-white">時刻表</h2>
+        <h2 className="text-xl font-semibold text-foreground">時刻表</h2>
 
-        <p className="text-sm text-gray-400">
+        <p className="text-sm text-muted-foreground">
           {data.trainLocationAvailable
             ? "本日のダイヤの列車を選択すると、現在位置を確認できます。"
             : "この路線は列車位置情報が提供されていません。"}
@@ -100,19 +100,21 @@ export default function Station() {
       <section className="space-y-4">
         <button
           onClick={() => setShowPassengers((v) => !v)}
-          className="flex w-full items-center justify-between rounded-xl border border-[#30363d] bg-[#161b22] px-5 py-4 transition hover:bg-[#21262d]"
+          className="flex w-full items-center justify-between rounded-xl border border-border bg-card px-5 py-4 transition hover:bg-muted"
         >
-          <span className="text-xl font-semibold text-white">年間乗降人員</span>
+          <span className="text-xl font-semibold text-foreground">
+            年間乗降人員
+          </span>
 
           {showPassengers ? (
-            <ChevronUp size={20} className="text-gray-400" />
+            <ChevronUp size={20} className="text-muted-foreground" />
           ) : (
-            <ChevronDown size={20} className="text-gray-400" />
+            <ChevronDown size={20} className="text-muted-foreground" />
           )}
         </button>
 
         {showPassengers && (
-          <div className="overflow-hidden rounded-xl border border-[#30363d] bg-[#0d1117] p-5">
+          <div className="overflow-hidden rounded-xl border border-border bg-background p-5">
             <PassengerTable passengers={data.passengers ?? []} />
           </div>
         )}

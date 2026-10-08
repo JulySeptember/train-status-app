@@ -89,20 +89,20 @@ function TimetableCard({
   }, [scrollKey]);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-[#30363d] bg-[#0d1117]">
-      <div className="flex items-center gap-2 border-b border-[#30363d] px-5 py-4">
-        <Clock3 size={18} className="text-[#2ea043]" />
+    <div className="overflow-hidden rounded-xl border border-border bg-background">
+      <div className="flex items-center gap-2 border-b border-border px-5 py-4">
+        <Clock3 size={18} className="text-brand" />
 
-        <h3 className="font-semibold text-white">{title}</h3>
+        <h3 className="font-semibold text-foreground">{title}</h3>
 
         {timetable?.isToday && (
-          <span className="rounded-full bg-[#1f6feb]/20 px-2 py-0.5 text-xs text-[#58a6ff]">
+          <span className="rounded-full bg-primary/20 px-2 py-0.5 text-xs text-brand">
             本日
           </span>
         )}
       </div>
 
-      <div className="divide-y divide-[#30363d]">
+      <div className="divide-y divide-border">
         {timetable?.timetables?.length ? (
           timetable.timetables.map((train, i) => {
             // 各停（普通）以外の種別は色を変えて目立たせる
@@ -116,16 +116,18 @@ function TimetableCard({
               : undefined;
             // scroll-mt-20: 固定ヘッダー（h-16）に行が隠れないようにする
             const rowClass = `scroll-mt-20 px-5 py-4 ${
-              isNext ? "border-l-4 border-l-[#2ea043] bg-[#2ea043]/10" : ""
+              isNext ? "border-l-4 border-l-brand bg-brand/10" : ""
             }`;
 
             const content = (
               <div>
                 <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                  <p className="text-2xl font-bold text-white">{train.time}</p>
+                  <p className="text-2xl font-bold text-foreground">
+                    {train.time}
+                  </p>
 
                   {isNext && (
-                    <span className="rounded-full bg-[#2ea043]/20 px-2 py-0.5 text-xs font-semibold text-[#3fb950]">
+                    <span className="rounded-full bg-brand/20 px-2 py-0.5 text-xs font-semibold text-brand">
                       次発
                     </span>
                   )}
@@ -134,8 +136,8 @@ function TimetableCard({
                     <span
                       className={
                         isLocal
-                          ? "rounded border border-[#30363d] px-1.5 py-0.5 text-xs text-gray-400"
-                          : "rounded border border-[#f0883e]/60 bg-[#f0883e]/15 px-1.5 py-0.5 text-xs font-semibold text-[#f0883e]"
+                          ? "rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground"
+                          : "rounded border border-warning/60 bg-warning/15 px-1.5 py-0.5 text-xs font-semibold text-warning"
                       }
                     >
                       {train.trainType}
@@ -143,13 +145,13 @@ function TimetableCard({
                   )}
 
                   {train.destination && (
-                    <p className="font-medium text-white">
+                    <p className="font-medium text-foreground">
                       {train.destination}行
                     </p>
                   )}
                 </div>
 
-                <p className="mt-1 text-sm text-gray-400">
+                <p className="mt-1 text-sm text-muted-foreground">
                   列車番号 {train.trainNumber}
                 </p>
               </div>
@@ -172,16 +174,16 @@ function TimetableCard({
                 key={`${train.time}-${train.trainId}`}
                 to={`/trains/${encodeURIComponent(train.trainId)}`}
                 ref={rowRef}
-                className={`flex items-center justify-between transition hover:bg-[#161b22] ${rowClass}`}
+                className={`flex items-center justify-between transition hover:bg-card ${rowClass}`}
               >
                 {content}
 
-                <ArrowRight size={18} className="text-gray-500" />
+                <ArrowRight size={18} className="text-muted-foreground" />
               </Link>
             );
           })
         ) : (
-          <div className="py-10 text-center text-gray-500">
+          <div className="py-10 text-center text-muted-foreground">
             データがありません
           </div>
         )}
@@ -213,13 +215,13 @@ export default function Timetable({
       <>
         {/* Mobile */}
         <div className="lg:hidden">
-          <div className="mb-5 flex overflow-hidden rounded-xl border border-[#30363d] bg-[#161b22]">
+          <div className="mb-5 flex overflow-hidden rounded-xl border border-border bg-card">
             <button
               onClick={() => setTab("weekday")}
               className={`flex-1 py-3 text-sm font-medium transition ${
                 tab === "weekday"
-                  ? "bg-[#1f6feb] text-white"
-                  : "text-gray-400 hover:bg-[#21262d]"
+                  ? "bg-primary text-foreground"
+                  : "text-muted-foreground hover:bg-muted"
               }`}
             >
               平日
@@ -229,8 +231,8 @@ export default function Timetable({
               onClick={() => setTab("saturdayHoliday")}
               className={`flex-1 py-3 text-sm font-medium transition ${
                 tab === "saturdayHoliday"
-                  ? "bg-[#1f6feb] text-white"
-                  : "text-gray-400 hover:bg-[#21262d]"
+                  ? "bg-primary text-foreground"
+                  : "text-muted-foreground hover:bg-muted"
               }`}
             >
               土休日
@@ -275,13 +277,13 @@ export default function Timetable({
     <>
       {/* Mobile */}
       <div className="lg:hidden">
-        <div className="mb-5 flex overflow-hidden rounded-xl border border-[#30363d] bg-[#161b22]">
+        <div className="mb-5 flex overflow-hidden rounded-xl border border-border bg-card">
           <button
             onClick={() => setTab("weekday")}
             className={`flex-1 py-3 text-sm font-medium transition ${
               tab === "weekday"
-                ? "bg-[#1f6feb] text-white"
-                : "text-gray-400 hover:bg-[#21262d]"
+                ? "bg-primary text-foreground"
+                : "text-muted-foreground hover:bg-muted"
             }`}
           >
             平日
@@ -291,8 +293,8 @@ export default function Timetable({
             onClick={() => setTab("saturday")}
             className={`flex-1 py-3 text-sm font-medium transition ${
               tab === "saturday"
-                ? "bg-[#1f6feb] text-white"
-                : "text-gray-400 hover:bg-[#21262d]"
+                ? "bg-primary text-foreground"
+                : "text-muted-foreground hover:bg-muted"
             }`}
           >
             土曜
@@ -302,8 +304,8 @@ export default function Timetable({
             onClick={() => setTab("holiday")}
             className={`flex-1 py-3 text-sm font-medium transition ${
               tab === "holiday"
-                ? "bg-[#1f6feb] text-white"
-                : "text-gray-400 hover:bg-[#21262d]"
+                ? "bg-primary text-foreground"
+                : "text-muted-foreground hover:bg-muted"
             }`}
           >
             休日

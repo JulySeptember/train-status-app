@@ -119,7 +119,7 @@ export default function Journey() {
     <div className="space-y-8">
       <h1 className="text-3xl font-bold">経路検索</h1>
 
-      <div className="space-y-4 rounded-xl border border-[#30363d] bg-[#161b22] p-5">
+      <div className="space-y-4 rounded-xl border border-border bg-card p-5">
         <div className="grid items-center gap-3 md:grid-cols-[1fr_auto_1fr]">
           <StationSelect
             stations={options}
@@ -150,7 +150,7 @@ export default function Journey() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex rounded-lg border border-[#30363d] p-0.5">
+          <div className="flex rounded-lg border border-border p-0.5">
             {modes.map((m) => (
               <button
                 key={m.value}
@@ -159,8 +159,8 @@ export default function Journey() {
                 className={cn(
                   "rounded-md px-3 py-1.5 text-sm transition",
                   mode === m.value
-                    ? "bg-[#1f6feb] text-white"
-                    : "text-gray-300 hover:bg-[#21262d]",
+                    ? "bg-primary text-foreground"
+                    : "text-foreground/80 hover:bg-muted",
                 )}
               >
                 {m.label}
@@ -178,12 +178,12 @@ export default function Journey() {
             />
           )}
 
-          <label className="flex items-center gap-2 text-sm text-gray-300">
+          <label className="flex items-center gap-2 text-sm text-foreground/80">
             <input
               type="checkbox"
               checked={realtime}
               onChange={(e) => setRealtime(e.target.checked)}
-              className="size-4 accent-[#1f6feb]"
+              className="size-4 accent-primary"
             />
             遅延・運転見合わせを反映
           </label>
@@ -193,7 +193,7 @@ export default function Journey() {
           </Button>
         </div>
 
-        <p className="text-xs text-gray-400">
+        <p className="text-xs text-muted-foreground">
           本日のダイヤで検索します。0時〜2時台は前日の深夜として扱います。
           {realtime
             ? "現在の遅れ（路線・方向ごとの見込み）を1時間以内に出る列車の時刻に足し、運転を見合わせている路線は使いません。"

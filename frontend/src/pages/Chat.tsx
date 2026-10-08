@@ -80,10 +80,10 @@ function Steps({ steps }: { steps: ChatStep[] }) {
   }
 
   return (
-    <ul className="space-y-1 text-sm text-gray-400">
+    <ul className="space-y-1 text-sm text-muted-foreground">
       {steps.map((step, i) => (
         <li key={i} className="flex items-start gap-1.5">
-          <CircleCheck size={14} className="mt-0.5 shrink-0 text-[#2ea043]" />
+          <CircleCheck size={14} className="mt-0.5 shrink-0 text-brand" />
           {step.label}
         </li>
       ))}
@@ -99,16 +99,16 @@ function AssistantMessage({
   const journeys = entry.journeys;
 
   return (
-    <div className="space-y-4 rounded-xl border border-[#30363d] bg-[#161b22] p-4">
+    <div className="space-y-4 rounded-xl border border-border bg-card p-4">
       <Steps steps={entry.steps} />
 
-      <p className="leading-relaxed whitespace-pre-wrap text-white">
+      <p className="leading-relaxed whitespace-pre-wrap text-foreground">
         {entry.text}
       </p>
 
       {journeys && journeys.journeys.length > 0 && (
-        <div className="space-y-3 border-t border-[#30363d] pt-4">
-          <p className="text-xs text-gray-400">
+        <div className="space-y-3 border-t border-border pt-4">
+          <p className="text-xs text-muted-foreground">
             AI
             の回答は誤ることがあります。時刻は下の経路（時刻表のデータ）で確かめてください。
           </p>
@@ -214,9 +214,9 @@ export default function Chat() {
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold text-white">AI に聞く</h1>
+          <h1 className="text-3xl font-bold text-foreground">AI に聞く</h1>
 
-          <p className="mt-2 text-sm text-gray-400">
+          <p className="mt-2 text-sm text-muted-foreground">
             都営交通の経路・次の電車・運行状況を、話し言葉で聞けます。遅延や運転見合わせを確かめてから経路を提案します。
           </p>
         </div>
@@ -231,7 +231,7 @@ export default function Chat() {
 
       {entries.length === 0 && (
         <div className="space-y-2">
-          <p className="text-sm text-gray-400">質問の例</p>
+          <p className="text-sm text-muted-foreground">質問の例</p>
 
           <div className="flex flex-wrap gap-2">
             {EXAMPLES.map((example) => (
@@ -239,7 +239,7 @@ export default function Chat() {
                 key={example}
                 type="button"
                 onClick={() => send(example)}
-                className="rounded-full border border-[#30363d] px-3 py-1.5 text-left text-sm text-gray-300 transition hover:bg-[#21262d] hover:text-white"
+                className="rounded-full border border-border px-3 py-1.5 text-left text-sm text-foreground/80 transition hover:bg-muted hover:text-foreground"
               >
                 {example}
               </button>
@@ -252,7 +252,7 @@ export default function Chat() {
         {entries.map((entry, i) =>
           entry.role === "user" ? (
             <div key={i} className="flex justify-end">
-              <p className="max-w-[85%] rounded-xl bg-[#1f6feb] px-4 py-2.5 whitespace-pre-wrap text-white">
+              <p className="max-w-[85%] rounded-xl bg-primary px-4 py-2.5 whitespace-pre-wrap text-foreground">
                 {entry.text}
               </p>
             </div>
@@ -262,7 +262,7 @@ export default function Chat() {
         )}
 
         {chat.isPending && (
-          <div className="flex items-center gap-2 rounded-xl border border-[#30363d] bg-[#161b22] p-4 text-sm text-gray-400">
+          <div className="flex items-center gap-2 rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground">
             <LoaderCircle size={16} className="animate-spin" />
             運行状況や時刻表を調べています（10秒ほどかかることがあります）
           </div>
@@ -298,7 +298,7 @@ export default function Chat() {
             maxLength={MAX_INPUT_CHARS}
             placeholder="例: 今春日にいる。浅草に行きたい"
             aria-label="質問"
-            className="max-h-40 min-h-12 text-white"
+            className="max-h-40 min-h-12 text-foreground"
           />
 
           <Button
@@ -311,7 +311,7 @@ export default function Chat() {
           </Button>
         </div>
 
-        <div className="flex items-start justify-between gap-4 text-xs text-gray-400">
+        <div className="flex items-start justify-between gap-4 text-xs text-muted-foreground">
           <p className="flex items-start gap-1.5">
             <Info size={14} className="mt-px shrink-0" />
             入力内容は AI

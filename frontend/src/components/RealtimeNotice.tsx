@@ -16,7 +16,7 @@ export default function RealtimeNotice({
 
   if (!data.delayApplied) {
     return (
-      <p className="rounded-lg border border-[#30363d] px-4 py-3 text-sm text-gray-300">
+      <p className="rounded-lg border border-border px-4 py-3 text-sm text-foreground/80">
         運行状況を取得できなかったため、時刻表どおりの結果です。
       </p>
     );
@@ -27,7 +27,7 @@ export default function RealtimeNotice({
   }
 
   return (
-    <p className="flex items-start gap-2 rounded-lg border border-[#f85149]/60 bg-[#f85149]/10 px-4 py-3 text-sm text-[#ffa198]">
+    <p className="flex items-start gap-2 rounded-lg border border-destructive/60 bg-destructive/10 px-4 py-3 text-sm text-destructive-foreground">
       <TriangleAlert size={16} className="mt-0.5 shrink-0" />
       {data.suspendedRailways.map((r) => r.name || r.id).join("・")}
       は運転を見合わせているため、使わない経路を表示しています。

@@ -71,7 +71,7 @@ function SortableItem({
         {...attributes}
         {...listeners}
         aria-label={`${label}を並び替える`}
-        className={`flex w-8 shrink-0 touch-manipulation items-center justify-center rounded-md text-gray-500 transition hover:bg-[#21262d] hover:text-gray-300 focus-visible:outline-2 focus-visible:outline-[#58a6ff] ${
+        className={`flex w-8 shrink-0 touch-manipulation items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring ${
           isDragging ? "cursor-grabbing" : "cursor-grab"
         }`}
       >

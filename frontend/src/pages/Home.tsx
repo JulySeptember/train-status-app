@@ -54,7 +54,7 @@ export default function Home() {
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-gray-400">
+        <p className="text-sm text-muted-foreground">
           左のつまみをドラッグすると、路線を並び替えられます。
         </p>
 
@@ -90,8 +90,8 @@ export default function Home() {
                   <Badge
                     className={
                       isNormal
-                        ? "border border-emerald-800 bg-emerald-900/50 text-white"
-                        : "border border-red-800 bg-red-900/50 text-white"
+                        ? "border border-brand/40 bg-brand/15 text-foreground"
+                        : "border border-destructive/40 bg-destructive/15 text-foreground"
                     }
                   >
                     {item.status}

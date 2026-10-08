@@ -5,14 +5,15 @@ import Footer from "./Footer";
 
 export default function Layout() {
   return (
-    <div className="min-h-screen bg-[#0d1117]">
+    <>
       <Header />
 
-      <main className="mx-auto w-full max-w-[1600px] px-6 py-6">
+      {/* ヘッダー・フッターと同じ幅（max-w-6xl）に揃える */}
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
         <Outlet />
       </main>
 
       <Footer />
-    </div>
+    </>
   );
 }
