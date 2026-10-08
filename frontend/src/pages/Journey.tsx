@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowUpDown } from "lucide-react";
+import { ArrowUpDown, TriangleAlert } from "lucide-react";
 
 import { api } from "@/api";
-import { type JourneyQuery, type Station } from "@/types";
+import { type JourneyQuery, type JourneySearch, type Station } from "@/types";
 
 import Loading from "@/components/Loading";
 import Error from "@/components/Error";
@@ -38,6 +38,7 @@ function readQuery(params: URLSearchParams): JourneyQuery | null {
     to,
     departAt: params.get("departAt") ?? undefined,
     arriveBy: params.get("arriveBy") ?? undefined,
+    realtime: params.get("realtime") !== "false",
   };
 }
 
@@ -54,6 +55,39 @@ function uniqueByName(stations: Station[]) {
   });
 }
 
+// 運転見合わせで除外した路線と、運行状況を取得できなかったことを知らせる
+function RealtimeNotice({
+  data,
+  realtime,
+}: {
+  data: JourneySearch;
+  realtime: boolean;
+}) {
+  if (!realtime) {
+    return null;
+  }
+
+  if (!data.delayApplied) {
+    return (
+      <p className="rounded-lg border border-[#30363d] px-4 py-3 text-sm text-gray-300">
+        運行状況を取得できなかったため、時刻表どおりの結果です。
+      </p>
+    );
+  }
+
+  if (data.suspendedRailways.length === 0) {
+    return null;
+  }
+
+  return (
+    <p className="flex items-start gap-2 rounded-lg border border-[#f85149]/60 bg-[#f85149]/10 px-4 py-3 text-sm text-[#ffa198]">
+      <TriangleAlert size={16} className="mt-0.5 shrink-0" />
+      {data.suspendedRailways.map((r) => r.name || r.id).join("・")}
+      は運転を見合わせているため、使わない経路を表示しています。
+    </p>
+  );
+}
+
 export default function Journey() {
   const [params, setParams] = useSearchParams();
   const query = readQuery(params);
@@ -64,6 +98,7 @@ export default function Journey() {
     query?.arriveBy ? "arriveBy" : query?.departAt ? "departAt" : "now",
   );
   const [time, setTime] = useState(query?.arriveBy ?? query?.departAt ?? "");
+  const [realtime, setRealtime] = useState(query?.realtime ?? true);
 
   const stations = useQuery({
     queryKey: ["stations"],
@@ -105,6 +140,9 @@ export default function Journey() {
     const next = new URLSearchParams({ from: fromId, to: toId });
     if (mode !== "now") {
       next.set(mode, time);
+    }
+    if (!realtime) {
+      next.set("realtime", "false");
     }
     setParams(next);
   };
@@ -172,13 +210,26 @@ export default function Journey() {
             />
           )}
 
+          <label className="flex items-center gap-2 text-sm text-gray-300">
+            <input
+              type="checkbox"
+              checked={realtime}
+              onChange={(e) => setRealtime(e.target.checked)}
+              className="size-4 accent-[#1f6feb]"
+            />
+            遅延・運転見合わせを反映
+          </label>
+
           <Button disabled={!canSearch} onClick={search} className="ml-auto">
             検索
           </Button>
         </div>
 
         <p className="text-xs text-gray-400">
-          本日のダイヤで検索します。0時〜2時台は前日の深夜として扱います。時刻表どおりの結果で、遅延は反映していません。
+          本日のダイヤで検索します。0時〜2時台は前日の深夜として扱います。
+          {realtime
+            ? "現在の遅れ（路線・方向ごとの見込み）を1時間以内に出る列車の時刻に足し、運転を見合わせている路線は使いません。"
+            : "遅延・運転見合わせは反映せず、時刻表どおりに検索します。"}
         </p>
       </div>
 
@@ -192,6 +243,13 @@ export default function Journey() {
             駅や時刻の指定を確かめて、もう一度検索してください。
           </p>
         </div>
+      )}
+
+      {query && journeys.data && (
+        <RealtimeNotice
+          data={journeys.data}
+          realtime={query.realtime ?? true}
+        />
       )}
 
       {query && journeys.data?.journeys.length === 0 && (

@@ -75,8 +75,11 @@ export interface JourneyLeg {
   fromName: string;
   to: string;
   toName: string;
+  // 遅れを足した時刻。遅れは路線・方向ごとの見込みで、現在から1時間以内の時刻にだけ足す
   departureTime: string;
   arrivalTime: string;
+  // 乗る駅での発車の遅れ（分）
+  delayMinutes: number;
 }
 
 export interface Journey {
@@ -88,6 +91,10 @@ export interface Journey {
 
 export interface JourneySearch {
   journeys: Journey[];
+  // 運行状況を取得できなかったときは false で、時刻表どおりの結果になる
+  delayApplied: boolean;
+  // 運転を見合わせているため使わなかった路線
+  suspendedRailways: Railway[];
 }
 
 // departAt と arriveBy（HH:MM）はどちらか一方だけ。どちらも無ければ現在時刻に出発する
@@ -98,4 +105,6 @@ export interface JourneyQuery {
   arriveBy?: string;
   maxTransfers?: number;
   avoid?: string[];
+  // false なら遅延・運転見合わせを反映せず、時刻表どおりに探す（省略時は反映する）
+  realtime?: boolean;
 }

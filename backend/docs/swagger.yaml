@@ -42,7 +42,11 @@ definitions:
     properties:
       arrivalTime:
         type: string
+      delayMinutes:
+        description: 乗る駅での発車の遅れ（分）。時刻表の発車時刻は departureTime からこの分を引いた時刻
+        type: integer
       departureTime:
+        description: 遅れを足した時刻。遅れは路線・方向ごとの見込みで、現在から1時間以内の時刻にだけ足す
         type: string
       destination:
         description: 大江戸線の環状部などでは行先が無く、空になる
@@ -72,9 +76,17 @@ definitions:
     type: object
   service.JourneySearch:
     properties:
+      delayApplied:
+        description: 遅れと運転見合わせを反映したか。運行状況を取得できなかったときは false で、時刻表どおりに探す
+        type: boolean
       journeys:
         items:
           $ref: '#/definitions/service.Journey'
+        type: array
+      suspendedRailways:
+        description: 運転を見合わせているため使わなかった路線
+        items:
+          $ref: '#/definitions/service.Railway'
         type: array
     type: object
   service.Passenger:
@@ -211,6 +223,9 @@ paths:
         Search journeys between two stations. Returns the earliest journey for each number of transfers.
         Stations with the same name on different lines (e.g. Shinjuku) are treated as one station.
         Times are on the current service day (before 03:00 belongs to the previous day).
+        Current delays (per railway and direction, within the next hour) are added to the times, and suspended railways are avoided.
+        If the realtime status cannot be fetched, the timetable is used as is and delayApplied is false.
+        With realtime=false, delays and suspensions are ignored and the timetable is used as is.
       parameters:
       - description: From station ID
         example: odpt.Station:Toei.Mita.Kasuga
@@ -243,6 +258,11 @@ paths:
         in: query
         name: avoid
         type: string
+      - default: true
+        description: Apply current delays and suspensions
+        in: query
+        name: realtime
+        type: boolean
       produces:
       - application/json
       responses:

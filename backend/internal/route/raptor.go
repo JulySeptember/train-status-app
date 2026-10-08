@@ -67,7 +67,7 @@ func (n *network) search(
 	from, to []int32,
 	t int,
 	maxTransfers int,
-	avoid map[int32]bool,
+	c *conditions,
 ) []Journey {
 
 	stations := len(e.stationIDs)
@@ -119,9 +119,11 @@ func (n *network) search(
 			start := first[pi]
 
 			p := &n.patterns[pi]
-			if avoid[p.railway] {
+			if c.avoid[p.railway] {
 				continue
 			}
+
+			sh := c.shift(n, p)
 
 			trip, board := -1, int32(-1)
 
@@ -130,7 +132,7 @@ func (n *network) search(
 				s := p.stops[i]
 
 				if trip >= 0 {
-					a := p.alightAt(trip, i)
+					a := sh.apply(p.alightAt(trip, i))
 
 					// 到着駅にすでにもっと早く着けるなら、この先を調べる必要はない
 					if a < cur.arrival[s] && a < bound {
@@ -167,7 +169,7 @@ func (n *network) search(
 					limit = trip
 				}
 
-				if et := p.earliestTrip(i, r, limit); et >= 0 {
+				if et := p.earliestTrip(i, r, limit, sh); et >= 0 {
 					trip, board = et, int32(i)
 				}
 			}
@@ -202,7 +204,7 @@ func (n *network) search(
 			continue
 		}
 
-		j := n.journey(e, rounds, k, bestStation[k])
+		j := n.journey(e, c, rounds, k, bestStation[k])
 
 		// 乗り換えが多いのに、少ない経路より早く着かないものは除く
 		if len(result) > 0 && j.Transfers() <= result[len(result)-1].Transfers() {
@@ -216,7 +218,7 @@ func (n *network) search(
 }
 
 // journey は rounds[k] で駅 to に着いた経路をさかのぼって組み立てる。
-func (n *network) journey(e *Engine, rounds []round, k int, to int32) Journey {
+func (n *network) journey(e *Engine, c *conditions, rounds []round, k int, to int32) Journey {
 
 	var legs []Leg
 
@@ -224,7 +226,7 @@ func (n *network) journey(e *Engine, rounds []round, k int, to int32) Journey {
 
 	for {
 		p := &n.patterns[l.pattern]
-		legs = append(legs, n.leg(e, p, l))
+		legs = append(legs, n.leg(e, p, c.shift(n, p), l))
 
 		b := p.stops[l.board]
 		prev := rounds[l.round-1]
@@ -251,7 +253,7 @@ func (n *network) journey(e *Engine, rounds []round, k int, to int32) Journey {
 }
 
 // leg は乗った区間を、元の向きの Leg にする。
-func (n *network) leg(e *Engine, p *pattern, l tripLabel) Leg {
+func (n *network) leg(e *Engine, p *pattern, sh shift, l tripLabel) Leg {
 
 	train := e.tt.Trains[p.trains[l.trip]]
 
@@ -264,14 +266,18 @@ func (n *network) leg(e *Engine, p *pattern, l tripLabel) Leg {
 		Destination:   e.tt.String(train.Destination),
 		From:          e.stationIDs[p.stops[l.board]],
 		To:            e.stationIDs[p.stops[l.alight]],
-		Departure:     int(p.boardAt(int(l.trip), int(l.board))),
-		Arrival:       int(p.alightAt(int(l.trip), int(l.alight))),
+		Departure:     int(sh.apply(p.boardAt(int(l.trip), int(l.board)))),
+		Arrival:       int(sh.apply(p.alightAt(int(l.trip), int(l.alight)))),
 	}
 
+	// 遅れは元の向きの発車時刻で求める（逆向きでは、降りる位置の時刻が元の発車時刻）
+	scheduled := p.boardAt(int(l.trip), int(l.board))
 	if n.reversed {
 		leg.From, leg.To = leg.To, leg.From
 		leg.Departure, leg.Arrival = -leg.Arrival, -leg.Departure
+		scheduled = -p.alightAt(int(l.trip), int(l.alight))
 	}
+	leg.Delay = leg.Departure - int(scheduled)
 
 	return leg
 }

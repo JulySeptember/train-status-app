@@ -371,6 +371,9 @@ func (h *Handler) Fare(
 //	@Description	Search journeys between two stations. Returns the earliest journey for each number of transfers.
 //	@Description	Stations with the same name on different lines (e.g. Shinjuku) are treated as one station.
 //	@Description	Times are on the current service day (before 03:00 belongs to the previous day).
+//	@Description	Current delays (per railway and direction, within the next hour) are added to the times, and suspended railways are avoided.
+//	@Description	If the realtime status cannot be fetched, the timetable is used as is and delayApplied is false.
+//	@Description	With realtime=false, delays and suspensions are ignored and the timetable is used as is.
 //	@Tags			Journey
 //	@Produce		json
 //	@Param			from			query		string	true	"From station ID"							example(odpt.Station:Toei.Mita.Kasuga)
@@ -379,6 +382,7 @@ func (h *Handler) Fare(
 //	@Param			arriveBy		query		string	false	"Arrival time (HH:MM). Cannot be used with departAt"
 //	@Param			maxTransfers	query		int		false	"Maximum number of transfers (0-3)"			default(3)
 //	@Param			avoid			query		string	false	"Comma-separated railway IDs to avoid"		example(odpt.Railway:Toei.Oedo)
+//	@Param			realtime		query		bool	false	"Apply current delays and suspensions"		default(true)
 //	@Success		200				{object}	service.JourneySearch
 //	@Failure		400				{object}	map[string]string
 //	@Failure		404				{object}	map[string]string
@@ -425,6 +429,21 @@ func (h *Handler) Journeys(
 
 	if v := params.Get("avoid"); v != "" {
 		q.Avoid = strings.Split(v, ",")
+	}
+
+	if v := params.Get("realtime"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			writeJSON(
+				w,
+				http.StatusBadRequest,
+				map[string]string{
+					"error": "realtime must be true or false",
+				},
+			)
+			return
+		}
+		q.TimetableOnly = !b
 	}
 
 	data, err := h.service.SearchJourneys(

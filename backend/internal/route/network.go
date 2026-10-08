@@ -27,8 +27,9 @@ type network struct {
 // pattern は、停車駅の並びが同じ列車をまとめたもの。
 // 列車は追い越しが無いように並べてあり、どの停車駅でも発車時刻の順になっている。
 type pattern struct {
-	railway int32 // Strings の番号
-	stops   []int32
+	railway   int32 // Strings の番号
+	direction int32 // Strings の番号
+	stops     []int32
 
 	// trains[k] は k 番目の列車（slim の Trains の番号）
 	trains []int32
@@ -57,12 +58,12 @@ func (p *pattern) alightAt(trip, i int) int32 {
 }
 
 // earliestTrip は、i 番目の停車駅で時刻 t 以降に乗れる最初の列車を、
-// limit 番より前から探す。無ければ -1。
-func (p *pattern) earliestTrip(i int, t int32, limit int) int {
+// limit 番より前から探す。無ければ -1。時刻は sh で遅れを足して比べる。
+func (p *pattern) earliestTrip(i int, t int32, limit int, sh shift) int {
 	lo, hi := 0, limit
 	for lo < hi {
 		mid := (lo + hi) / 2
-		if p.boardAt(mid, i) < t {
+		if sh.apply(p.boardAt(mid, i)) < t {
 			lo = mid + 1
 		} else {
 			hi = mid
@@ -161,15 +162,15 @@ func (e *Engine) buildNetwork(trips []tripTimes, reversed bool) *network {
 		transfers:       make([][]footpath, len(e.stationIDs)),
 	}
 
-	// 路線と停車駅の並びが同じ列車をまとめる
+	// 路線・方向と停車駅の並びが同じ列車をまとめる（遅れは路線・方向ごとに足すため）
 	groups := make(map[string][]tripTimes)
 	var keys []string
 
 	for _, t := range trips {
-		railway := e.tt.Trains[t.train].Railway
+		train := e.tt.Trains[t.train]
 
 		var b strings.Builder
-		fmt.Fprint(&b, railway)
+		fmt.Fprint(&b, train.Railway, ",", train.RailDirection)
 		for _, s := range t.stops {
 			fmt.Fprint(&b, ",", s)
 		}
@@ -204,7 +205,8 @@ func (e *Engine) buildNetwork(trips []tripTimes, reversed bool) *network {
 		}
 
 		for _, s := range split {
-			n.addPattern(e.tt.Trains[s[0].train].Railway, s)
+			train := e.tt.Trains[s[0].train]
+			n.addPattern(train.Railway, train.RailDirection, s)
 		}
 	}
 
@@ -243,17 +245,18 @@ func overtakes(a, b tripTimes) bool {
 	return false
 }
 
-func (n *network) addPattern(railway int32, trips []tripTimes) {
+func (n *network) addPattern(railway, direction int32, trips []tripTimes) {
 
 	stops := trips[0].stops
 	size := len(stops)
 
 	p := pattern{
-		railway: railway,
-		stops:   stops,
-		trains:  make([]int32, len(trips)),
-		board:   make([]int32, 0, len(trips)*size),
-		alight:  make([]int32, 0, len(trips)*size),
+		railway:   railway,
+		direction: direction,
+		stops:     stops,
+		trains:    make([]int32, len(trips)),
+		board:     make([]int32, 0, len(trips)*size),
+		alight:    make([]int32, 0, len(trips)*size),
 	}
 
 	for k, t := range trips {

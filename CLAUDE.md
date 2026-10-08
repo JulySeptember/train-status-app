@@ -92,14 +92,14 @@ main は Ruleset（`main`）で保護している: PR 必須（承認は不要�
   - `service` はデータの加工・集約を担い、`model`（ODPT JSON-LD そのままの型）をフロント向けの DTO に変換する。DTO は service.go に定義する
   - `client` で外部 API を呼ぶのは運行情報（`odpt:TrainInformation`）と列車位置（`odpt:Train`）だけ。共通処理はジェネリクスの `fetch[T]`
 - `assets/`: ODPT の静的データ（路線・駅・運賃・駅時刻表・列車時刻表・乗降人員・列車種別）を `go:embed` で埋め込み、起動時に全件読み込む。駅時刻表と列車時刻表は、それぞれ約25MBの JSON を埋め込まず、使う項目に絞って文字列表にまとめた `station_timetable.gob` / `train_timetable.gob`（`assets/slim`、`cmd/gen-assets` で生成）を埋め込む。Lambda のコールドスタートを短くするため。`model.StationTimetableEntry` も約12万件が常駐するので、使う項目以外を足さない。列車時刻表は経路探索用で、`model` の型に戻さず、文字列表の番号と分（3時前は +24時間）のまま `slim.TrainTimetables` で持つ
-- `internal/route`: 経路探索エンジン（RAPTOR）。`GET /api/journeys` から使う。`slim.TrainTimetables` を数値のまま使い、駅・路線は ID の文字列で扱う（都営に決め打ちしない）。乗り換えの対応表（`route.Transfer`）は service（`service/transfer.go`）が作って渡す: 同じ名前の駅どうし（一律5分）と、名前が違う駅の組（東日本橋 ⇔ 馬喰横山）。同じ名前の駅は、出発駅・到着駅としては1つの駅にまとめる。設計は `docs/design/route-search.md`
+- `internal/route`: 経路探索エンジン（RAPTOR）。遅れは `Query.Delays`（路線・方向ごと）で受け取り、パターンの時刻に足して探す（`shift`）。service（`service/realtime.go`）が `odpt:Train` の遅れの中央値と、運行情報の文章による見合わせの判定を30秒キャッシュして渡す。`GET /api/journeys` から使う。`slim.TrainTimetables` を数値のまま使い、駅・路線は ID の文字列で扱う（都営に決め打ちしない）。乗り換えの対応表（`route.Transfer`）は service（`service/transfer.go`）が作って渡す: 同じ名前の駅どうし（一律5分）と、名前が違う駅の組（東日本橋 ⇔ 馬喰横山）。同じ名前の駅は、出発駅・到着駅としては1つの駅にまとめる。設計は `docs/design/route-search.md`
 - `internal/calendar`: 運行日（3時前は前日扱い）と、その日に適用されるダイヤ種別（`odpt.Calendar:*`）を判定する。祝日は祝日法に基づいて計算する
 - テストは `service`・`route`・`handler`・`calendar`・`assets` にある。service のテストは `mockClient` と実際の embed アセットを使う。route のテストは小さな架空の路線網で確かめる
 
 ### ODPT データの注意点
 
 - 列車番号（`odpt:trainNumber`）は路線間で重複し、平日・土休日ダイヤでも使い回される。列車は必ず列車ID（`odpt.Train:Toei.<路線>.<番号>`）で特定する。service は起動時に駅時刻表から列車ID → 路線・列車番号の索引を作る
-- 日暮里・舎人ライナーは `odpt:Train` が配信されない（`trainLocationUnsupported`）
+- 日暮里・舎人ライナーは `odpt:Train` が配信されない（`trainLocationUnsupported`）。荒川線は `odpt:Train` は配信されるが `odpt:delay` が null（`model` では 0 になる）
 - `odpt:Train` で `toStation` が null の列車は `fromStation` に停車中
 - 路線によって「土曜・休日」が別ダイヤのものと「土休日」にまとめられたものがある（フロントの `Timetable.tsx` も両方に対応している）
 - 時刻表の行先には直通運転先（京急・京成・東急など他社）の駅が含まれるが、他社の駅データは公開 API から取れない。駅名は `service/through_service.go` の辞書で引く。assets 更新後に起動ログへ `unknown destination station` が出たら辞書に追加する

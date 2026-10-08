@@ -73,7 +73,7 @@ const docTemplate = `{
         },
         "/api/journeys": {
             "get": {
-                "description": "Search journeys between two stations. Returns the earliest journey for each number of transfers.\nStations with the same name on different lines (e.g. Shinjuku) are treated as one station.\nTimes are on the current service day (before 03:00 belongs to the previous day).",
+                "description": "Search journeys between two stations. Returns the earliest journey for each number of transfers.\nStations with the same name on different lines (e.g. Shinjuku) are treated as one station.\nTimes are on the current service day (before 03:00 belongs to the previous day).\nCurrent delays (per railway and direction, within the next hour) are added to the times, and suspended railways are avoided.\nIf the realtime status cannot be fetched, the timetable is used as is and delayApplied is false.\nWith realtime=false, delays and suspensions are ignored and the timetable is used as is.",
                 "produces": [
                     "application/json"
                 ],
@@ -123,6 +123,13 @@ const docTemplate = `{
                         "example": "odpt.Railway:Toei.Oedo",
                         "description": "Comma-separated railway IDs to avoid",
                         "name": "avoid",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "default": true,
+                        "description": "Apply current delays and suspensions",
+                        "name": "realtime",
                         "in": "query"
                     }
                 ],
@@ -457,7 +464,12 @@ const docTemplate = `{
                 "arrivalTime": {
                     "type": "string"
                 },
+                "delayMinutes": {
+                    "description": "乗る駅での発車の遅れ（分）。時刻表の発車時刻は departureTime からこの分を引いた時刻",
+                    "type": "integer"
+                },
                 "departureTime": {
+                    "description": "遅れを足した時刻。遅れは路線・方向ごとの見込みで、現在から1時間以内の時刻にだけ足す",
                     "type": "string"
                 },
                 "destination": {
@@ -502,10 +514,21 @@ const docTemplate = `{
         "service.JourneySearch": {
             "type": "object",
             "properties": {
+                "delayApplied": {
+                    "description": "遅れと運転見合わせを反映したか。運行状況を取得できなかったときは false で、時刻表どおりに探す",
+                    "type": "boolean"
+                },
                 "journeys": {
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/service.Journey"
+                    }
+                },
+                "suspendedRailways": {
+                    "description": "運転を見合わせているため使わなかった路線",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/service.Railway"
                     }
                 }
             }

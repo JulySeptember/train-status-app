@@ -202,6 +202,28 @@ func TestSearch(t *testing.T) {
 			want:  [][]string{{"A.local1000@A1>A2"}},
 		},
 		{
+			// A が6分遅れると、どちらの各停でも B.1020 に間に合わない
+			name:  "遅れで乗り換えられなくなる",
+			query: Query{From: []string{"A1"}, To: []string{"B3"}, Time: hm("09:58"), Delays: []Delay{{Railway: "A", Minutes: 6}}, DelayUntil: hm("12:00"), MaxTransfers: DefaultMaxTransfers},
+			want:  [][]string{{"A.local1005@A1>A2", "B.1040@B2>B3"}},
+		},
+		{
+			name:  "遅れで発車済みの列車に乗れる",
+			query: Query{From: []string{"B2"}, To: []string{"B3"}, Time: hm("10:25"), Delays: []Delay{{Railway: "B", Minutes: 10}}, DelayUntil: hm("12:00"), MaxTransfers: DefaultMaxTransfers},
+			want:  [][]string{{"B.1020@B2>B3"}},
+		},
+		{
+			name:  "別の方向の遅れは足さない",
+			query: Query{From: []string{"B2"}, To: []string{"B3"}, Time: hm("10:25"), Delays: []Delay{{Railway: "B", RailDirection: "other", Minutes: 10}}, DelayUntil: hm("12:00"), MaxTransfers: DefaultMaxTransfers},
+			want:  [][]string{{"B.1040@B2>B3"}},
+		},
+		{
+			// 10:20 発は 10:15（DelayUntil + 遅れ）より後なので、時刻表どおり
+			name:  "遅れは DelayUntil より後の列車に足さない",
+			query: Query{From: []string{"B2"}, To: []string{"B3"}, Time: hm("10:25"), Delays: []Delay{{Railway: "B", Minutes: 10}}, DelayUntil: hm("10:05"), MaxTransfers: DefaultMaxTransfers},
+			want:  [][]string{{"B.1040@B2>B3"}},
+		},
+		{
 			name:  "同じ駅を2回通る列車で、2回目に降りる",
 			query: Query{From: []string{"a"}, To: []string{"T"}, Time: hm("10:00"), MaxTransfers: DefaultMaxTransfers},
 			want:  [][]string{{"L.loop@a>T"}},
@@ -362,6 +384,50 @@ func TestSearchErrors(t *testing.T) {
 			_, err := e.Search(Query{From: from, To: []string{tt.to}, Calendars: []string{weekday}})
 			if !errors.Is(err, tt.want) {
 				t.Errorf("err = %v, want %v", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestSearchDelayTimes(t *testing.T) {
+
+	e := newTestEngine(t)
+
+	// A は 10:02 までの時刻が5分遅れる。それより後の時刻は 10:07 より前にならない
+	base := Query{
+		From:         []string{"A1"},
+		To:           []string{"A2"},
+		Calendars:    []string{weekday},
+		MaxTransfers: DefaultMaxTransfers,
+		Delays:       []Delay{{Railway: "A", Minutes: 5}},
+		DelayUntil:   hm("10:02"),
+	}
+
+	departAt := base
+	departAt.Time = hm("09:58")
+
+	arriveBy := base
+	arriveBy.Time = hm("10:10")
+	arriveBy.ArriveBy = true
+
+	for name, q := range map[string]Query{"出発時刻": departAt, "到着時刻": arriveBy} {
+		t.Run(name, func(t *testing.T) {
+
+			got, err := e.Search(q)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if len(got) != 1 || len(got[0].Legs) != 1 {
+				t.Fatalf("got %v", summary(got))
+			}
+
+			l := got[0].Legs[0]
+			if l.Train != "A.local1000" || l.Departure != hm("10:05") || l.Arrival != hm("10:10") || l.Delay != 5 {
+				t.Errorf("got %s %d-%d delay %d", l.Train, l.Departure, l.Arrival, l.Delay)
+			}
+			if got[0].Departure != l.Departure || got[0].Arrival != l.Arrival {
+				t.Errorf("journey %d-%d does not match leg", got[0].Departure, got[0].Arrival)
 			}
 		})
 	}

@@ -9,6 +9,7 @@ import (
 
 	"train-status-app/backend/assets"
 	"train-status-app/backend/internal/calendar"
+	"train-status-app/backend/internal/model"
 	"train-status-app/backend/internal/route"
 )
 
@@ -20,6 +21,8 @@ const (
 	oshiage      = "odpt.Station:Toei.Asakusa.Oshiage"
 	nishiMagome  = "odpt.Station:Toei.Asakusa.NishiMagome"
 	oedoRailway  = "odpt.Railway:Toei.Oedo"
+	mitaRailway  = "odpt.Railway:Toei.Mita"
+	mitaMita     = "odpt.Station:Toei.Mita.Mita"
 )
 
 // 2026-10-08（木）10:00。平日ダイヤ
@@ -27,13 +30,18 @@ var journeyNow = time.Date(2026, 10, 8, 10, 0, 0, 0, time.FixedZone("Asia/Tokyo"
 
 func newJourneyService(t *testing.T) *Service {
 	t.Helper()
+	return newJourneyServiceWith(t, &mockClient{})
+}
+
+func newJourneyServiceWith(t *testing.T, c *mockClient) *Service {
+	t.Helper()
 
 	loader, err := assets.New()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	s := New(&mockClient{}, loader)
+	s := New(c, loader)
 	s.now = func() time.Time { return journeyNow }
 
 	return s
@@ -71,9 +79,16 @@ func assertTimetable(t *testing.T, s *Service, journeys []Journey) {
 
 		for i, l := range j.Legs {
 
+			// 遅れを足した時刻から、時刻表の時刻に戻して比べる
+			dep, err := parseClock(l.DepartureTime)
+			if err != nil {
+				t.Fatal(err)
+			}
+			scheduled := formatClock(dep - l.DelayMinutes)
+
 			got, ok := departures[[2]string{l.From, l.Train}]
-			if !ok || got != l.DepartureTime {
-				t.Errorf("%s at %s: departure %s, station timetable %q", l.Train, l.From, l.DepartureTime, got)
+			if !ok || got != scheduled {
+				t.Errorf("%s at %s: departure %s (delay %d), station timetable %q", l.Train, l.From, l.DepartureTime, l.DelayMinutes, got)
 			}
 
 			if l.ArrivalTime < l.DepartureTime {
@@ -375,4 +390,221 @@ func TestSameNameStations(t *testing.T) {
 	if pairs != 8 {
 		t.Errorf("same-name pairs = %d, want 8", pairs)
 	}
+}
+
+// mitaDelayed は、三田線の両方向が delay 秒遅れている列車位置。
+func mitaDelayed(delay int) []model.TrainLocation {
+	return []model.TrainLocation{
+		{Railway: mitaRailway, RailDirection: "odpt.RailDirection:Southbound", Delay: delay},
+		{Railway: mitaRailway, RailDirection: "odpt.RailDirection:Southbound", Delay: delay},
+		{Railway: mitaRailway, RailDirection: "odpt.RailDirection:Southbound", Delay: 0},
+		{Railway: mitaRailway, RailDirection: "odpt.RailDirection:Northbound", Delay: delay},
+	}
+}
+
+func TestSearchJourneysDelay(t *testing.T) {
+
+	query := JourneyQuery{From: kasugaMita, To: mitaMita, MaxTransfers: 0}
+
+	scheduled, err := newJourneyService(t).SearchJourneys(context.Background(), query)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s := newJourneyServiceWith(t, &mockClient{trainLocations: mitaDelayed(300)})
+
+	got, err := s.SearchJourneys(context.Background(), query)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !got.DelayApplied {
+		t.Error("delayApplied = false")
+	}
+
+	if len(got.Journeys) != 1 || len(scheduled.Journeys) != 1 {
+		t.Fatalf("journeys = %d, %d", len(got.Journeys), len(scheduled.Journeys))
+	}
+
+	assertTimetable(t, s, got.Journeys)
+
+	// 中央値の5分遅れ。時刻表で 10:00 より前に出た列車にも乗れるので、時刻表どおりより早く出る
+	l := got.Journeys[0].Legs[0]
+	if l.Railway != mitaRailway || l.DelayMinutes != 5 {
+		t.Errorf("leg = %s delay %d", l.Railway, l.DelayMinutes)
+	}
+	if l.DepartureTime < "10:00" || l.DepartureTime > scheduled.Journeys[0].DepartureTime {
+		t.Errorf("departs %s, scheduled journey departs %s", l.DepartureTime, scheduled.Journeys[0].DepartureTime)
+	}
+}
+
+func TestSearchJourneysSuspended(t *testing.T) {
+
+	s := newJourneyServiceWith(t, &mockClient{
+		trainStatus: []model.TrainStatus{
+			{Railway: mitaRailway, TrainInformationText: model.LocalizedString{Ja: "三田線は、人身事故の影響で、運転を見合わせています。"}},
+			{Railway: oedoRailway, TrainInformationText: model.LocalizedString{Ja: "現在、１５分以上の遅延はありません。"}},
+		},
+	})
+
+	got, err := s.SearchJourneys(context.Background(), JourneyQuery{
+		From:         kasugaMita,
+		To:           mitaMita,
+		DepartAt:     "10:00",
+		MaxTransfers: route.DefaultMaxTransfers,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []Railway{{ID: mitaRailway, Name: "三田線"}}
+	if !slices.Equal(got.SuspendedRailways, want) {
+		t.Errorf("suspendedRailways = %v, want %v", got.SuspendedRailways, want)
+	}
+
+	// 三田駅には浅草線でも行ける
+	if len(got.Journeys) == 0 {
+		t.Fatal("no journeys")
+	}
+
+	for _, j := range got.Journeys {
+		for _, l := range j.Legs {
+			if l.Railway == mitaRailway {
+				t.Errorf("uses suspended railway: %+v", l)
+			}
+		}
+	}
+}
+
+func TestSearchJourneysRealtimeError(t *testing.T) {
+
+	s := newJourneyServiceWith(t, &mockClient{
+		trainLocations: mitaDelayed(300),
+		statusErr:      errors.New("timeout"),
+	})
+
+	got, err := s.SearchJourneys(context.Background(), JourneyQuery{From: kasugaMita, To: mitaMita, DepartAt: "10:00"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got.DelayApplied {
+		t.Error("delayApplied = true")
+	}
+
+	if len(got.Journeys) == 0 || got.Journeys[0].Legs[0].DelayMinutes != 0 {
+		t.Errorf("journeys = %+v", got.Journeys)
+	}
+}
+
+func TestRailwayConditionsCache(t *testing.T) {
+
+	c := &mockClient{trainLocations: mitaDelayed(300)}
+	s := newJourneyServiceWith(t, c)
+
+	now := journeyNow
+	s.now = func() time.Time { return now }
+
+	minutes := func() int {
+		t.Helper()
+		conds, err := s.railwayConditions(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return conds.delays[0].Minutes
+	}
+
+	if got := minutes(); got != 5 {
+		t.Fatalf("minutes = %d", got)
+	}
+
+	c.trainLocations = mitaDelayed(600)
+
+	now = journeyNow.Add(realtimeTTL - time.Second)
+	if got := minutes(); got != 5 {
+		t.Errorf("within TTL: minutes = %d, want cached 5", got)
+	}
+
+	now = journeyNow.Add(realtimeTTL)
+	if got := minutes(); got != 10 {
+		t.Errorf("after TTL: minutes = %d, want 10", got)
+	}
+}
+
+func TestIsSuspended(t *testing.T) {
+
+	tests := []struct {
+		text string
+		want bool
+	}{
+		{"現在、１５分以上の遅延はありません。", false},
+		{"浅草線は、車両点検の影響で、ダイヤが乱れています。", false},
+		{"三田線は、人身事故の影響で、白金高輪駅～目黒駅間の運転を見合わせています。", true},
+		{"新宿線は、信号故障の影響で、運転を中止しています。", true},
+		{"三田線は、人身事故の影響で運転を見合わせていましたが、運転を再開しました。", false},
+	}
+
+	for _, tt := range tests {
+		if got := isSuspended(tt.text); got != tt.want {
+			t.Errorf("isSuspended(%q) = %v, want %v", tt.text, got, tt.want)
+		}
+	}
+}
+
+func TestMedianDelays(t *testing.T) {
+
+	got := medianDelays([]model.TrainLocation{
+		{Railway: "R", RailDirection: "Up", Delay: 0},
+		{Railway: "R", RailDirection: "Up", Delay: 400},
+		{Railway: "R", RailDirection: "Up", Delay: 120},
+		{Railway: "R", RailDirection: "Down", Delay: 20},
+		{Railway: "R", RailDirection: "Down", Delay: 600},
+		// odpt:delay が null の路線は 0 になり、含めない
+		{Railway: "Arakawa", RailDirection: "Up"},
+	})
+
+	want := []route.Delay{
+		// 20秒と600秒の中央値（2件では後ろの値）
+		{Railway: "R", RailDirection: "Down", Minutes: 10},
+		{Railway: "R", RailDirection: "Up", Minutes: 2},
+	}
+
+	if !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestSearchJourneysTimetableOnly(t *testing.T) {
+
+	s := newJourneyServiceWith(t, &mockClient{
+		trainStatus: []model.TrainStatus{
+			{Railway: mitaRailway, TrainInformationText: model.LocalizedString{Ja: "三田線は、人身事故の影響で、運転を見合わせています。"}},
+		},
+		trainLocations: mitaDelayed(300),
+	})
+
+	got, err := s.SearchJourneys(context.Background(), JourneyQuery{
+		From:          kasugaMita,
+		To:            mitaMita,
+		DepartAt:      "10:00",
+		MaxTransfers:  0,
+		TimetableOnly: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got.DelayApplied || len(got.SuspendedRailways) != 0 {
+		t.Errorf("delayApplied = %v, suspendedRailways = %v", got.DelayApplied, got.SuspendedRailways)
+	}
+
+	// 見合わせ中でも三田線で、遅れを足さずに探す
+	if len(got.Journeys) != 1 {
+		t.Fatalf("journeys = %d", len(got.Journeys))
+	}
+	if l := got.Journeys[0].Legs[0]; l.Railway != mitaRailway || l.DelayMinutes != 0 {
+		t.Errorf("leg = %s delay %d", l.Railway, l.DelayMinutes)
+	}
+
+	assertTimetable(t, s, got.Journeys)
 }
