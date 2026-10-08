@@ -30,7 +30,8 @@ type Limits struct {
 
 func DefaultLimits() Limits {
 	return Limits{
-		PerIPPerMinute: 5,
+		// Gemini の無料枠の RPM は 15。1回の質問で AI を3〜4回呼ぶので、1人で使い切らないように3回にする
+		PerIPPerMinute: 3,
 		PerIPPerDay:    30,
 		CallsPerDay:    200,
 	}
