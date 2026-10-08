@@ -1,4 +1,5 @@
 export interface TrainStatus {
+  railwayId: string;
   railway: string;
   status: string;
 }
