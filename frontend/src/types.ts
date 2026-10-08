@@ -105,4 +105,6 @@ export interface JourneyQuery {
   arriveBy?: string;
   maxTransfers?: number;
   avoid?: string[];
+  // false なら遅延・運転見合わせを反映せず、時刻表どおりに探す（省略時は反映する）
+  realtime?: boolean;
 }

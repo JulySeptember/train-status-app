@@ -50,6 +50,8 @@ func TestJourneys(t *testing.T) {
 		{"時刻の形式", url.Values{"from": {kasuga}, "to": {asakusa}, "departAt": {"10"}}, http.StatusBadRequest},
 		{"乗り換え回数が数でない", url.Values{"from": {kasuga}, "to": {asakusa}, "maxTransfers": {"a"}}, http.StatusBadRequest},
 		{"乗り換え回数の上限", url.Values{"from": {kasuga}, "to": {asakusa}, "maxTransfers": {"4"}}, http.StatusBadRequest},
+		{"運行状況を反映しない", url.Values{"from": {kasuga}, "to": {asakusa}, "realtime": {"false"}}, http.StatusOK},
+		{"運行状況の指定が真偽値でない", url.Values{"from": {kasuga}, "to": {asakusa}, "realtime": {"no"}}, http.StatusBadRequest},
 		{"存在しない路線", url.Values{"from": {kasuga}, "to": {asakusa}, "avoid": {"odpt.Railway:Toei.Unknown"}}, http.StatusBadRequest},
 	}
 

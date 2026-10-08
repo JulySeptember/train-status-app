@@ -71,6 +71,7 @@ export const api = {
       params.set("maxTransfers", String(query.maxTransfers));
     }
     if (query.avoid?.length) params.set("avoid", query.avoid.join(","));
+    if (query.realtime === false) params.set("realtime", "false");
 
     return request<JourneySearch>(`/journeys?${params}`);
   },

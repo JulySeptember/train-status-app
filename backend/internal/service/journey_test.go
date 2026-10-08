@@ -573,3 +573,38 @@ func TestMedianDelays(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
+
+func TestSearchJourneysTimetableOnly(t *testing.T) {
+
+	s := newJourneyServiceWith(t, &mockClient{
+		trainStatus: []model.TrainStatus{
+			{Railway: mitaRailway, TrainInformationText: model.LocalizedString{Ja: "三田線は、人身事故の影響で、運転を見合わせています。"}},
+		},
+		trainLocations: mitaDelayed(300),
+	})
+
+	got, err := s.SearchJourneys(context.Background(), JourneyQuery{
+		From:          kasugaMita,
+		To:            mitaMita,
+		DepartAt:      "10:00",
+		MaxTransfers:  0,
+		TimetableOnly: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got.DelayApplied || len(got.SuspendedRailways) != 0 {
+		t.Errorf("delayApplied = %v, suspendedRailways = %v", got.DelayApplied, got.SuspendedRailways)
+	}
+
+	// 見合わせ中でも三田線で、遅れを足さずに探す
+	if len(got.Journeys) != 1 {
+		t.Fatalf("journeys = %d", len(got.Journeys))
+	}
+	if l := got.Journeys[0].Legs[0]; l.Railway != mitaRailway || l.DelayMinutes != 0 {
+		t.Errorf("leg = %s delay %d", l.Railway, l.DelayMinutes)
+	}
+
+	assertTimetable(t, s, got.Journeys)
+}

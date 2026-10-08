@@ -167,8 +167,10 @@ RAPTOR は、乗り換え回数を1回ずつ増やしながら、各駅に最も
 ## 6. API
 
 ```
-GET /api/journeys?from=<駅ID>&to=<駅ID>&departAt=<HH:MM>|arriveBy=<HH:MM>&maxTransfers=<n>&avoid=<路線ID,...>
+GET /api/journeys?from=<駅ID>&to=<駅ID>&departAt=<HH:MM>|arriveBy=<HH:MM>&maxTransfers=<n>&avoid=<路線ID,...>&realtime=<true|false>
 ```
+
+- `realtime=false` を指定すると、遅延と運転見合わせ（7章）を反映せず、時刻表どおりに探す（`delayApplied` は `false`）。省略時は反映する。
 
 - `/api/routes` は路線一覧で使っているので、別の名前にする。
 - `avoid` で指定した路線は使わない（7章の運転見合わせや、AI が探し直すときに使う）。

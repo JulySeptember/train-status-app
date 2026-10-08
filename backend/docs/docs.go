@@ -73,7 +73,7 @@ const docTemplate = `{
         },
         "/api/journeys": {
             "get": {
-                "description": "Search journeys between two stations. Returns the earliest journey for each number of transfers.\nStations with the same name on different lines (e.g. Shinjuku) are treated as one station.\nTimes are on the current service day (before 03:00 belongs to the previous day).\nCurrent delays (per railway and direction, within the next hour) are added to the times, and suspended railways are avoided.\nIf the realtime status cannot be fetched, the timetable is used as is and delayApplied is false.",
+                "description": "Search journeys between two stations. Returns the earliest journey for each number of transfers.\nStations with the same name on different lines (e.g. Shinjuku) are treated as one station.\nTimes are on the current service day (before 03:00 belongs to the previous day).\nCurrent delays (per railway and direction, within the next hour) are added to the times, and suspended railways are avoided.\nIf the realtime status cannot be fetched, the timetable is used as is and delayApplied is false.\nWith realtime=false, delays and suspensions are ignored and the timetable is used as is.",
                 "produces": [
                     "application/json"
                 ],
@@ -123,6 +123,13 @@ const docTemplate = `{
                         "example": "odpt.Railway:Toei.Oedo",
                         "description": "Comma-separated railway IDs to avoid",
                         "name": "avoid",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "default": true,
+                        "description": "Apply current delays and suspensions",
+                        "name": "realtime",
                         "in": "query"
                     }
                 ],

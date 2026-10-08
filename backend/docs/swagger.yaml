@@ -225,6 +225,7 @@ paths:
         Times are on the current service day (before 03:00 belongs to the previous day).
         Current delays (per railway and direction, within the next hour) are added to the times, and suspended railways are avoided.
         If the realtime status cannot be fetched, the timetable is used as is and delayApplied is false.
+        With realtime=false, delays and suspensions are ignored and the timetable is used as is.
       parameters:
       - description: From station ID
         example: odpt.Station:Toei.Mita.Kasuga
@@ -257,6 +258,11 @@ paths:
         in: query
         name: avoid
         type: string
+      - default: true
+        description: Apply current delays and suspensions
+        in: query
+        name: realtime
+        type: boolean
       produces:
       - application/json
       responses:

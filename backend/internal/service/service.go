@@ -822,6 +822,9 @@ type JourneyQuery struct {
 
 	MaxTransfers int
 	Avoid        []string
+
+	// TimetableOnly なら、遅れと運転見合わせを反映せず、時刻表どおりに探す
+	TimetableOnly bool
 }
 
 // =========================
@@ -897,24 +900,8 @@ func (s *Service) SearchJourneys(
 		SuspendedRailways: []Railway{},
 	}
 
-	// 運行状況を取得できなくても、時刻表どおりに探す
-	if conds, err := s.railwayConditions(ctx); err != nil {
-		log.Printf("journey search without realtime conditions: %v", err)
-	} else {
-		result.DelayApplied = true
-
-		rq.Delays = conds.delays
-		rq.DelayUntil = serviceDayMinutes(now) + delayWindowMinutes
-
-		for _, id := range conds.suspended {
-			result.SuspendedRailways = append(result.SuspendedRailways, Railway{
-				ID:   id,
-				Name: s.railwayNames[id],
-			})
-			if !slices.Contains(rq.Avoid, id) {
-				rq.Avoid = append(rq.Avoid, id)
-			}
-		}
+	if !q.TimetableOnly {
+		result.DelayApplied = s.applyRealtime(ctx, &rq, result, now)
 	}
 
 	journeys, err := s.routes.Search(rq)
@@ -963,6 +950,37 @@ func (s *Service) SearchJourneys(
 	}
 
 	return result, nil
+}
+
+// applyRealtime は、遅れと運転見合わせを探索の条件に足し、見合わせている路線を result に入れる。
+// 運行状況を取得できなかったときは何も足さずに false を返す（時刻表どおりに探す）。
+func (s *Service) applyRealtime(
+	ctx context.Context,
+	rq *route.Query,
+	result *JourneySearch,
+	now time.Time,
+) bool {
+
+	conds, err := s.railwayConditions(ctx)
+	if err != nil {
+		log.Printf("journey search without realtime conditions: %v", err)
+		return false
+	}
+
+	rq.Delays = conds.delays
+	rq.DelayUntil = serviceDayMinutes(now) + delayWindowMinutes
+
+	for _, id := range conds.suspended {
+		result.SuspendedRailways = append(result.SuspendedRailways, Railway{
+			ID:   id,
+			Name: s.railwayNames[id],
+		})
+		if !slices.Contains(rq.Avoid, id) {
+			rq.Avoid = append(rq.Avoid, id)
+		}
+	}
+
+	return true
 }
 
 // parseClock は "HH:MM" を運行日の0時からの分にする（3時前は +24時間）。
