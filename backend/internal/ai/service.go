@@ -23,6 +23,11 @@ type Config struct {
 	// AI の1回の呼び出しの上限
 	CallTimeout time.Duration
 
+	// AI の呼び出しが時間切れか一時的な障害で失敗したときに、呼び直す回数。
+	// 残り時間が RetryMinRemaining より少なければ呼び直さない
+	CallRetries       int
+	RetryMinRemaining time.Duration
+
 	// 1回のリクエスト全体の上限（API Gateway と Lambda の 30 秒に収める）
 	TotalTimeout time.Duration
 
@@ -38,12 +43,15 @@ type Config struct {
 
 func DefaultConfig() Config {
 	return Config{
-		MaxRounds:     5,
-		CallTimeout:   10 * time.Second,
-		TotalTimeout:  25 * time.Second,
-		AnswerReserve: 8 * time.Second,
-		MaxInputChars: 500,
-		MaxHistory:    6,
+		MaxRounds:   5,
+		CallTimeout: 10 * time.Second,
+		// Gemini はふだん数秒で答えるが、まれに応答が返らなくなる。待ち続けずに呼び直す
+		CallRetries:       1,
+		RetryMinRemaining: 5 * time.Second,
+		TotalTimeout:      25 * time.Second,
+		AnswerReserve:     8 * time.Second,
+		MaxInputChars:     500,
+		MaxHistory:        6,
 	}
 }
 
@@ -99,6 +107,7 @@ const fallbackReply = "時間内に回答をまとめられませんでした。
 type stats struct {
 	inputChars int
 	rounds     int
+	retries    int
 	tools      []string
 	usage      Usage
 }
@@ -119,8 +128,8 @@ func (s *Service) Chat(ctx context.Context, clientIP string, req ChatRequest) (*
 		result = ErrorKind(err)
 	}
 	log.Printf(
-		"chat: result=%s chars=%d rounds=%d tools=%s input_tokens=%d output_tokens=%d",
-		result, st.inputChars, st.rounds, strings.Join(st.tools, ","), st.usage.InputTokens, st.usage.OutputTokens,
+		"chat: result=%s chars=%d rounds=%d retries=%d tools=%s input_tokens=%d output_tokens=%d",
+		result, st.inputChars, st.rounds, st.retries, strings.Join(st.tools, ","), st.usage.InputTokens, st.usage.OutputTokens,
 	)
 
 	return res, err
@@ -158,14 +167,7 @@ func (s *Service) run(ctx context.Context, clientIP string, messages []Message, 
 			req.System += "\n\n道具はもう使えません。ここまでに得た情報だけで答えてください。"
 		}
 
-		if err := s.limiter.AllowCall(ctx); err != nil {
-			return nil, err
-		}
-
-		resp, err := s.generate(ctx, req)
-		st.rounds++
-		st.usage.InputTokens += resp.Usage.InputTokens
-		st.usage.OutputTokens += resp.Usage.OutputTokens
+		resp, err := s.callAI(ctx, req, deadline, st)
 		if err != nil {
 			return nil, err
 		}
@@ -209,6 +211,31 @@ func (s *Service) run(ctx context.Context, clientIP string, messages []Message, 
 		}
 
 		messages = append(messages, Message{Role: RoleTool, ToolResults: results})
+	}
+}
+
+// callAI は AI を呼ぶ。時間切れか一時的な障害で失敗したら、残り時間があれば呼び直す。
+// 呼び直しも AI の呼び出しなので、アプリ全体の上限で数える
+func (s *Service) callAI(ctx context.Context, req Request, deadline time.Time, st *stats) (Response, error) {
+
+	st.rounds++
+
+	for attempt := 0; ; attempt++ {
+
+		if err := s.limiter.AllowCall(ctx); err != nil {
+			return Response{}, err
+		}
+
+		resp, err := s.generate(ctx, req)
+		st.usage.InputTokens += resp.Usage.InputTokens
+		st.usage.OutputTokens += resp.Usage.OutputTokens
+
+		retryable := errors.Is(err, ErrTimeout) || errors.Is(err, ErrUnavailable)
+		if err == nil || !retryable || attempt >= s.cfg.CallRetries || time.Until(deadline) < s.cfg.RetryMinRemaining {
+			return resp, err
+		}
+
+		st.retries++
 	}
 }
 
@@ -320,8 +347,8 @@ func (s *Service) systemPrompt(now time.Time) string {
 # 経路を聞かれたとき
 1. find_station で出発駅と到着駅を特定します。候補が複数の駅名に分かれる、または見つからないときは、ユーザーに聞き返して終えてください（同じ駅名で路線だけが違う候補は同じ駅として扱い、どれか1つの id を使います）。
 2. get_train_status で運行状況を確認します。
-3. search_route で経路を探します。遅れと運転見合わせはアプリが反映済みです。
-4. 結果に、運転見合わせ中の路線や、10分以上遅れている路線が含まれていれば、その路線を avoidRailways に入れて探し直してください。
+3. search_route で経路を探します。avoidRailways はユーザーが避けたい路線を言ったときだけ指定してください。遅れと運転見合わせはアプリが反映済みで、見合わせ中の路線は使いません。
+4. 10分以上遅れている路線が関わるときは、アプリがその路線を使う経路と避けた経路を比べ、comparison に返します。comparison.faster（到着の早い方）を推薦し、遅れている路線を使うならそのことを伝えてください。
 5. 候補（到着時刻・乗り換え回数・遅れている路線を使うか）を比べて1つを推薦し、理由と次点の候補を短く添えてください。
 
 # 回答の書き方

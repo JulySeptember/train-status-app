@@ -22,11 +22,13 @@
   expect_tools: [find_station, get_train_status, search_route]
   expect_reply_any: [見合わせ]
 
+# 浅草線は遅れていても、避けて遠回り（三田線・大江戸線で約50分）するより早く着く
 - name: 経路（浅草線が20分遅れ）
   input: 三田から大門まで行きたい
   status: { odpt.Railway:Toei.Asakusa: delayed:20 }
   expect_tools: [find_station, get_train_status, search_route]
-  expect_args: { search_route: { avoidRailways: [odpt.Railway:Toei.Asakusa] } }
+  expect_reply_any: [浅草線]
+  expect_reply_not: [春日駅で大江戸線に乗り換え]
 
 - name: 到着時刻と乗り換え
   input: 新宿から浅草まで、18時までに着きたい。乗り換え少なめで

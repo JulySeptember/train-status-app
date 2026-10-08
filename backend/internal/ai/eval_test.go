@@ -66,7 +66,7 @@ func TestEval(t *testing.T) {
 	provider := gemini.New(key)
 
 	// 無料枠の1分あたりの上限に当たらないように、質問の間を空ける
-	interval := 10 * time.Second
+	interval := 20 * time.Second
 	if v, err := strconv.Atoi(os.Getenv("AI_EVAL_INTERVAL_SECONDS")); err == nil {
 		interval = time.Duration(v) * time.Second
 	}

@@ -189,6 +189,7 @@ func TestChatProviderTimeout(t *testing.T) {
 
 	cfg := ai.DefaultConfig()
 	cfg.CallTimeout = 50 * time.Millisecond
+	cfg.CallRetries = 0
 
 	p := fake.New(fake.Reply{Response: ai.Response{Text: "遅い"}, Delay: time.Second})
 
@@ -326,5 +327,57 @@ func TestChatLogDoesNotContainText(t *testing.T) {
 	}
 	if strings.Contains(out, "秘密") {
 		t.Fatalf("log contains the text: %q", out)
+	}
+}
+
+// AI の呼び出しが時間切れになったら1回だけ呼び直す。呼び直しもアプリ全体の上限で数える
+func TestChatRetry(t *testing.T) {
+
+	cfg := ai.DefaultConfig()
+	cfg.CallTimeout = 50 * time.Millisecond
+	cfg.RetryMinRemaining = 0
+
+	limiter := ai.NewMemoryLimiter(ai.Limits{PerIPPerMinute: 10, PerIPPerDay: 10, CallsPerDay: 2})
+
+	p := fake.New(
+		fake.Reply{Response: ai.Response{Text: "遅い"}, Delay: time.Second},
+		fake.Text("答えです。"),
+	)
+
+	res, err := newService(p, &stubTools{}, limiter, cfg).Chat(t.Context(), "ip", ask("遅延は？"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Reply != "答えです。" || len(p.Requests()) != 2 {
+		t.Fatalf("expected a retry, got %+v (%d calls)", res, len(p.Requests()))
+	}
+
+	// 上限（2回）を使い切ったので、次の質問は ErrQuotaExceeded
+	if err := limiter.AllowCall(t.Context()); !errors.Is(err, ai.ErrQuotaExceeded) {
+		t.Fatalf("retry must be counted, got %v", err)
+	}
+}
+
+// 呼び直しは1回まで。Provider 側の上限（429）は呼び直さない
+func TestChatRetryLimits(t *testing.T) {
+
+	cfg := ai.DefaultConfig()
+	cfg.RetryMinRemaining = 0
+
+	p := fake.New(fake.Reply{Err: ai.ErrUnavailable}, fake.Reply{Err: ai.ErrUnavailable}, fake.Text("届かない"))
+	if _, err := newService(p, &stubTools{}, nil, cfg).Chat(t.Context(), "ip", ask("？")); !errors.Is(err, ai.ErrUnavailable) || len(p.Requests()) != 2 {
+		t.Fatalf("expected one retry, got %v (%d calls)", err, len(p.Requests()))
+	}
+
+	p = fake.New(fake.Reply{Err: ai.ErrRateLimited}, fake.Text("届かない"))
+	if _, err := newService(p, &stubTools{}, nil, cfg).Chat(t.Context(), "ip", ask("？")); !errors.Is(err, ai.ErrRateLimited) || len(p.Requests()) != 1 {
+		t.Fatalf("rate limit must not be retried, got %v (%d calls)", err, len(p.Requests()))
+	}
+
+	// 残り時間が少なければ呼び直さない
+	cfg.RetryMinRemaining = time.Hour
+	p = fake.New(fake.Reply{Err: ai.ErrTimeout}, fake.Text("届かない"))
+	if _, err := newService(p, &stubTools{}, nil, cfg).Chat(t.Context(), "ip", ask("？")); !errors.Is(err, ai.ErrTimeout) || len(p.Requests()) != 1 {
+		t.Fatalf("expected no retry, got %v (%d calls)", err, len(p.Requests()))
 	}
 }
