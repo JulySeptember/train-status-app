@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 概要
 
-東京都交通局（都営）のオープンデータ（ODPT API, `api-public.odpt.org`、APIキー不要）を使った鉄道運行情報アプリ。
+NORIKAE AI（非公式）: 東京都交通局（都営）のオープンデータ（ODPT API, `api-public.odpt.org`、APIキー不要）を使った、運行情報・列車位置・時刻表・遅れを反映した経路検索・AI チャットのアプリ。リポジトリ名（`train-status-app`）は AWS のリソース名に使っているので変えない。
 Go の REST API（AWS Lambda）と React + TypeScript の SPA（S3 + CloudFront）で構成し、インフラは Terraform で管理する。
 
 ## コマンド

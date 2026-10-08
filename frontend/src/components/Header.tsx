@@ -2,6 +2,7 @@ import { Link, NavLink } from "react-router-dom";
 import { TrainFront } from "lucide-react";
 
 import { NAV_ITEMS } from "@/components/nav";
+import { APP_NAME } from "@/components/PageTitle";
 
 import { cn } from "@/lib/utils";
 
@@ -17,7 +18,7 @@ export default function Header() {
             <TrainFront size={20} />
           </span>
 
-          <span className="font-bold tracking-tight">都営 運行情報</span>
+          <span className="font-bold tracking-tight">{APP_NAME}</span>
         </Link>
 
         {/* スマホでは画面下のタブバー（BottomNav）を使う */}
