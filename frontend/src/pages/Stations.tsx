@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, Search } from "lucide-react";
 
@@ -10,8 +10,13 @@ import Loading from "@/components/Loading";
 import Error from "@/components/Error";
 import RailwayBadge from "@/components/RailwayBadge";
 import PageTitle from "@/components/PageTitle";
-import StationSelect from "@/components/StationSelect";
 
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Input } from "@/components/ui/input";
 import { railwayIdOf, useRailways } from "@/lib/railways";
 
@@ -20,33 +25,62 @@ type Group = {
   stations: Station[];
 };
 
-// 路線ごとに、駅をプルダウンから選んで時刻表を開く
-function RailwayList({ groups }: { groups: Group[] }) {
-  const navigate = useNavigate();
-
+function StationGrid({ stations }: { stations: Station[] }) {
   return (
-    <ul className="space-y-3">
-      {groups.map(({ railway, stations }) => (
-        <li
-          key={railway.id}
-          className="flex flex-col gap-3 rounded-xl border bg-card px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-        >
-          <p className="flex items-center gap-3 font-semibold">
-            <RailwayBadge railway={railway} className="size-8 text-sm" />
-            {railway.name}
-          </p>
+    <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+      {stations.map((station) => (
+        <li key={station.id}>
+          <Link
+            to={`/stations/${encodeURIComponent(station.id)}`}
+            className="flex items-center justify-between rounded-lg border bg-card px-3 py-2.5 text-base no-underline! transition hover:bg-muted"
+          >
+            <span className="truncate">{station.name}</span>
 
-          <div className="sm:w-64">
-            <StationSelect
-              stations={stations}
-              value=""
-              onChange={(id) => navigate(`/stations/${encodeURIComponent(id)}`)}
-              label="駅"
+            <ChevronRight
+              size={16}
+              className="shrink-0 text-muted-foreground"
             />
-          </div>
+          </Link>
         </li>
       ))}
     </ul>
+  );
+}
+
+// 路線を並べ、選んだ路線の駅だけを開いて見せる
+function RailwayAccordion({ groups }: { groups: Group[] }) {
+  // 開いた路線は URL に残す（駅の時刻表から戻ったとき、同じ路線を開いたままにする）
+  const [params, setParams] = useSearchParams();
+  const open = params.get("route");
+
+  return (
+    <Accordion
+      value={open ? [open] : []}
+      onValueChange={(value) => {
+        const [route] = value as string[];
+        setParams(route ? { route } : {}, { replace: true });
+      }}
+      className="gap-3"
+    >
+      {groups.map(({ railway, stations }) => (
+        <AccordionItem
+          key={railway.id}
+          value={railway.id}
+          className="rounded-xl border bg-card px-4"
+        >
+          <AccordionTrigger className="items-center py-3 text-base font-semibold hover:no-underline">
+            <span className="flex items-center gap-3">
+              <RailwayBadge railway={railway} className="size-8 text-sm" />
+              {railway.name}
+            </span>
+          </AccordionTrigger>
+
+          <AccordionContent className="pb-4">
+            <StationGrid stations={stations} />
+          </AccordionContent>
+        </AccordionItem>
+      ))}
+    </Accordion>
   );
 }
 
@@ -73,23 +107,7 @@ function SearchResult({
         {railway.name}
       </h2>
 
-      <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-        {stations.map((station) => (
-          <li key={station.id}>
-            <Link
-              to={`/stations/${encodeURIComponent(station.id)}`}
-              className="flex items-center justify-between rounded-lg border bg-card px-3 py-2.5 transition hover:bg-muted"
-            >
-              <span className="truncate">{station.name}</span>
-
-              <ChevronRight
-                size={16}
-                className="shrink-0 text-muted-foreground"
-              />
-            </Link>
-          </li>
-        ))}
-      </ul>
+      <StationGrid stations={stations} />
     </section>
   ));
 }
@@ -151,7 +169,7 @@ export default function Stations() {
       </div>
 
       {word === "" ? (
-        <RailwayList groups={groups} />
+        <RailwayAccordion groups={groups} />
       ) : (
         <SearchResult groups={groups} keyword={word} />
       )}
