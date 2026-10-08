@@ -10,6 +10,7 @@ import RailwayBadge from "@/components/RailwayBadge";
 import PageTitle from "@/components/PageTitle";
 
 import { useRailway } from "@/lib/railways";
+import { usePrefetchStation } from "@/lib/station";
 
 export default function Route() {
   const { routeId = "" } = useParams();
@@ -20,6 +21,7 @@ export default function Route() {
   });
 
   const railway = useRailway(routeId);
+  const prefetch = usePrefetchStation();
 
   if (isPending) return <Loading />;
 
@@ -42,6 +44,7 @@ export default function Route() {
           <li key={station.id}>
             <Link
               to={`/stations/${encodeURIComponent(station.id)}`}
+              {...prefetch(station.id)}
               className="flex items-center justify-between rounded-lg px-3 py-3 transition hover:bg-muted"
             >
               {station.name}

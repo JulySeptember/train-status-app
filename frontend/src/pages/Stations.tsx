@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/accordion";
 import { Input } from "@/components/ui/input";
 import { railwayIdOf, useRailways } from "@/lib/railways";
+import { usePrefetchStation } from "@/lib/station";
 
 type Group = {
   railway: Railway;
@@ -26,12 +27,15 @@ type Group = {
 };
 
 function StationGrid({ stations }: { stations: Station[] }) {
+  const prefetch = usePrefetchStation();
+
   return (
     <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
       {stations.map((station) => (
         <li key={station.id}>
           <Link
             to={`/stations/${encodeURIComponent(station.id)}`}
+            {...prefetch(station.id)}
             className="flex items-center justify-between rounded-lg border bg-card px-3 py-2.5 text-base no-underline! transition hover:bg-muted"
           >
             <span className="truncate">{station.name}</span>

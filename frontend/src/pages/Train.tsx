@@ -2,11 +2,63 @@ import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
 import { api } from "@/api";
+import { type TrainLocation as TrainLocationType } from "@/types";
 
 import Loading from "@/components/Loading";
 import Error from "@/components/Error";
-import TrainLocation from "@/components/TrainLocation";
+import TrainLocation, { TrainNotRunning } from "@/components/TrainLocation";
 import PageTitle from "@/components/PageTitle";
+
+import { nowServiceMinutes, timeToServiceMinutes } from "@/lib/time";
+
+// 「運行を終えました」と出したあとも取り直し続ける時間（分）。
+// 判定は時刻表の時刻だけなので、遅れて走っている列車が配信から一時的に抜けたときにも出る
+const FINISHED_RECHECK_MINUTES = 30;
+
+// 列車位置を取り直す間隔（ミリ秒）。false なら取り直さない
+function refetchInterval(data?: TrainLocationType): number | false {
+  if (!data) {
+    return false;
+  }
+
+  if (data.available || data.notRunning === "noData") {
+    return 15_000;
+  }
+
+  const scheduled = data.scheduledTime
+    ? timeToServiceMinutes(data.scheduledTime)
+    : null;
+
+  if (scheduled === null) {
+    return false;
+  }
+
+  const now = nowServiceMinutes();
+
+  // 出発までが長い列車は、開いたままにしても API を呼び続けないよう間隔を延ばす
+  if (data.notRunning === "beforeDeparture") {
+    const untilDeparture = scheduled - now;
+
+    if (untilDeparture > 30) {
+      return 5 * 60_000;
+    }
+
+    if (untilDeparture > 5) {
+      return 60_000;
+    }
+
+    return 15_000;
+  }
+
+  if (
+    data.notRunning === "finished" &&
+    now - scheduled <= FINISHED_RECHECK_MINUTES
+  ) {
+    return 60_000;
+  }
+
+  return false;
+}
 
 export default function Train() {
   const { trainId = "" } = useParams();
@@ -17,15 +69,8 @@ export default function Train() {
 
     staleTime: 15_000,
 
-    refetchInterval: (query) => {
-      const data = query.state.data;
-
-      if (data?.available) {
-        return 15000;
-      }
-
-      return false;
-    },
+    // 走っている列車は位置を更新し、まだ出発していない列車は出発したら位置を出すために取り直す
+    refetchInterval: (query) => refetchInterval(query.state.data),
   });
 
   if (isPending) {
@@ -36,31 +81,20 @@ export default function Train() {
     return <Error />;
   }
 
+  const title = `${data.railway ? `${data.railway} ` : ""}${data.trainNumber}`;
+
   if (!data.available) {
     return (
-      <div className="rounded-xl border border-border bg-card p-8">
-        <PageTitle title="列車位置" />
-        <h1 className="mb-4 text-2xl font-bold text-foreground">列車情報</h1>
-
-        <p className="mb-6 text-foreground/80">{data.message}</p>
-
-        <div className="rounded-lg border border-border bg-background p-5">
-          <h2 className="mb-3 text-lg font-semibold text-foreground">
-            考えられる理由
-          </h2>
-
-          <ul className="list-disc space-y-2 pl-5 text-sm text-muted-foreground">
-            <li>運行前または運行終了の列車です。</li>
-            <li>現在位置情報が配信されていません。</li>
-            <li>データ提供元で一時的に取得できない状態です。</li>
-          </ul>
-        </div>
-      </div>
+      <>
+        <PageTitle title={`${title} の運行状況`} />
+        <TrainNotRunning train={data} />
+      </>
     );
   }
+
   return (
     <>
-      <PageTitle title={`${data.railway} ${data.trainNumber} の位置`} />
+      <PageTitle title={`${title} の位置`} />
       <TrainLocation train={data} />
     </>
   );

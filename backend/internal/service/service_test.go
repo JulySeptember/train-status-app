@@ -824,6 +824,12 @@ func TestGetTrainLocation(t *testing.T) {
 				FromStation: &from,
 				ToStation:   &to,
 				Delay:       60,
+
+				TrainType:     "odpt.TrainType:Toei.Express",
+				RailDirection: "odpt.RailDirection:Southbound",
+				// 直通運転先（東急）の駅は through_service.go の辞書で引く
+				DestinationStation: []string{"odpt.Station:Tokyu.Meguro.Hiyoshi"},
+				Date:               "2026-10-08T20:12:26+09:00",
 			},
 		},
 	}
@@ -849,24 +855,78 @@ func TestGetTrainLocation(t *testing.T) {
 		t.Fatal("unexpected train number")
 	}
 
-	if result.Delay != 60 {
-		t.Fatal("unexpected delay")
+	if result.Delay != 60 || !result.DelayAvailable {
+		t.Fatalf("unexpected delay %d (available %v)", result.Delay, result.DelayAvailable)
 	}
 
-	if result.Railway != "三田線" {
-		t.Fatalf("unexpected railway %s", result.Railway)
+	if result.RailwayID != railway || result.Railway != "三田線" {
+		t.Fatalf("unexpected railway %s %s", result.RailwayID, result.Railway)
 	}
 
-	if result.FromStation != "春日" {
-		t.Fatalf("unexpected from station %s", result.FromStation)
+	if result.FromStationID != from || result.FromStation != "春日" {
+		t.Fatalf("unexpected from station %s %s", result.FromStationID, result.FromStation)
 	}
 
-	if result.ToStation != "白山" {
-		t.Fatalf("unexpected to station %s", result.ToStation)
+	if result.ToStationID != to || result.ToStation != "白山" {
+		t.Fatalf("unexpected to station %s %s", result.ToStationID, result.ToStation)
+	}
+
+	if result.TrainTypeID != "odpt.TrainType:Toei.Express" || result.TrainType != "急行" {
+		t.Fatalf("unexpected train type %s %s", result.TrainTypeID, result.TrainType)
+	}
+
+	if result.RailDirection != "odpt.RailDirection:Southbound" {
+		t.Fatalf("unexpected direction %s", result.RailDirection)
+	}
+
+	if result.Destination != "日吉" {
+		t.Fatalf("unexpected destination %s", result.Destination)
+	}
+
+	if result.UpdatedAt != "2026-10-08T20:12:26+09:00" {
+		t.Fatalf("unexpected updatedAt %s", result.UpdatedAt)
 	}
 
 	if result.Stopped {
 		t.Fatal("expected running train")
+	}
+}
+
+// 荒川線は odpt:delay が配信されないので、遅れを出せないことを返す
+func TestGetTrainLocationDelayUnavailable(t *testing.T) {
+
+	loader, err := assets.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	railway := "odpt.Railway:Toei.Arakawa"
+	trainID, trainNumber := findTrain(t, loader, railway)
+
+	from := "odpt.Station:Toei.Arakawa.Minowabashi"
+
+	mock := &mockClient{
+		trainLocations: []model.TrainLocation{
+			{
+				SameAs:      trainID,
+				TrainNumber: trainNumber,
+				Railway:     railway,
+				FromStation: &from,
+			},
+		},
+	}
+
+	result, err := New(mock, loader).GetTrainLocation(context.Background(), trainID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if result.DelayAvailable {
+		t.Fatal("expected delay to be unavailable on Arakawa line")
+	}
+
+	if !result.Stopped || result.ToStationID != "" {
+		t.Fatalf("expected stopped train, got toStationId %q", result.ToStationID)
 	}
 }
 
@@ -1000,6 +1060,141 @@ func TestGetTrainLocationNotRunning(t *testing.T) {
 
 	if result.Message == "" {
 		t.Fatal("expected message")
+	}
+}
+
+// 位置が配信されていない列車は、本日のダイヤから出発前か運行を終えたかを返す。
+// 浅草線 2022N は平日ダイヤで泉岳寺 20:31 発、西馬込 20:44 着（泉岳寺始発）
+func TestGetTrainLocationNotRunningSchedule(t *testing.T) {
+
+	loader, err := assets.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const trainID = "odpt.Train:Toei.Asakusa.2022N"
+	jst := time.FixedZone("Asia/Tokyo", 9*60*60)
+
+	tests := []struct {
+		name    string
+		now     time.Time
+		want    string
+		station string
+		time    string
+	}{
+		{"出発前", time.Date(2026, 10, 8, 20, 26, 0, 0, jst), NotRunningBeforeDeparture, "泉岳寺", "20:31"},
+		// 出発時刻を過ぎても2分までは、配信の遅れとみなして出発前のままにする
+		{"出発時刻と同じ分", time.Date(2026, 10, 8, 20, 31, 30, 0, jst), NotRunningBeforeDeparture, "泉岳寺", "20:31"},
+		{"出発の2分後まで", time.Date(2026, 10, 8, 20, 32, 59, 0, jst), NotRunningBeforeDeparture, "泉岳寺", "20:31"},
+		{"走行中のはずが配信なし", time.Date(2026, 10, 8, 20, 33, 0, 0, jst), NotRunningNoData, "泉岳寺", "20:31"},
+		{"到着の3分前は配信なし", time.Date(2026, 10, 8, 20, 41, 59, 0, jst), NotRunningNoData, "泉岳寺", "20:31"},
+		// 到着の2分前からは、配信が消えていれば運行を終えたとみなす
+		{"到着の2分前から", time.Date(2026, 10, 8, 20, 42, 0, 0, jst), NotRunningFinished, "西馬込", "20:44"},
+		{"運行終了", time.Date(2026, 10, 8, 21, 0, 0, 0, jst), NotRunningFinished, "西馬込", "20:44"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+
+			svc := New(&mockClient{}, loader)
+			svc.now = func() time.Time { return tc.now }
+
+			result, err := svc.GetTrainLocation(context.Background(), trainID)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if result.Available {
+				t.Fatal("expected unavailable train")
+			}
+
+			if result.NotRunning != tc.want ||
+				result.ScheduledStation != tc.station ||
+				result.ScheduledTime != tc.time {
+				t.Fatalf("got %q %q %q, want %q %q %q",
+					result.NotRunning, result.ScheduledStation, result.ScheduledTime,
+					tc.want, tc.station, tc.time)
+			}
+
+			if result.Railway != "浅草線" || result.Destination != "西馬込" {
+				t.Fatalf("unexpected railway %q / destination %q", result.Railway, result.Destination)
+			}
+
+			if !strings.Contains(result.Message, tc.station) {
+				t.Fatalf("message should mention %s: %s", tc.station, result.Message)
+			}
+		})
+	}
+}
+
+// 0時〜3時は前日の運行日として扱い、24時以降の時刻と比べる。
+// 浅草線 2402T は平日ダイヤで泉岳寺 00:19 発、西馬込 00:32 着。2026-10-09 は金曜日で、0時台は 10-08（木曜日）の運行日
+func TestGetTrainLocationNotRunningAfterMidnight(t *testing.T) {
+
+	loader, err := assets.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const trainID = "odpt.Train:Toei.Asakusa.2402T"
+	jst := time.FixedZone("Asia/Tokyo", 9*60*60)
+
+	tests := []struct {
+		name    string
+		now     time.Time
+		want    string
+		station string
+		time    string
+	}{
+		{"23時台は出発前", time.Date(2026, 10, 8, 23, 50, 0, 0, jst), NotRunningBeforeDeparture, "泉岳寺", "00:19"},
+		{"0時台の出発前", time.Date(2026, 10, 9, 0, 10, 0, 0, jst), NotRunningBeforeDeparture, "泉岳寺", "00:19"},
+		{"0時台の配信なし", time.Date(2026, 10, 9, 0, 25, 0, 0, jst), NotRunningNoData, "泉岳寺", "00:19"},
+		{"1時台は運行終了", time.Date(2026, 10, 9, 1, 0, 0, 0, jst), NotRunningFinished, "西馬込", "00:32"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+
+			svc := New(&mockClient{}, loader)
+			svc.now = func() time.Time { return tc.now }
+
+			result, err := svc.GetTrainLocation(context.Background(), trainID)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if result.NotRunning != tc.want ||
+				result.ScheduledStation != tc.station ||
+				result.ScheduledTime != tc.time {
+				t.Fatalf("got %q %q %q, want %q %q %q",
+					result.NotRunning, result.ScheduledStation, result.ScheduledTime,
+					tc.want, tc.station, tc.time)
+			}
+		})
+	}
+}
+
+// 本日のダイヤに無い列車（平日だけ走る列車を土休日に開いたなど）は、状態を返さない
+func TestGetTrainLocationNotRunningOtherCalendar(t *testing.T) {
+
+	loader, err := assets.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	svc := New(&mockClient{}, loader)
+	// 2026-10-11 は日曜日
+	svc.now = func() time.Time {
+		return time.Date(2026, 10, 11, 20, 26, 0, 0, time.FixedZone("Asia/Tokyo", 9*60*60))
+	}
+
+	result, err := svc.GetTrainLocation(context.Background(), "odpt.Train:Toei.Asakusa.2022N")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if result.NotRunning != "" || result.Message != "本日のダイヤでは走らない列車です" {
+		t.Fatalf("unexpected result %+v", result)
 	}
 }
 

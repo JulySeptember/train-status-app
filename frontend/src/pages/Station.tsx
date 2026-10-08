@@ -3,8 +3,6 @@ import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronUp } from "lucide-react";
 
-import { api } from "@/api";
-
 import Loading from "@/components/Loading";
 import Error from "@/components/Error";
 import Timetable from "@/components/Timetable";
@@ -15,15 +13,12 @@ import PageTitle from "@/components/PageTitle";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { directionLabel } from "@/lib/odpt";
 import { railwayIdOf, useRailway } from "@/lib/railways";
+import { stationQuery } from "@/lib/station";
 
 export default function Station() {
   const { stationId = "" } = useParams();
 
-  const { data, isPending, error } = useQuery({
-    queryKey: ["station", stationId],
-    queryFn: () => api.getStation(stationId),
-    staleTime: 5 * 60 * 1000,
-  });
+  const { data, isPending, error } = useQuery(stationQuery(stationId));
 
   const railway = useRailway(railwayIdOf(stationId));
 

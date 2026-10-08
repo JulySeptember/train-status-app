@@ -50,13 +50,27 @@ export interface StationDetail {
 export interface TrainLocation {
   trainId: string;
   trainNumber: string;
+  railwayId: string;
   railway: string;
+  trainTypeId: string;
+  trainType: string;
+  railDirection: string;
+  destination: string;
+  fromStationId: string;
   fromStation: string;
+  toStationId: string;
   toStation: string;
   stopped: boolean;
   delay: number;
+  delayAvailable: boolean;
+  updatedAt: string;
   available: boolean;
   message: string;
+  // available が false のとき、本日のダイヤから見た状態。本日のダイヤに無い列車では無い
+  notRunning?: "beforeDeparture" | "finished" | "noData";
+  scheduledStationId?: string;
+  scheduledStation?: string;
+  scheduledTime?: string;
 }
 
 export interface Fare {

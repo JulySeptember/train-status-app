@@ -127,6 +127,7 @@ PR を作ったら、実装時の会話を持たないサブエージェント�
 - 列車番号（`odpt:trainNumber`）は路線間で重複し、平日・土休日ダイヤでも使い回される。列車は必ず列車ID（`odpt.Train:Toei.<路線>.<番号>`）で特定する。service は起動時に駅時刻表から列車ID → 路線・列車番号の索引を作る
 - 日暮里・舎人ライナーは `odpt:Train` が配信されない（`trainLocationUnsupported`）。荒川線は `odpt:Train` は配信されるが `odpt:delay` が null（`model` では 0 になる）
 - `odpt:Train` で `toStation` が null の列車は `fromStation` に停車中
+- `odpt:Train` は走り出した列車しか配信しない。始発駅で発車を待つ列車（浅草線の泉岳寺始発など）は、時刻表の次発でも位置が無い。位置の無い列車の状態（出発前・運行終了）は、本日の列車時刻表から判定している（`service/train_schedule.go`）
 - 路線によって「土曜・休日」が別ダイヤのものと「土休日」にまとめられたものがある（フロントの `Timetable.tsx` も両方に対応している）
 - 時刻表の行先には直通運転先（京急・京成・東急など他社）の駅が含まれるが、他社の駅データは公開 API から取れない。駅名は `service/through_service.go` の辞書で引く。assets 更新後に起動ログへ `unknown destination station` が出たら辞書に追加する
 - 駅データ（`station.json`）には乗り換え先の情報がない。経路探索の乗り換えは同じ名前の駅から作り、名前が違う乗り換え駅は `service/transfer.go` の `differentNameTransfers` に手で足す

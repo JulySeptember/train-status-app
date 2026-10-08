@@ -762,15 +762,46 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "delay": {
+                    "description": "遅れ（秒）。delayAvailable が false の路線（荒川線）では配信されず 0 になる",
                     "type": "integer"
                 },
+                "delayAvailable": {
+                    "type": "boolean"
+                },
+                "destination": {
+                    "description": "行先の駅名。直通運転先（他社）の駅も含む",
+                    "type": "string"
+                },
                 "fromStation": {
+                    "type": "string"
+                },
+                "fromStationId": {
                     "type": "string"
                 },
                 "message": {
                     "type": "string"
                 },
+                "notRunning": {
+                    "description": "available が false のとき、本日のダイヤから見た状態（beforeDeparture・finished・noData）。\n本日のダイヤに無い列車では空",
+                    "type": "string"
+                },
+                "railDirection": {
+                    "type": "string"
+                },
                 "railway": {
+                    "type": "string"
+                },
+                "railwayId": {
+                    "type": "string"
+                },
+                "scheduledStation": {
+                    "type": "string"
+                },
+                "scheduledStationId": {
+                    "description": "notRunning が beforeDeparture・noData のときは出発する駅と時刻、finished のときは着いた駅と時刻",
+                    "type": "string"
+                },
+                "scheduledTime": {
                     "type": "string"
                 },
                 "stopped": {
@@ -780,10 +811,24 @@ const docTemplate = `{
                 "toStation": {
                     "type": "string"
                 },
+                "toStationId": {
+                    "type": "string"
+                },
                 "trainId": {
                     "type": "string"
                 },
                 "trainNumber": {
+                    "type": "string"
+                },
+                "trainType": {
+                    "type": "string"
+                },
+                "trainTypeId": {
+                    "description": "列車種別（例: 普通、エアポート快特）",
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "description": "位置情報の配信時刻（ODPT の dc:date）",
                     "type": "string"
                 }
             }

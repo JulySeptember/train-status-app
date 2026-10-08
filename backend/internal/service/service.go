@@ -633,18 +633,49 @@ type TrainLocation struct {
 	TrainID     string `json:"trainId"`
 	TrainNumber string `json:"trainNumber"`
 
-	Railway string `json:"railway"`
+	RailwayID string `json:"railwayId"`
+	Railway   string `json:"railway"`
 
-	FromStation string `json:"fromStation"`
-	ToStation   string `json:"toStation"`
+	// 列車種別（例: 普通、エアポート快特）
+	TrainTypeID string `json:"trainTypeId"`
+	TrainType   string `json:"trainType"`
+
+	RailDirection string `json:"railDirection"`
+
+	// 行先の駅名。直通運転先（他社）の駅も含む
+	Destination string `json:"destination"`
+
+	FromStationID string `json:"fromStationId"`
+	FromStation   string `json:"fromStation"`
+	ToStationID   string `json:"toStationId"`
+	ToStation     string `json:"toStation"`
 
 	// true の場合は fromStation に停車中（toStation は空）
 	Stopped bool `json:"stopped"`
 
-	Delay int `json:"delay"`
+	// 遅れ（秒）。delayAvailable が false の路線（荒川線）では配信されず 0 になる
+	Delay          int  `json:"delay"`
+	DelayAvailable bool `json:"delayAvailable"`
+
+	// 位置情報の配信時刻（ODPT の dc:date）
+	UpdatedAt string `json:"updatedAt"`
 
 	Available bool   `json:"available"`
 	Message   string `json:"message"`
+
+	// available が false のとき、本日のダイヤから見た状態（beforeDeparture・finished・noData）。
+	// 本日のダイヤに無い列車では空
+	NotRunning string `json:"notRunning,omitempty"`
+
+	// notRunning が beforeDeparture・noData のときは出発する駅と時刻、finished のときは着いた駅と時刻
+	ScheduledStationID string `json:"scheduledStationId,omitempty"`
+	ScheduledStation   string `json:"scheduledStation,omitempty"`
+	ScheduledTime      string `json:"scheduledTime,omitempty"`
+}
+
+// delayUnsupported は、odpt:Train の odpt:delay が配信されない（null の）路線
+var delayUnsupported = map[string]bool{
+	"odpt.Railway:Toei.Arakawa": true,
 }
 
 // =========================
@@ -700,24 +731,36 @@ func (s *Service) GetTrainLocation(
 		}
 
 		item := &TrainLocation{
-			TrainID:     trainID,
-			TrainNumber: train.TrainNumber,
-			Stopped:     train.ToStation == nil,
-			Delay:       train.Delay,
-			Available:   true,
+			TrainID:        trainID,
+			TrainNumber:    train.TrainNumber,
+			RailwayID:      train.Railway,
+			TrainTypeID:    train.TrainType,
+			TrainType:      s.trainTypeName(train.TrainType),
+			RailDirection:  train.RailDirection,
+			Stopped:        train.ToStation == nil,
+			Delay:          train.Delay,
+			DelayAvailable: !delayUnsupported[train.Railway],
+			UpdatedAt:      train.Date,
+			Available:      true,
 		}
 
 		if railway, ok := railwayMap[train.Railway]; ok {
 			item.Railway = railway.RailwayTitle.Ja
 		}
 
+		if len(train.DestinationStation) > 0 {
+			item.Destination = s.stationName(train.DestinationStation[0])
+		}
+
 		if train.FromStation != nil {
+			item.FromStationID = *train.FromStation
 			if station, ok := stationMap[*train.FromStation]; ok {
 				item.FromStation = station.StationTitle.Ja
 			}
 		}
 
 		if train.ToStation != nil {
+			item.ToStationID = *train.ToStation
 			if station, ok := stationMap[*train.ToStation]; ok {
 				item.ToStation = station.StationTitle.Ja
 			}
@@ -726,13 +769,22 @@ func (s *Service) GetTrainLocation(
 		return item, nil
 	}
 
-	return &TrainLocation{
+	item := &TrainLocation{
 		TrainID:     trainID,
 		TrainNumber: ref.trainNumber,
 		Available:   false,
 		Message:     "現在この列車の運行情報は取得できません",
-	}, nil
+	}
 
+	// 位置が配信されるのは走っている列車だけなので、本日のダイヤで出発前か運行を終えたかを伝える
+	now := s.now()
+	if sc, ok := s.todaySchedule(trainID, now); ok {
+		s.describeNotRunning(item, sc, now)
+	} else {
+		item.Message = "本日のダイヤでは走らない列車です"
+	}
+
+	return item, nil
 }
 
 // =========================

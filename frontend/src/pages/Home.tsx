@@ -77,7 +77,7 @@ function AskForm() {
             }
           }}
           maxLength={MAX_INPUT_CHARS}
-          placeholder="例: 今春日にいる。浅草に行きたい"
+          placeholder="行きたい場所や、知りたいことを入力"
           aria-label="AI への質問"
           className="max-h-40 min-h-12 text-base"
         />
