@@ -78,6 +78,8 @@ aws logs filter-log-events --region ap-northeast-1 \
 
 PR では `.github/workflows/ci.yml` が変更のあった領域だけを検証する（backend: gofmt・vet・test・Swagger が最新か / frontend: lint・build / infra: terraform fmt・validate と、PR への `terraform plan` の結果のコメント）。Swagger のチェックは go.mod の swaggo/swag と同じバージョンの CLI で再生成して差分を見る。
 
+main は Ruleset（`main`）で保護している: PR 必須（承認は不要）、force push・削除の禁止、必須チェックは `changes`・`backend`・`frontend`・`infra`（ci.yml のジョブ名）。`if` でスキップされたジョブは成功として扱われるので、変更のない領域があってもマージできる。`changes` が失敗すると後続がスキップされて通ってしまうため、`changes` も必須にしている。ci.yml のジョブ名を変えたり検証のジョブを足したりしたら、Ruleset の必須チェックも合わせて変える（`gh api repos/JulySeptember/train-status-app/rulesets`）。`infra-plan` は AWS 側の一時的な失敗やフォークからの PR があるので必須にしていない。
+
 `gh pr edit` は Projects (classic) 廃止の GraphQL エラーで失敗する。PR の題名・説明は `gh api -X PATCH repos/JulySeptember/train-status-app/pulls/<番号> -f title=... -F body=@<ファイル>` で更新する。
 
 ## アーキテクチャ
