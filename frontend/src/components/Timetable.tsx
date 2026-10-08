@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Link } from "react-router-dom";
 import { Clock3, ArrowRight } from "lucide-react";
 
@@ -20,6 +20,21 @@ type Props = {
 };
 
 type Tab = "weekday" | "saturday" | "holiday" | "saturdayHoliday";
+
+// Tailwind の lg と同じ幅。PC 表示ではダイヤを並べ、スマホ表示ではタブで1つずつ出す
+const desktopQuery = window.matchMedia("(min-width: 64rem)");
+
+// 時刻表は1駅で数百行あるので、スマホ用と PC 用の両方を描いて片方を CSS で隠すと遅い。
+// 画面の幅に合う方だけを描く
+function useIsDesktop() {
+  return useSyncExternalStore(
+    (onChange) => {
+      desktopQuery.addEventListener("change", onChange);
+      return () => desktopQuery.removeEventListener("change", onChange);
+    },
+    () => desktopQuery.matches,
+  );
+}
 
 // 次に発車する列車の位置。最終列車が出たあとは -1。
 // 0時台・1時台の列車は運行日の最後に並ぶので、文字列ではなく運行日の経過分で比べる
@@ -81,14 +96,7 @@ function TimetableCard({
     : "";
 
   useEffect(() => {
-    const row = nextRowRef.current;
-
-    // スマホ表示ではデスクトップ用の時刻表が、PC表示ではスマホ用が非表示のまま描画されている
-    if (!row || row.getClientRects().length === 0) {
-      return;
-    }
-
-    row.scrollIntoView({ block: "center" });
+    nextRowRef.current?.scrollIntoView({ block: "center" });
   }, [scrollKey]);
 
   return (
@@ -224,37 +232,14 @@ export default function Timetable({
     () => cards.find((c) => c.timetable?.isToday)?.tab ?? "weekday",
   );
 
-  return (
-    <>
-      {/* Mobile */}
-      <div className="lg:hidden">
-        <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
-          <TabsList className="mb-3 h-10! w-full">
-            {cards.map((c) => (
-              <TabsTrigger key={c.tab} value={c.tab}>
-                {c.title}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+  const isDesktop = useIsDesktop();
 
-        {cards
-          .filter((c) => c.tab === tab)
-          .map((c) => (
-            <TimetableCard
-              key={c.tab}
-              title={c.title}
-              timetable={c.timetable}
-              trainLocationAvailable={trainLocationAvailable}
-            />
-          ))}
-      </div>
-
-      {/* Desktop */}
+  if (isDesktop) {
+    return (
       <div
         className={cn(
-          "hidden gap-6 lg:grid",
-          cards.length === 2 ? "lg:grid-cols-2" : "lg:grid-cols-3",
+          "grid gap-6",
+          cards.length === 2 ? "grid-cols-2" : "grid-cols-3",
         )}
       >
         {cards.map((c) => (
@@ -266,6 +251,31 @@ export default function Timetable({
           />
         ))}
       </div>
-    </>
+    );
+  }
+
+  return (
+    <div>
+      <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
+        <TabsList className="mb-3 h-10! w-full">
+          {cards.map((c) => (
+            <TabsTrigger key={c.tab} value={c.tab}>
+              {c.title}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+
+      {cards
+        .filter((c) => c.tab === tab)
+        .map((c) => (
+          <TimetableCard
+            key={c.tab}
+            title={c.title}
+            timetable={c.timetable}
+            trainLocationAvailable={trainLocationAvailable}
+          />
+        ))}
+    </div>
   );
 }
