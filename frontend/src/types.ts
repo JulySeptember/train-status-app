@@ -109,3 +109,28 @@ export interface JourneyQuery {
   // false なら遅延・運転見合わせを反映せず、時刻表どおりに探す（省略時は反映する）
   realtime?: boolean;
 }
+
+// AI エージェント（POST /api/chat）。会話の履歴はブラウザが持ち、毎回送る
+export interface ChatMessage {
+  role: "user" | "assistant";
+  text: string;
+}
+
+// AI が呼んだ道具と、画面向けの短い説明
+export interface ChatStep {
+  tool: string;
+  label: string;
+}
+
+export interface ChatResponse {
+  reply: string;
+  steps: ChatStep[];
+  // 最後に探した経路。時刻などは AI の文章ではなく、これをそのまま表示する
+  journeys?: JourneySearch;
+}
+
+// quota_exceeded・rate_limited・unavailable などで表示を分ける
+export interface ChatErrorBody {
+  error: string;
+  code: string;
+}

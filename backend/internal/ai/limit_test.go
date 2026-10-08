@@ -20,9 +20,9 @@ func TestMemoryLimiterPerIP(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// 1分あたりの上限
-	if err := l.AllowQuestion(ctx, "a"); !errors.Is(err, ErrQuotaExceeded) {
-		t.Fatalf("expected ErrQuotaExceeded, got %v", err)
+	// 1分あたりの上限は、少し待てば使える
+	if err := l.AllowQuestion(ctx, "a"); !errors.Is(err, ErrRateLimited) {
+		t.Fatalf("expected ErrRateLimited, got %v", err)
 	}
 	// 別の IP は数えない
 	if err := l.AllowQuestion(ctx, "b"); err != nil {

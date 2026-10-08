@@ -11,7 +11,8 @@ import (
 
 // Limiter は利用上限（設計書 9章）。共有の無料枠を1人で使い切られないようにする。
 type Limiter interface {
-	// AllowQuestion は、IP ごとの質問の回数（1分・1日）を数え、上限を超えたら ErrQuotaExceeded を返す
+	// AllowQuestion は、IP ごとの質問の回数（1分・1日）を数える。
+	// 1分の上限を超えたら ErrRateLimited（少し待てば使える）、1日の上限を超えたら ErrQuotaExceeded を返す
 	AllowQuestion(ctx context.Context, clientIP string) error
 
 	// AllowCall は、アプリ全体の1日の AI 呼び出しの回数を数え、上限を超えたら ErrQuotaExceeded を返す。
@@ -91,7 +92,7 @@ func (l *MemoryLimiter) AllowQuestion(_ context.Context, clientIP string) error 
 	minuteKey := fmt.Sprintf("%s|%d", clientIP, now.Unix()/60)
 
 	if l.minute[minuteKey] >= l.limits.PerIPPerMinute {
-		return fmt.Errorf("%w: per-ip per-minute", ErrQuotaExceeded)
+		return fmt.Errorf("%w: per-ip per-minute", ErrRateLimited)
 	}
 	if l.daily[clientIP] >= l.limits.PerIPPerDay {
 		return fmt.Errorf("%w: per-ip per-day", ErrQuotaExceeded)

@@ -1,4 +1,7 @@
 import type {
+  ChatErrorBody,
+  ChatMessage,
+  ChatResponse,
   Fare,
   JourneyQuery,
   JourneySearch,
@@ -16,6 +19,36 @@ async function request<T>(url: string): Promise<T> {
 
   if (!res.ok) {
     throw new Error(await res.text());
+  }
+
+  return await res.json();
+}
+
+// ChatError は /api/chat のエラー。message はユーザーに見せる文言
+export class ChatError extends Error {
+  code: string;
+
+  constructor(body: ChatErrorBody) {
+    super(body.error);
+    this.code = body.code;
+  }
+}
+
+async function postChat(messages: ChatMessage[]): Promise<ChatResponse> {
+  const res = await fetch(`${API}/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages }),
+  });
+
+  if (!res.ok) {
+    // CloudFront や API Gateway のエラーは JSON でないことがある
+    const body = await res.json().catch(() => null);
+    throw new ChatError(
+      body?.error && body?.code
+        ? body
+        : { error: "エラーが発生しました。", code: "internal" },
+    );
   }
 
   return await res.json();
@@ -74,5 +107,9 @@ export const api = {
     if (query.realtime === false) params.set("realtime", "false");
 
     return request<JourneySearch>(`/journeys?${params}`);
+  },
+
+  chat(messages: ChatMessage[]) {
+    return postChat(messages);
   },
 };

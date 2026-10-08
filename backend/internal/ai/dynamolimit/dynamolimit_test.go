@@ -62,8 +62,8 @@ func TestAllowQuestion(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := l.AllowQuestion(ctx, "203.0.113.1"); !errors.Is(err, ai.ErrQuotaExceeded) || !strings.Contains(err.Error(), "per-minute") {
-		t.Fatalf("expected per-minute quota, got %v", err)
+	if err := l.AllowQuestion(ctx, "203.0.113.1"); !errors.Is(err, ai.ErrRateLimited) || !strings.Contains(err.Error(), "per-minute") {
+		t.Fatalf("expected per-minute rate limit, got %v", err)
 	}
 	if err := l.AllowQuestion(ctx, "203.0.113.2"); err != nil {
 		t.Fatalf("another IP must be allowed: %v", err)

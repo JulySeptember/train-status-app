@@ -26,6 +26,29 @@ export default function License() {
       </ul>
       <br></br>
 
+      <h2>AI の利用について</h2>
+
+      <p>
+        「AI に聞く」では、Google の Gemini API を使っています。入力内容は AI
+        の提供元（Google）に送信され、サービス改善に利用されることがあります。個人情報は入力しないでください。
+      </p>
+
+      <p>
+        <a
+          href="https://ai.google.dev/gemini-api/terms"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Gemini API 利用規約
+        </a>
+      </p>
+
+      <p>
+        AI
+        の回答は誤ることがあります。駅・時刻・経路・運行状況は、アプリが持つオープンデータから取得しています。
+      </p>
+      <br></br>
+
       <h2>ライセンス</h2>
 
       <p>
