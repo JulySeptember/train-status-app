@@ -125,26 +125,26 @@ function SearchPanel() {
   return (
     <Card className="[--card-spacing:--spacing(5)]">
       <CardContent>
-        <Tabs defaultValue="journey" className="gap-4">
+        <Tabs defaultValue="ai" className="gap-4">
           <TabsList className="h-10! w-full sm:w-fit">
-            <TabsTrigger value="journey" className="px-4 text-base">
-              <Route />
-              経路検索
-            </TabsTrigger>
             <TabsTrigger value="ai" className="px-4 text-base">
               <Sparkles />
               AI に聞く
             </TabsTrigger>
+            <TabsTrigger value="journey" className="px-4 text-base">
+              <Route />
+              経路検索
+            </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="ai">
+            <AskForm />
+          </TabsContent>
 
           <TabsContent value="journey">
             <JourneyForm
               onSearch={(params) => navigate(`/journeys?${params}`)}
             />
-          </TabsContent>
-
-          <TabsContent value="ai">
-            <AskForm />
           </TabsContent>
         </Tabs>
       </CardContent>
