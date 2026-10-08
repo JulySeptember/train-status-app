@@ -1083,7 +1083,13 @@ func TestGetTrainLocationNotRunningSchedule(t *testing.T) {
 		time    string
 	}{
 		{"出発前", time.Date(2026, 10, 8, 20, 26, 0, 0, jst), NotRunningBeforeDeparture, "泉岳寺", "20:31"},
-		{"走行中のはずが配信なし", time.Date(2026, 10, 8, 20, 35, 0, 0, jst), NotRunningNoData, "泉岳寺", "20:31"},
+		// 出発時刻を過ぎても2分までは、配信の遅れとみなして出発前のままにする
+		{"出発時刻と同じ分", time.Date(2026, 10, 8, 20, 31, 30, 0, jst), NotRunningBeforeDeparture, "泉岳寺", "20:31"},
+		{"出発の2分後まで", time.Date(2026, 10, 8, 20, 32, 59, 0, jst), NotRunningBeforeDeparture, "泉岳寺", "20:31"},
+		{"走行中のはずが配信なし", time.Date(2026, 10, 8, 20, 33, 0, 0, jst), NotRunningNoData, "泉岳寺", "20:31"},
+		{"到着の3分前は配信なし", time.Date(2026, 10, 8, 20, 41, 59, 0, jst), NotRunningNoData, "泉岳寺", "20:31"},
+		// 到着の2分前からは、配信が消えていれば運行を終えたとみなす
+		{"到着の2分前から", time.Date(2026, 10, 8, 20, 42, 0, 0, jst), NotRunningFinished, "西馬込", "20:44"},
 		{"運行終了", time.Date(2026, 10, 8, 21, 0, 0, 0, jst), NotRunningFinished, "西馬込", "20:44"},
 	}
 
@@ -1116,6 +1122,53 @@ func TestGetTrainLocationNotRunningSchedule(t *testing.T) {
 
 			if !strings.Contains(result.Message, tc.station) {
 				t.Fatalf("message should mention %s: %s", tc.station, result.Message)
+			}
+		})
+	}
+}
+
+// 0時〜3時は前日の運行日として扱い、24時以降の時刻と比べる。
+// 浅草線 2402T は平日ダイヤで泉岳寺 00:19 発、西馬込 00:32 着。2026-10-09 は金曜日で、0時台は 10-08（木曜日）の運行日
+func TestGetTrainLocationNotRunningAfterMidnight(t *testing.T) {
+
+	loader, err := assets.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const trainID = "odpt.Train:Toei.Asakusa.2402T"
+	jst := time.FixedZone("Asia/Tokyo", 9*60*60)
+
+	tests := []struct {
+		name    string
+		now     time.Time
+		want    string
+		station string
+		time    string
+	}{
+		{"23時台は出発前", time.Date(2026, 10, 8, 23, 50, 0, 0, jst), NotRunningBeforeDeparture, "泉岳寺", "00:19"},
+		{"0時台の出発前", time.Date(2026, 10, 9, 0, 10, 0, 0, jst), NotRunningBeforeDeparture, "泉岳寺", "00:19"},
+		{"0時台の配信なし", time.Date(2026, 10, 9, 0, 25, 0, 0, jst), NotRunningNoData, "泉岳寺", "00:19"},
+		{"1時台は運行終了", time.Date(2026, 10, 9, 1, 0, 0, 0, jst), NotRunningFinished, "西馬込", "00:32"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+
+			svc := New(&mockClient{}, loader)
+			svc.now = func() time.Time { return tc.now }
+
+			result, err := svc.GetTrainLocation(context.Background(), trainID)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if result.NotRunning != tc.want ||
+				result.ScheduledStation != tc.station ||
+				result.ScheduledTime != tc.time {
+				t.Fatalf("got %q %q %q, want %q %q %q",
+					result.NotRunning, result.ScheduledStation, result.ScheduledTime,
+					tc.want, tc.station, tc.time)
 			}
 		})
 	}

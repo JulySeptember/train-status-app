@@ -21,6 +21,9 @@ const (
 	NotRunningNoData = "noData"
 )
 
+// scheduleGraceMinutes は、位置が配信されていない列車を出発前・運行終了とみなす、時刻表の時刻の前後の余裕（分）
+const scheduleGraceMinutes = 2
+
 // trainSchedule は、本日のダイヤでの列車の都営線内の最初と最後の停車駅と時刻（運行日の0時からの分）
 type trainSchedule struct {
 	railway       string
@@ -91,7 +94,9 @@ func (s *Service) describeNotRunning(item *TrainLocation, sc trainSchedule, now 
 	minutes := serviceDayMinutes(now)
 
 	switch {
-	case minutes < sc.firstTime:
+	// 時刻表は分単位で、odpt:Train の配信も数十秒遅れるので、出発・到着の前後に余裕を持たせる。
+	// 余裕が無いと、定刻で出発した直後の列車を「遅れてまだ出発していない」と案内してしまう
+	case minutes < sc.firstTime+scheduleGraceMinutes:
 		item.NotRunning = NotRunningBeforeDeparture
 		item.ScheduledStationID = sc.firstStation
 		item.ScheduledStation = s.stationName(sc.firstStation)
@@ -101,7 +106,7 @@ func (s *Service) describeNotRunning(item *TrainLocation, sc trainSchedule, now 
 			item.ScheduledStation, item.ScheduledTime,
 		)
 
-	case minutes > sc.lastTime:
+	case minutes >= sc.lastTime-scheduleGraceMinutes:
 		item.NotRunning = NotRunningFinished
 		item.ScheduledStationID = sc.lastStation
 		item.ScheduledStation = s.stationName(sc.lastStation)
