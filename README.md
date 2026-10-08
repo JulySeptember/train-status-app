@@ -1,6 +1,8 @@
-# Train Status App
+# NORIKAE AI
 
-東京都交通局が公開するオープンデータを利用した鉄道運行情報Webアプリです。
+都営線の運行情報・列車位置・時刻表と、遅れを反映した乗り換え案内を、AI に話しかけて調べられる Web アプリです。東京都交通局が公開するオープンデータ（ODPT）を利用しています。
+
+> 本アプリは個人が作成した**非公式**のアプリで、東京都交通局とは関係ありません。
 
 # 🌍 Live Demo
 
@@ -11,7 +13,7 @@
 
 ---
 
-運行情報や列車位置などの動的データと、駅時刻表・運賃・乗降者数などの静的データを取得し、各路線・駅の情報を閲覧できます。
+運行情報や列車位置などの動的データと、駅時刻表・列車時刻表・乗降者数などの静的データを組み合わせ、各路線・駅の情報の閲覧、遅れを反映した経路検索、AI との会話による照会ができます。
 
 # 対応路線
 
@@ -32,9 +34,15 @@
 - 路線一覧
 - 路線ごとの駅一覧
 - 駅詳細
-  - 時刻表（方面・平日・土休日別）
+  - 時刻表（方面・平日・土休日別、行先・列車種別つき）
   - 乗降者数
-- 列車現在位置検索
+- 列車の現在位置（路線図上に表示。出発前・運行終了も案内）
+- 経路検索
+  - RAPTOR による乗り換え探索
+  - 走行中の列車の遅れと、運行情報の見合わせを反映
+- AI チャット（Gemini）
+  - 「次の電車は？」「遅れてる？」のような自然な文章で、運行情報・時刻表・経路を聞ける
+  - AI が道具（照会 API）を呼び、アプリが結果を返す、を繰り返して答える
 - 運賃検索
 - SwaggerによるAPIドキュメント
 
@@ -54,7 +62,9 @@ CloudFront
            │
      Amazon API Gateway
            │
-       AWS Lambda
+       AWS Lambda ──── Gemini API（AI チャット）
+           │    ├── SSM Parameter Store（Gemini の API キー）
+           │    └── DynamoDB（AI の利用回数）
            │
 東京都交通局オープンデータAPI
 ```
@@ -80,6 +90,8 @@ CloudFront
 - REST API
 - JSON API
 - swaggo (Swagger/OpenAPI)
+- RAPTOR（経路探索）
+- Gemini API（AI エージェント・Function Calling）
 
 ## Infrastructure
 
@@ -88,7 +100,10 @@ CloudFront
 - Amazon API Gateway (HTTP API)
 - Amazon CloudFront
 - Amazon S3
+- Amazon DynamoDB（AI の利用上限の管理）
+- AWS Systems Manager Parameter Store（API キーの保管）
 - IAM
+- GitHub Actions（CI/CD、OIDC で AWS に接続）
 
 ---
 
@@ -113,6 +128,8 @@ CloudFront
 | GET | `/api/stations/{stationId}` | 駅詳細（時刻表・乗降者数） |
 | GET | `/api/trains/{trainId}/location` | 列車現在位置 |
 | GET | `/api/fares?from={fromStation}&to={toStation}` | 運賃検索 |
+| GET | `/api/journeys?from={fromStation}&to={toStation}` | 経路検索（遅れを反映） |
+| POST | `/api/chat` | AI チャット |
 
 詳細なAPI仕様はSwagger UIから確認できます。
 
