@@ -9,9 +9,11 @@ import Loading from "@/components/Loading";
 import Error from "@/components/Error";
 import Timetable from "@/components/Timetable";
 import PassengerTable from "@/components/PassengerTable";
+import RailwayBadge from "@/components/RailwayBadge";
 
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { directionLabel } from "@/lib/odpt";
+import { railwayIdOf, useRailway } from "@/lib/railways";
 
 export default function Station() {
   const { stationId = "" } = useParams();
@@ -21,6 +23,8 @@ export default function Station() {
     queryFn: () => api.getStation(stationId),
     staleTime: 5 * 60 * 1000,
   });
+
+  const railway = useRailway(railwayIdOf(stationId));
 
   const [direction, setDirection] = useState("");
   const [showPassengers, setShowPassengers] = useState(false);
@@ -65,8 +69,15 @@ export default function Station() {
 
   return (
     <div className="space-y-8">
-      <div>
+      <div className="space-y-2">
         <h1 className="text-3xl font-bold text-foreground">{data.name}</h1>
+
+        {railway && (
+          <p className="flex items-center gap-2 text-foreground/80">
+            <RailwayBadge railway={railway} className="size-6" />
+            {railway.name}
+          </p>
+        )}
       </div>
 
       <section className="space-y-4">

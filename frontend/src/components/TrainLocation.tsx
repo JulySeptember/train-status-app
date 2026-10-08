@@ -2,11 +2,17 @@ import { MapPin, Train, Timer } from "lucide-react";
 
 import { type TrainLocation as TrainLocationType } from "@/types";
 
+import RailwayBadge from "@/components/RailwayBadge";
+
+import { railwayIdOf, useRailway } from "@/lib/railways";
+
 type Props = {
   train: TrainLocationType;
 };
 
 export default function TrainLocation({ train }: Props) {
+  const railway = useRailway(railwayIdOf(train.trainId));
+
   return (
     <section className="overflow-hidden rounded-xl border border-border bg-card">
       <div className="border-b border-border px-6 py-5">
@@ -31,7 +37,8 @@ export default function TrainLocation({ train }: Props) {
             路線
           </div>
 
-          <p className="text-xl font-semibold text-foreground">
+          <p className="flex items-center gap-2 text-xl font-semibold text-foreground">
+            <RailwayBadge railway={railway} />
             {train.railway}
           </p>
         </div>

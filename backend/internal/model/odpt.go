@@ -44,6 +44,9 @@ type Railway struct {
 	LineCode string `json:"odpt:lineCode"`
 	Operator string `json:"odpt:operator"`
 
+	// 路線の色（例: #FF535F）。都電荒川線・日暮里・舎人ライナーのように配信されない路線もある
+	Color string `json:"odpt:color"`
+
 	RailwayTitle LocalizedString `json:"odpt:railwayTitle"`
 
 	StationOrder []StationOrder `json:"odpt:stationOrder"`

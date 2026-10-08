@@ -3,6 +3,10 @@ import { ArrowDown, MapPin, Repeat } from "lucide-react";
 
 import { type Journey, type JourneyLeg } from "@/types";
 
+import RailwayBadge from "@/components/RailwayBadge";
+
+import { FALLBACK_RAILWAY_COLOR, useRailway } from "@/lib/railways";
+
 // "HH:MM" を運行日の0時からの分にする（3時前は翌日として24時間を足す）
 function minutes(time: string) {
   const [h, m] = time.split(":").map(Number);
@@ -55,13 +59,21 @@ function Stop({ time, id, name }: { time: string; id: string; name: string }) {
 }
 
 function Leg({ leg }: { leg: JourneyLeg }) {
+  const railway = useRailway(leg.railway);
+
   return (
     <div className="space-y-2">
       <Stop time={leg.departureTime} id={leg.from} name={leg.fromName} />
 
-      <div className="ml-6 flex gap-4 border-l-2 border-brand/60 py-2 pl-12">
+      {/* 乗車区間の線は路線の色にする */}
+      <div
+        className="ml-6 flex gap-4 border-l-4 py-2 pl-12"
+        style={{ borderColor: railway?.color || FALLBACK_RAILWAY_COLOR }}
+      >
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-2">
+            <RailwayBadge railway={railway} className="size-6" />
+
             <span className="font-semibold text-foreground">
               {leg.railwayName}
             </span>

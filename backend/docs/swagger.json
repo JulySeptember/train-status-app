@@ -671,7 +671,14 @@
         "service.Railway": {
             "type": "object",
             "properties": {
+                "color": {
+                    "type": "string"
+                },
                 "id": {
+                    "type": "string"
+                },
+                "lineCode": {
+                    "description": "路線記号（例: A）と路線の色（例: #FF535F）。GET /api/routes だけが返す。\nODPT が配信していない路線では空になる",
                     "type": "string"
                 },
                 "name": {

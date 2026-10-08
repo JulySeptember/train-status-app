@@ -208,6 +208,13 @@ func TestGetRailways(t *testing.T) {
 			result[0].Name,
 		)
 	}
+
+	for _, r := range result {
+		if r.ID == "odpt.Railway:Toei.Asakusa" &&
+			(r.LineCode != "A" || r.Color != "#FF535F") {
+			t.Fatalf("unexpected line code or color: %+v", r)
+		}
+	}
 }
 
 func TestGetStations(t *testing.T) {

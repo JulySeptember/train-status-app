@@ -8,11 +8,13 @@ import { api } from "@/api";
 import Loading from "@/components/Loading";
 import Error from "@/components/Error";
 import SortableList from "@/components/SortableList";
+import RailwayBadge from "@/components/RailwayBadge";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { applyOrder, sortByOrder, useRailwayOrder } from "@/lib/railwayOrder";
+import { useRailways } from "@/lib/railways";
 
 export default function Home() {
   const status = useQuery({
@@ -20,10 +22,7 @@ export default function Home() {
     queryFn: api.getStatus,
   });
 
-  const routes = useQuery({
-    queryKey: ["routes"],
-    queryFn: api.getRoutes,
-  });
+  const routes = useRailways();
 
   const railwayOrder = useRailwayOrder();
 
@@ -83,7 +82,12 @@ export default function Home() {
             return (
               <Card>
                 <CardHeader>
-                  <CardTitle>{item.railway}</CardTitle>
+                  <CardTitle className="flex items-center gap-2">
+                    <RailwayBadge
+                      railway={routes.data.find((r) => r.id === item.railwayId)}
+                    />
+                    {item.railway}
+                  </CardTitle>
                 </CardHeader>
 
                 <CardContent>
@@ -116,7 +120,10 @@ export default function Home() {
           renderItem={(route) => (
             <Link to={`/routes/${route.id}`}>
               <Card className="transition-colors hover:bg-accent">
-                <CardContent className="py-6">{route.name}</CardContent>
+                <CardContent className="flex items-center gap-2 py-6">
+                  <RailwayBadge railway={route} />
+                  {route.name}
+                </CardContent>
               </Card>
             </Link>
           )}
