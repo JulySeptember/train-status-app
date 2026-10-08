@@ -13,6 +13,7 @@ import (
 
 	"train-status-app/backend/assets"
 	"train-status-app/backend/internal/ai"
+	"train-status-app/backend/internal/ai/awssetup"
 	"train-status-app/backend/internal/ai/gemini"
 	"train-status-app/backend/internal/client"
 	"train-status-app/backend/internal/config"
@@ -68,14 +69,9 @@ func main() {
 }
 
 // newChat は AI エージェントを組み立てる。使えないときは nil を返し、/api/chat は 503 になる。
-// Lambda では、API キー（SSM）と利用上限の保存先（DynamoDB）を用意するまで使わない
-// （メモリ上の利用上限はインスタンスごとにしか数えられないため）。
+// Lambda では API キーを SSM から読み、利用上限を DynamoDB で数える（/api/chat の初回に準備する）。
+// 手元では環境変数の API キーを使い、利用上限をメモリ上で数える。
 func newChat(cfg config.Config, svc *service.Service, onLambda bool) handler.ChatService {
-
-	if onLambda || cfg.GeminiAPIKey == "" {
-		log.Printf("AI agent is disabled")
-		return nil
-	}
 
 	limits := ai.DefaultLimits()
 	if cfg.AILimitPerIPPerMinute > 0 {
@@ -89,17 +85,37 @@ func newChat(cfg config.Config, svc *service.Service, onLambda bool) handler.Cha
 	}
 
 	model := ai.ResolveModel(cfg.AIModel)
-	log.Printf("AI agent is enabled (model %s)", model)
+	tools := ai.NewTools(svc)
+
+	if onLambda {
+		if cfg.AIKeyParameter == "" || cfg.AIUsageTable == "" {
+			log.Printf("AI agent is disabled (AI_API_KEY_PARAMETER or AI_USAGE_TABLE is not set)")
+			return nil
+		}
+		return awssetup.New(awssetup.Config{
+			KeyParameter: cfg.AIKeyParameter,
+			UsageTable:   cfg.AIUsageTable,
+			Model:        model,
+			Limits:       limits,
+		}, tools)
+	}
+
+	if cfg.GeminiAPIKey == "" {
+		log.Printf("AI agent is disabled (GEMINI_API_KEY is not set)")
+		return nil
+	}
 
 	var opts []gemini.Option
 	if cfg.GeminiBaseURL != "" {
 		opts = append(opts, gemini.WithBaseURL(cfg.GeminiBaseURL))
 	}
 
+	log.Printf("AI agent is enabled (model %s)", model)
+
 	return ai.NewService(
 		gemini.New(cfg.GeminiAPIKey, opts...),
 		model,
-		ai.NewTools(svc),
+		tools,
 		ai.NewMemoryLimiter(limits),
 		ai.DefaultConfig(),
 	)

@@ -38,6 +38,12 @@ resource "aws_lambda_function" "this" {
   environment {
     variables = {
       ENV = var.env
+
+      # AI エージェント。キーの値ではなく、キーを入れた SSM のパラメータ名を渡す
+      AI_API_KEY_PARAMETER   = local.ai_api_key_parameter
+      AI_USAGE_TABLE         = aws_dynamodb_table.ai_usage.name
+      AI_MODEL               = var.ai_model
+      AI_LIMIT_CALLS_PER_DAY = tostring(var.ai_calls_per_day)
     }
   }
 

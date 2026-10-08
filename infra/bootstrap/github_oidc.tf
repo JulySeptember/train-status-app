@@ -174,8 +174,20 @@ data "aws_iam_policy_document" "github_deploy" {
     condition {
       test     = "ArnEquals"
       variable = "iam:PolicyARN"
-      values   = ["arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"]
+      values = [
+        "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+        aws_iam_policy.lambda_ai.arn,
+      ]
     }
+  }
+
+  # AI エージェントの利用上限を数えるテーブル
+  statement {
+    sid     = "AiUsageTable"
+    actions = ["dynamodb:*"]
+    resources = [
+      "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.current.account_id}:table/${local.ai_usage_table_name}",
+    ]
   }
 
   statement {
