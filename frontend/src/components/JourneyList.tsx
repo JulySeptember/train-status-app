@@ -69,6 +69,12 @@ function Leg({ leg }: { leg: JourneyLeg }) {
             {leg.destinationName && (
               <span className="text-gray-300">{leg.destinationName}行</span>
             )}
+
+            {leg.delayMinutes > 0 && (
+              <span className="rounded border border-[#f85149]/60 bg-[#f85149]/15 px-1.5 py-0.5 text-xs font-semibold text-[#f85149]">
+                約{leg.delayMinutes}分遅れ
+              </span>
+            )}
           </div>
 
           <p className="text-sm text-gray-400">

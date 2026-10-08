@@ -70,6 +70,19 @@ type Query struct {
 
 	// Avoid に含まれる路線は使わない
 	Avoid []string
+
+	// Delays は路線・方向ごとの遅れ。DelayUntil（運行日の0時からの分）までの時刻に遅れを足す。
+	// それより後の時刻は、DelayUntil + 遅れ より前にならないように後ろへずらす
+	// （遅れは現時点の値なので、先の列車ほど元のダイヤに戻っていくとみなす）
+	Delays     []Delay
+	DelayUntil int
+}
+
+// Delay は、路線・方向の列車がどれだけ遅れているか。
+type Delay struct {
+	Railway       string
+	RailDirection string
+	Minutes       int
 }
 
 // Journey は経路1本。
@@ -96,6 +109,9 @@ type Leg struct {
 	To        string
 	Departure int
 	Arrival   int
+
+	// Delay は、乗る駅での発車時刻の遅れ（分）。Departure と Arrival は遅れを足した時刻
+	Delay int
 }
 
 type Engine struct {
@@ -208,36 +224,107 @@ func (e *Engine) Search(q Query) ([]Journey, error) {
 
 	nets := e.networkPair(q.Calendars)
 
-	avoid := make(map[int32]bool)
-	for i, s := range e.tt.Strings {
-		if slices.Contains(q.Avoid, s) {
-			avoid[int32(i)] = true
-		}
-	}
+	c := e.conditions(q)
 
 	if q.ArriveBy {
 		// 最も遅く出る経路を逆向きに探し、出発時刻から最も早く着く経路に絞る
-		latest := nets.backward.search(e, to, from, -q.Time, maxTransfers, avoid)
+		latest := nets.backward.search(e, to, from, -q.Time, maxTransfers, c)
 
 		result := make([]Journey, 0, len(latest))
 		for _, j := range latest {
-			best := nets.forward.search(e, from, to, j.Departure, j.Transfers(), avoid)
+			best := nets.forward.search(e, from, to, j.Departure, j.Transfers(), c)
 			result = append(result, pick(best, j))
 		}
 
 		return result, nil
 	}
 
-	earliest := nets.forward.search(e, from, to, q.Time, maxTransfers, avoid)
+	earliest := nets.forward.search(e, from, to, q.Time, maxTransfers, c)
 
 	// 同じ時刻に着く経路のうち、最も遅く出るものに絞る（乗り換え駅で長く待たないように）
 	result := make([]Journey, 0, len(earliest))
 	for _, j := range earliest {
-		latest := nets.backward.search(e, to, from, -j.Arrival, j.Transfers(), avoid)
+		latest := nets.backward.search(e, to, from, -j.Arrival, j.Transfers(), c)
 		result = append(result, pick(latest, j))
 	}
 
 	return result, nil
+}
+
+// conditions は、探索のあいだ変わらない条件（使わない路線と遅れ）。路線・方向は Strings の番号で持つ。
+type conditions struct {
+	avoid  map[int32]bool
+	delays map[[2]int32]int32
+	until  int32
+}
+
+func (e *Engine) conditions(q Query) *conditions {
+
+	c := &conditions{
+		avoid:  make(map[int32]bool),
+		delays: make(map[[2]int32]int32),
+		until:  int32(q.DelayUntil),
+	}
+
+	index := make(map[string]int32, len(e.tt.Strings))
+	for i, s := range e.tt.Strings {
+		index[s] = int32(i)
+	}
+
+	for _, id := range q.Avoid {
+		if i, ok := index[id]; ok {
+			c.avoid[i] = true
+		}
+	}
+
+	for _, d := range q.Delays {
+		railway, ok := index[d.Railway]
+		if !ok || d.Minutes <= 0 {
+			continue
+		}
+		direction, ok := index[d.RailDirection]
+		if !ok {
+			continue
+		}
+		c.delays[[2]int32{railway, direction}] = int32(d.Minutes)
+	}
+
+	return c
+}
+
+// shift は、パターンの列車の時刻に足す遅れ。
+func (c *conditions) shift(n *network, p *pattern) shift {
+	return shift{
+		minutes:  c.delays[[2]int32{p.railway, p.direction}],
+		until:    c.until,
+		reversed: n.reversed,
+	}
+}
+
+// shift は時刻表の時刻を、遅れを足した時刻にする。
+// 時刻の前後を入れ替えない（単調に増える）ので、列車の順番や追い越しの判定はそのまま使える。
+type shift struct {
+	minutes  int32
+	until    int32
+	reversed bool
+}
+
+func (s shift) apply(t int32) int32 {
+	if s.minutes == 0 {
+		return t
+	}
+	// 逆向きの路線網では時刻に -1 を掛けているので、元の向きに戻してから足す
+	if s.reversed {
+		return -s.forward(-t)
+	}
+	return s.forward(t)
+}
+
+func (s shift) forward(t int32) int32 {
+	if t <= s.until {
+		return t + s.minutes
+	}
+	return max(t, s.until+s.minutes)
 }
 
 func (e *Engine) stationGroup(ids []string) ([]int32, error) {

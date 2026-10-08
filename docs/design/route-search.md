@@ -183,7 +183,6 @@ GET /api/journeys?from=<駅ID>&to=<駅ID>&departAt=<HH:MM>|arriveBy=<HH:MM>&maxT
       "departureTime": "10:02",
       "arrivalTime": "10:31",
       "transfers": 1,
-      "delayApplied": true,
       "legs": [
         {
           "railway": "odpt.Railway:Toei.Mita",
@@ -198,12 +197,14 @@ GET /api/journeys?from=<駅ID>&to=<駅ID>&departAt=<HH:MM>|arriveBy=<HH:MM>&maxT
         }
       ]
     }
-  ]
+  ],
+  "delayApplied": true,
+  "suspendedRailways": []
 }
 ```
 
 - 駅名・路線名・種別名・行先名は、ID と別の項目（`fromName`・`railwayName`・`trainTypeName`・`destinationName` など）で日本語のラベルも返す。
-- `delayApplied` と `delayMinutes` は、遅延を反映する PR 3（7章）で足す。PR 2 では時刻表どおりの結果を返す。
+- `delayApplied`・`suspendedRailways`・`delayMinutes` は7章（PR 3）で足した。`departureTime`・`arrivalTime` は遅れを足した時刻で、時刻表の発車時刻は `departureTime` から `delayMinutes` を引いた時刻になる。
 - エラー: 必須パラメータの不足・時刻の形式・`departAt` と `arriveBy` の両方の指定・`maxTransfers` の範囲（0〜3）・存在しない路線の `avoid`・同じ駅の指定は 400、存在しない駅は 404。経路が無い場合は 200 で `journeys` を空にする。
 - DTO を変えたら、Swagger・フロントの `src/types.ts`・`src/api.ts` も合わせて変える。
 
@@ -217,13 +218,15 @@ GET /api/journeys?from=<駅ID>&to=<駅ID>&departAt=<HH:MM>|arriveBy=<HH:MM>&maxT
 |---|---|---|
 | 何分くらい遅れているか | `odpt:Train` の `odpt:delay`（秒） | 路線・方向ごとの中央値を求め、その路線・方向のこれから出る列車すべてに足して探す |
 | 運転を見合わせているか | `odpt:TrainInformation` の文章 | 「見合わせ」「運休」などの言葉で判定し、その路線を `avoid` に入れて探す |
-| 日暮里・舎人ライナー | `odpt:TrainInformation` の文章だけ | `odpt:Train` が配信されないので、遅延の分数は反映できない |
+| 日暮里・舎人ライナー・荒川線 | `odpt:TrainInformation` の文章だけ | 日暮里・舎人ライナーは `odpt:Train` が配信されず、荒川線は `odpt:delay` が null で配信されるので、遅延の分数は反映できない |
 
 - 運行情報の文章は、平常時は「現在、15分以上の遅延はありません。」のようになっていて、状態を表す項目はない。15分未満の遅れは文章からは分からないので、分数は `odpt:Train` から求める。
-- 判定の結果は、路線ごとに「平常 / 遅延（◯分）/ 見合わせ」の3つにまとめる。AI の道具（`get_train_status`）にも、この形で渡す。
-- 遅延は現時点の値なので、反映するのは近い時間帯（例: 現在から1時間以内に出る列車）だけにする。
-- 遅延と運行情報の取得結果は、短時間（30秒程度）キャッシュする。
-- 取得に失敗した場合は、遅延を反映せずに時刻表どおりに探し、レスポンスの `delayApplied` を `false` にする。
+- 判定の結果は、路線ごとに「平常 / 遅延（◯分）/ 見合わせ」の3つにまとめる。AI の道具（`get_train_status`）にも、この形で渡す（AI エージェントの PR で作る。経路探索で使うのは遅れの分数と見合わせだけ）。
+- 遅延は現時点の値なので、反映するのは近い時間帯だけにする。現在から1時間後（`DelayUntil`）までの時刻に遅れを足し、それより後の時刻は「`DelayUntil` + 遅れ」より前にならないように後ろへずらす。時刻の前後が入れ替わらない変換なので、パターン（追い越しの無い列車の並び）と二分探索はそのまま使える。パターンは路線・方向ごとに分ける。
+- 見合わせは「見合わせ」「運転を中止」「運転中止」を含み、「再開」を含まない文章で判定する（`service/realtime.go`）。過去の文章は集められなかったので、見合わせの文章が出たら確かめて言葉を足す。一部区間の見合わせでも路線全体を `avoid` に入れ、レスポンスの `suspendedRailways` で知らせる。検索する時刻にかかわらず避ける。
+- 遅れの分数は、路線・方向ごとの `odpt:delay` の中央値（件数が偶数なら後ろの値）を分に丸めたもの。
+- 遅延と運行情報の取得結果は30秒キャッシュする。取得は3秒で打ち切る。
+- 取得に失敗した場合は、遅延も見合わせも反映せずに時刻表どおりに探し、レスポンスの `delayApplied` を `false` にする。
 
 ---
 
@@ -277,5 +280,5 @@ GET /api/journeys?from=<駅ID>&to=<駅ID>&departAt=<HH:MM>|arriveBy=<HH:MM>&maxT
 | 項目 | 決める時期 |
 |---|---|
 | 経路検索の画面を、AI のチャット画面より先に作るか | PR 2 の後 |
-| 運転見合わせを判定する言葉の一覧 | PR 3 の実装時。過去の運行情報の文章を集めて決める |
+| 運転見合わせを判定する言葉の一覧 | PR 3 で仮に決めた（7章）。見合わせの文章が出たら見直す |
 | 終電後に翌日の始発まで探すか | 利用状況を見て |

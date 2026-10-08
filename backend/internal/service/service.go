@@ -59,6 +59,9 @@ type Service struct {
 
 	routes *route.Engine
 
+	// 経路検索に反映する運行状況のキャッシュ
+	realtime realtimeCache
+
 	now func() time.Time
 }
 
@@ -762,6 +765,12 @@ func (s *Service) GetFare(
 
 type JourneySearch struct {
 	Journeys []Journey `json:"journeys"`
+
+	// 遅れと運転見合わせを反映したか。運行状況を取得できなかったときは false で、時刻表どおりに探す
+	DelayApplied bool `json:"delayApplied"`
+
+	// 運転を見合わせているため使わなかった路線
+	SuspendedRailways []Railway `json:"suspendedRailways"`
 }
 
 type Journey struct {
@@ -791,8 +800,12 @@ type JourneyLeg struct {
 	To       string `json:"to"`
 	ToName   string `json:"toName"`
 
+	// 遅れを足した時刻。遅れは路線・方向ごとの見込みで、現在から1時間以内の時刻にだけ足す
 	DepartureTime string `json:"departureTime"`
 	ArrivalTime   string `json:"arrivalTime"`
+
+	// 乗る駅での発車の遅れ（分）。時刻表の発車時刻は departureTime からこの分を引いた時刻
+	DelayMinutes int `json:"delayMinutes"`
 }
 
 // JourneyQuery は経路検索の条件。
@@ -857,7 +870,7 @@ func (s *Service) SearchJourneys(
 		To:           to,
 		Calendars:    calendar.Calendars(now),
 		MaxTransfers: q.MaxTransfers,
-		Avoid:        q.Avoid,
+		Avoid:        slices.Clone(q.Avoid),
 	}
 
 	switch {
@@ -880,14 +893,36 @@ func (s *Service) SearchJourneys(
 		rq.Time = serviceDayMinutes(now)
 	}
 
+	result := &JourneySearch{
+		SuspendedRailways: []Railway{},
+	}
+
+	// 運行状況を取得できなくても、時刻表どおりに探す
+	if conds, err := s.railwayConditions(ctx); err != nil {
+		log.Printf("journey search without realtime conditions: %v", err)
+	} else {
+		result.DelayApplied = true
+
+		rq.Delays = conds.delays
+		rq.DelayUntil = serviceDayMinutes(now) + delayWindowMinutes
+
+		for _, id := range conds.suspended {
+			result.SuspendedRailways = append(result.SuspendedRailways, Railway{
+				ID:   id,
+				Name: s.railwayNames[id],
+			})
+			if !slices.Contains(rq.Avoid, id) {
+				rq.Avoid = append(rq.Avoid, id)
+			}
+		}
+	}
+
 	journeys, err := s.routes.Search(rq)
 	if err != nil {
 		return nil, err
 	}
 
-	result := &JourneySearch{
-		Journeys: make([]Journey, 0, len(journeys)),
-	}
+	result.Journeys = make([]Journey, 0, len(journeys))
 
 	for _, j := range journeys {
 
@@ -920,6 +955,7 @@ func (s *Service) SearchJourneys(
 				ToName:          s.stationName(l.To),
 				DepartureTime:   formatClock(l.Departure),
 				ArrivalTime:     formatClock(l.Arrival),
+				DelayMinutes:    l.Delay,
 			})
 		}
 

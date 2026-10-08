@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowUpDown } from "lucide-react";
+import { ArrowUpDown, TriangleAlert } from "lucide-react";
 
 import { api } from "@/api";
-import { type JourneyQuery, type Station } from "@/types";
+import { type JourneyQuery, type JourneySearch, type Station } from "@/types";
 
 import Loading from "@/components/Loading";
 import Error from "@/components/Error";
@@ -52,6 +52,29 @@ function uniqueByName(stations: Station[]) {
     seen.add(s.name);
     return true;
   });
+}
+
+// 運転見合わせで除外した路線と、運行状況を取得できなかったことを知らせる
+function RealtimeNotice({ data }: { data: JourneySearch }) {
+  if (!data.delayApplied) {
+    return (
+      <p className="rounded-lg border border-[#30363d] px-4 py-3 text-sm text-gray-300">
+        運行状況を取得できなかったため、時刻表どおりの結果です。
+      </p>
+    );
+  }
+
+  if (data.suspendedRailways.length === 0) {
+    return null;
+  }
+
+  return (
+    <p className="flex items-start gap-2 rounded-lg border border-[#f85149]/60 bg-[#f85149]/10 px-4 py-3 text-sm text-[#ffa198]">
+      <TriangleAlert size={16} className="mt-0.5 shrink-0" />
+      {data.suspendedRailways.map((r) => r.name || r.id).join("・")}
+      は運転を見合わせているため、使わない経路を表示しています。
+    </p>
+  );
 }
 
 export default function Journey() {
@@ -178,7 +201,7 @@ export default function Journey() {
         </div>
 
         <p className="text-xs text-gray-400">
-          本日のダイヤで検索します。0時〜2時台は前日の深夜として扱います。時刻表どおりの結果で、遅延は反映していません。
+          本日のダイヤで検索します。0時〜2時台は前日の深夜として扱います。現在の遅れ（路線・方向ごとの見込み）を、1時間以内に出る列車の時刻に足しています。
         </p>
       </div>
 
@@ -193,6 +216,8 @@ export default function Journey() {
           </p>
         </div>
       )}
+
+      {query && journeys.data && <RealtimeNotice data={journeys.data} />}
 
       {query && journeys.data?.journeys.length === 0 && (
         <div className="rounded-lg border p-6 text-center">

@@ -371,6 +371,8 @@ func (h *Handler) Fare(
 //	@Description	Search journeys between two stations. Returns the earliest journey for each number of transfers.
 //	@Description	Stations with the same name on different lines (e.g. Shinjuku) are treated as one station.
 //	@Description	Times are on the current service day (before 03:00 belongs to the previous day).
+//	@Description	Current delays (per railway and direction, within the next hour) are added to the times, and suspended railways are avoided.
+//	@Description	If the realtime status cannot be fetched, the timetable is used as is and delayApplied is false.
 //	@Tags			Journey
 //	@Produce		json
 //	@Param			from			query		string	true	"From station ID"							example(odpt.Station:Toei.Mita.Kasuga)
