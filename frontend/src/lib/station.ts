@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { queryOptions, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "@/api";
@@ -11,16 +12,30 @@ export function stationQuery(id: string) {
   });
 }
 
-// 駅へのリンクにカーソルを載せたとき・押し始めたときに、駅の詳細を先に取りにいく。
-// 本番では API の応答に 0.5〜1 秒かかるので、画面を開くまでの待ち時間を縮める
+// カーソルを載せてから先読みを始めるまでの時間。駅の一覧の上をなぞっただけで、
+// 通った駅をすべて取りにいかないようにする（1駅で約110KBある）
+const HOVER_DELAY_MS = 150;
+
+// 駅へのリンクを押し始めたとき・キーボードで選んだとき、またはカーソルを少し載せ続けたときに、
+// 駅の詳細を先に取りにいく。本番では API の応答に 0.5〜1 秒かかるので、画面を開くまでの待ち時間を縮める
 export function usePrefetchStation() {
   const queryClient = useQueryClient();
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  useEffect(() => () => clearTimeout(timer.current), []);
 
   return (id: string) => {
-    const prefetch = () => void queryClient.prefetchQuery(stationQuery(id));
+    const prefetch = () => {
+      clearTimeout(timer.current);
+      void queryClient.prefetchQuery(stationQuery(id));
+    };
 
     return {
-      onPointerEnter: prefetch,
+      onPointerEnter: () => {
+        clearTimeout(timer.current);
+        timer.current = setTimeout(prefetch, HOVER_DELAY_MS);
+      },
+      onPointerLeave: () => clearTimeout(timer.current),
       onPointerDown: prefetch,
       onFocus: prefetch,
     };
