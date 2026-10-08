@@ -64,7 +64,8 @@ main への push が続くと、待機中の実行は新しいものに置き換
 - `make backend-deploy`: linux/arm64 でビルドして zip にし、S3 にアップロードする。Lambda への反映は `make tf-main-apply`（`s3_object_version` を参照している）
 - `make frontend-deploy`: ビルドして S3 に sync し、CloudFront を invalidate する
 - `make tf-main-plan` / `tf-main-apply`: `infra/main` を `infra/env/dev.tfvars` で適用する。`tf-*-apply` / `destroy` は `-auto-approve` 付き
-- `infra/bootstrap`: tfstate 用 S3・DynamoDB、Lambda アーティファクト用 S3、GitHub Actions 用の OIDC プロバイダと IAM ロール（PR の plan 用・main のデプロイ用）を作る。state はローカルにあるので、手元から `make tf-bootstrap-apply` で適用する
+- `infra/bootstrap`: tfstate 用 S3・DynamoDB、Lambda アーティファクト用 S3、GitHub Actions 用の OIDC プロバイダと IAM ロール（PR の plan 用・main のデプロイ用）、Lambda に付ける AI 用のポリシー（`lambda_ai.tf`）を作る。state はローカルにあるので、手元から `make tf-bootstrap-apply` で適用する。bootstrap を変えた PR は、マージ（CD の `terraform apply`）の前に bootstrap を適用する
+- Lambda の実行ロールに権限を足すときは、`infra/bootstrap` でポリシーを作り、deploy 用ロールの `LambdaExecutionRolePolicy` の条件にその ARN を足す。deploy 用ロールに任意のポリシーを付けられる権限を与えない（CD を経由して権限を広げられないように）
 
 手元でデプロイするときは、make を1つずつ順に実行し、前のコマンドが成功したのを確かめてから次に進む（同時に実行すると、途中で止まったときに片方だけ反映される）。
 
@@ -126,6 +127,8 @@ main は Ruleset（`main`）で保護している: PR 必須（承認は不要�
 ### インフラ（`infra/`）
 
 CloudFront が `/api/*` を API Gateway（HTTP API）→ Lambda（`provided.al2023`, arm64, 256MB）に流し、それ以外を S3 に流す。リージョンは `ap-northeast-1`。
+
+AI エージェントの API キー（Gemini）は SSM Parameter Store の SecureString（`/train-status-app/dev/gemini-api-key`）に手で登録する。Terraform・tfvars・Lambda の環境変数には置かない。キーの値がこの会話に出ないよう、ユーザーに `! aws ssm put-parameter --region ap-northeast-1 --type SecureString --overwrite --name /train-status-app/dev/gemini-api-key --value '<キー>'` を実行してもらう。利用上限は DynamoDB（`train-status-app-dev-ai-usage`）で数え、アプリ全体の1日の上限は `ai_calls_per_day`（tfvars）で変える。
 
 SPA のルーティングは CloudFront Function（`infra/main/functions/spa_rewrite.js`）で `/index.html` に書き換えている。`custom_error_response` は `/api/*` のエラーまで `index.html` の 200 にしてしまうので使わない。
 

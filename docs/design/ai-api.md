@@ -1,6 +1,6 @@
 # AI 鉄道エージェント 設計書
 
-- 状態: Phase 3 実装中（2026-10-08 改訂。バックエンドは #30）
+- 状態: Phase 3 実装中（2026-10-08 改訂。バックエンドは #30、インフラは #31）
 - 対象: `backend/internal/ai`、`POST /api/chat`、チャット UI
 - 関連: [経路探索エンジン 設計書](route-search.md)
 
@@ -270,7 +270,7 @@ Gemini API の規約では、無料枠に送った内容と応答は、Google �
 
 | 制限 | 初期値（案） | 管理する場所 |
 |---|---|---|
-| IP ごと | 1分 5 質問 / 1日 30 質問 | DynamoDB（オンデマンド課金、TTL で自動削除） |
+| IP ごと | 1分 5 質問 / 1日 30 質問 | DynamoDB（オンデマンド課金、TTL で自動削除）。IP はハッシュにして保存する |
 | アプリ全体 | 1日の AI 呼び出し回数の上限 = Gemini 無料枠の 80% | DynamoDB |
 | 1回のリクエスト | 入力 500 文字まで、履歴 6 往復まで | handler で検証 |
 | API 全体 | API Gateway のスロットリング | Terraform |
@@ -287,7 +287,10 @@ Gemini API の規約では、無料枠に送った内容と応答は、Google �
 
 - AWS SSM Parameter Store の SecureString に保存する（標準パラメータは無料）。
 - Lambda の IAM ロールに、そのパラメータだけを読める権限（`ssm:GetParameter`）を与える。
-- Lambda の起動時に1回だけ読み込み、メモリに置いておく。
+- `/api/chat` が初めて呼ばれたときに1回だけ読み込み、メモリに置いておく（`internal/ai/awssetup`）。AI 以外の API のコールドスタートを遅くしないため。
+- キーがまだ登録されていなければ 503 を返し、1分ごとに読み直す。登録すれば再デプロイせずに使える。Gemini がキーを拒否したら（`ErrAuth`）、次の質問で読み直す（キーを差し替えたとき）。
+- パラメータ名は `/<project>/<env>/gemini-api-key`。Terraform では作らず、手で登録する（値を tfstate に残さないため）。
+- Lambda の実行ロールに付ける権限（このパラメータの `ssm:GetParameter`、利用上限のテーブルの `dynamodb:UpdateItem`）は `infra/bootstrap` で作る。CD の deploy 用ロールには、そのポリシーを付け外しすることだけを許す。
 - キーは、ソースコード、Git、CLAUDE.md、tfvars、Lambda の環境変数のどれにも書かない。
 
 ### 10.2 BYOK（Phase 4）

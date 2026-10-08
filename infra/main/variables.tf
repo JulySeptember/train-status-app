@@ -35,3 +35,15 @@ variable "tags" {
 
   default = {}
 }
+
+variable "ai_model" {
+  description = "AI エージェントが使うモデル。空ならバックエンドの初期値（ai.Models の先頭）"
+  type        = string
+  default     = ""
+}
+
+variable "ai_calls_per_day" {
+  description = "アプリ全体の1日の AI 呼び出し回数の上限。Gemini の無料枠（AI Studio で確認する）の 80% にする"
+  type        = number
+  default     = 200
+}

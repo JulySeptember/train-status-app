@@ -16,6 +16,10 @@ type Config struct {
 	// Gemini の接続先。手元で Gemini を真似たサーバーに向けるときだけ使う
 	GeminiBaseURL string
 
+	// Lambda で使う、API キーを入れた SSM のパラメータ名と、利用上限を数える DynamoDB のテーブル名
+	AIKeyParameter string
+	AIUsageTable   string
+
 	// 使うモデル。空なら ai.Models の先頭
 	AIModel string
 
@@ -35,6 +39,8 @@ func Load() Config {
 		Port:                  port,
 		GeminiAPIKey:          os.Getenv("GEMINI_API_KEY"),
 		GeminiBaseURL:         os.Getenv("GEMINI_BASE_URL"),
+		AIKeyParameter:        os.Getenv("AI_API_KEY_PARAMETER"),
+		AIUsageTable:          os.Getenv("AI_USAGE_TABLE"),
 		AIModel:               os.Getenv("AI_MODEL"),
 		AILimitPerIPPerMinute: intEnv("AI_LIMIT_PER_IP_PER_MINUTE"),
 		AILimitPerIPPerDay:    intEnv("AI_LIMIT_PER_IP_PER_DAY"),
