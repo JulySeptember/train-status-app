@@ -66,7 +66,7 @@ func (l *Limiter) AllowCall(ctx context.Context) error {
 	return l.increment(ctx, "app#day#"+ai.QuotaDay(now), l.limits.CallsPerDay, now.Add(48*time.Hour))
 }
 
-// increment は key の回数を1つ増やす。すでに limit 回に達していれば増やさずに ErrQuotaExceeded を返す。
+// increment は key の回数を1つ増やす。すでに limit 回に達していれば増やさずに ErrRateLimited（1分の上限）か ErrQuotaExceeded を返す。
 // DynamoDB に書けないときは、共有の無料枠を守るため、使えないものとして扱う（ErrUnavailable）。
 func (l *Limiter) increment(ctx context.Context, key string, limit int, expires time.Time) error {
 
@@ -90,6 +90,9 @@ func (l *Limiter) increment(ctx context.Context, key string, limit int, expires 
 
 	var failed *types.ConditionalCheckFailedException
 	switch {
+	case errors.As(err, &failed) && strings.Contains(key, "#minute#"):
+		// 1分の上限は、少し待てば使える
+		return fmt.Errorf("%w: %s", ai.ErrRateLimited, keyKind(key))
 	case errors.As(err, &failed):
 		return fmt.Errorf("%w: %s", ai.ErrQuotaExceeded, keyKind(key))
 	case err != nil:
