@@ -28,6 +28,7 @@ cd backend && go test ./internal/service -run TestGetTrainLocation -v
 ```
 
 フロントエンドにテストはない。
+画面は手元で起動して Playwright MCP で確かめる。スクリーンショットはリポジトリの `.playwright-mcp/`（gitignore 済み）にしか保存できない。
 
 AI エージェントの評価セット（`backend/internal/ai/testdata/eval.yaml`）は実際の Gemini を呼ぶので、手で実行する（CI では動かない。無料枠を数十回使い、約7分かかる）。キーは SSM から直接渡し、画面や会話に出さない:
 
@@ -140,6 +141,8 @@ PR を作ったら、実装時の会話を持たないサブエージェント�
 - ODPT の ID を日本語ラベルに変換する処理は `src/lib/odpt.ts`
 - ID は `odpt.Station:...` のように `:` や `.` を含むので、URL に入れるときは `encodeURIComponent` する
 - `components/ui` は base-ui ベース。`PopoverTrigger` などのトリガーに `Button` を使うときは、子要素にせず `render={<Button ... />}` で渡す（子にすると button が入れ子になる）
+- `components/ui` は shadcn の生成物で書式が違う（行末のセミコロンが無い）。Prettier は変えたファイルだけにかけ、`npx prettier --write src` のようにまとめてかけない
+- 色は `index.css` のトークン（`primary`・`brand`・`warning`・`destructive-foreground` など）で指定し、色コードを直接書かない。路線の色・記号は `GET /api/routes`（ODPT の `odpt:color`・`odpt:lineCode`）を `lib/railways.ts` の `useRailways` / `useRailway` で引く
 
 ### インフラ（`infra/`）
 
