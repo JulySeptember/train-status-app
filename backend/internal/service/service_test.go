@@ -209,11 +209,20 @@ func TestGetRailways(t *testing.T) {
 		)
 	}
 
+	byID := map[string]Railway{}
 	for _, r := range result {
-		if r.ID == "odpt.Railway:Toei.Asakusa" &&
-			(r.LineCode != "A" || r.Color != "#FF535F") {
-			t.Fatalf("unexpected line code or color: %+v", r)
-		}
+		byID[r.ID] = r
+	}
+
+	asakusa, ok := byID["odpt.Railway:Toei.Asakusa"]
+	if !ok || asakusa.LineCode != "A" || asakusa.Color != "#FF535F" {
+		t.Fatalf("unexpected line code or color: %+v", asakusa)
+	}
+
+	// 荒川線は路線の色が配信されないので、色は空になる（JSON では省かれる）
+	arakawa, ok := byID["odpt.Railway:Toei.Arakawa"]
+	if !ok || arakawa.LineCode != "SA" || arakawa.Color != "" {
+		t.Fatalf("unexpected line code or color: %+v", arakawa)
 	}
 }
 

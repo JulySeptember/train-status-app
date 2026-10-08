@@ -5,6 +5,7 @@ import { arrayMove } from "@dnd-kit/sortable";
 import {
   ChevronRight,
   CircleCheck,
+  Info,
   Route,
   RotateCcw,
   SendHorizontal,
@@ -32,12 +33,12 @@ import { useRailways } from "@/lib/railways";
 import { EXAMPLES, MAX_INPUT_CHARS, type ChatLocationState } from "@/lib/chat";
 import { cn } from "@/lib/utils";
 
-// 遅れが無いときの運行情報の文章。全角・半角の数字のどちらでも配信される
+// 運行情報の文章に含まれていたら平常とみなす言葉（バックエンドの service/assistant.go の normalWords と揃える）。
+// 「１５分以上の遅延はありません」のように全角の数字でも配信されるので、数字を含めずに判定する
+const NORMAL_WORDS = ["遅延はありません", "平常"];
+
 function isNormal(status: string) {
-  return (
-    status.includes("現在、15分以上の遅延はありません") ||
-    status.includes("現在、１５分以上の遅延はありません")
-  );
+  return NORMAL_WORDS.some((w) => status.includes(w));
 }
 
 // 質問を「AI に聞く」の画面に渡して開く。送るのは向こうの画面で行う
@@ -106,6 +107,13 @@ function AskForm() {
 
       <p className="text-xs text-muted-foreground">
         経路・次の電車・運行状況を、話し言葉で聞けます。遅延や運転見合わせを確かめてから経路を提案します。
+      </p>
+
+      {/* 送るとすぐに AI に渡るので、「AI に聞く」の画面と同じ注意をここでも出す */}
+      <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+        <Info size={14} className="mt-px shrink-0" />
+        入力内容は AI
+        の提供元（Google）に送信され、サービス改善に利用されることがあります。個人情報は入力しないでください。
       </p>
     </form>
   );

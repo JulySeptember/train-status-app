@@ -67,7 +67,7 @@ export default function Stations() {
         </div>
       </div>
 
-      {groups.length === 0 && (
+      {groups.length === 0 && keyword.trim() !== "" && (
         <p className="text-muted-foreground">
           「{keyword.trim()}」を含む駅は見つかりませんでした。
         </p>
