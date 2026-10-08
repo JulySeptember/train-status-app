@@ -7,6 +7,10 @@ export interface TrainStatus {
 export interface Railway {
   id: string;
   name: string;
+
+  // GET /api/routes だけが返す。ODPT が配信していない路線では無い
+  lineCode?: string;
+  color?: string;
 }
 
 export interface Station {

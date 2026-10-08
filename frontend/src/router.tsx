@@ -5,6 +5,7 @@ import Layout from "@/components/Layout";
 import Home from "@/pages/Home";
 import Route from "@/pages/Route";
 import Station from "@/pages/Station";
+import Stations from "@/pages/Stations";
 import Train from "@/pages/Train";
 import Fare from "@/pages/Fare";
 import Journey from "@/pages/Journey";
@@ -23,6 +24,10 @@ export const router = createBrowserRouter([
       {
         path: "/routes/:routeId",
         element: <Route />,
+      },
+      {
+        path: "/stations",
+        element: <Stations />,
       },
       {
         path: "/stations/:stationId",
@@ -44,7 +49,6 @@ export const router = createBrowserRouter([
         path: "/fares",
         element: <Fare />,
       },
-
       {
         path: "/license",
         element: <License />,

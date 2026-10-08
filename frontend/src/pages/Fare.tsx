@@ -6,6 +6,7 @@ import { api } from "@/api";
 import Loading from "@/components/Loading";
 import Error from "@/components/Error";
 import FareSearch from "@/components/FareSearch";
+import PageTitle from "@/components/PageTitle";
 
 export default function Fare() {
   const [fromId, setFromId] = useState("");
@@ -37,6 +38,7 @@ export default function Fare() {
 
   return (
     <div className="space-y-8">
+      <PageTitle title="運賃検索" />
       <h1 className="text-3xl font-bold">運賃検索</h1>
 
       <FareSearch

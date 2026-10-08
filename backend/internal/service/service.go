@@ -300,6 +300,11 @@ func (s *Service) GetTrainStatus(
 type Railway struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+
+	// 路線記号（例: A）と路線の色（例: #FF535F）。GET /api/routes だけが返す。
+	// ODPT が配信していない路線では空になる
+	LineCode string `json:"lineCode,omitempty"`
+	Color    string `json:"color,omitempty"`
 }
 
 // =========================
@@ -314,8 +319,10 @@ func (s *Service) GetRailways(
 
 	for _, r := range s.assets.Railways() {
 		items = append(items, Railway{
-			ID:   r.SameAs,
-			Name: r.RailwayTitle.Ja,
+			ID:       r.SameAs,
+			Name:     r.RailwayTitle.Ja,
+			LineCode: r.LineCode,
+			Color:    r.Color,
 		})
 	}
 

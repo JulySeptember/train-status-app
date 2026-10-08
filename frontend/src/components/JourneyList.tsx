@@ -3,6 +3,10 @@ import { ArrowDown, MapPin, Repeat } from "lucide-react";
 
 import { type Journey, type JourneyLeg } from "@/types";
 
+import RailwayBadge from "@/components/RailwayBadge";
+
+import { FALLBACK_RAILWAY_COLOR, useRailway } from "@/lib/railways";
+
 // "HH:MM" を運行日の0時からの分にする（3時前は翌日として24時間を足す）
 function minutes(time: string) {
   const [h, m] = time.split(":").map(Number);
@@ -29,8 +33,8 @@ function TrainType({ leg }: { leg: JourneyLeg }) {
     <span
       className={
         isLocal
-          ? "rounded border border-[#30363d] px-1.5 py-0.5 text-xs text-gray-400"
-          : "rounded border border-[#f0883e]/60 bg-[#f0883e]/15 px-1.5 py-0.5 text-xs font-semibold text-[#f0883e]"
+          ? "rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground"
+          : "rounded border border-warning/60 bg-warning/15 px-1.5 py-0.5 text-xs font-semibold text-warning"
       }
     >
       {leg.trainTypeName}
@@ -41,13 +45,13 @@ function TrainType({ leg }: { leg: JourneyLeg }) {
 function Stop({ time, id, name }: { time: string; id: string; name: string }) {
   return (
     <div className="flex items-baseline gap-4">
-      <p className="w-14 shrink-0 text-xl font-bold text-white">{time}</p>
+      <p className="w-14 shrink-0 text-xl font-bold text-foreground">{time}</p>
 
       <Link
         to={`/stations/${encodeURIComponent(id)}`}
-        className="flex items-center gap-1.5 font-medium text-white hover:text-[#58a6ff]"
+        className="flex items-center gap-1.5 font-medium text-foreground hover:text-brand"
       >
-        <MapPin size={14} className="text-gray-400" />
+        <MapPin size={14} className="text-muted-foreground" />
         {name}
       </Link>
     </div>
@@ -55,33 +59,45 @@ function Stop({ time, id, name }: { time: string; id: string; name: string }) {
 }
 
 function Leg({ leg }: { leg: JourneyLeg }) {
+  const railway = useRailway(leg.railway);
+
   return (
     <div className="space-y-2">
       <Stop time={leg.departureTime} id={leg.from} name={leg.fromName} />
 
-      <div className="ml-6 flex gap-4 border-l-2 border-[#58a6ff]/60 py-2 pl-12">
+      {/* 乗車区間の線は路線の色にする */}
+      <div
+        className="ml-6 flex gap-4 border-l-4 py-2 pl-12"
+        style={{ borderColor: railway?.color || FALLBACK_RAILWAY_COLOR }}
+      >
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-semibold text-white">{leg.railwayName}</span>
+            <RailwayBadge railway={railway} className="size-6" />
+
+            <span className="font-semibold text-foreground">
+              {leg.railwayName}
+            </span>
 
             <TrainType leg={leg} />
 
             {leg.destinationName && (
-              <span className="text-gray-300">{leg.destinationName}行</span>
+              <span className="text-foreground/80">
+                {leg.destinationName}行
+              </span>
             )}
 
             {leg.delayMinutes > 0 && (
-              <span className="rounded border border-[#f85149]/60 bg-[#f85149]/15 px-1.5 py-0.5 text-xs font-semibold text-[#f85149]">
+              <span className="rounded border border-destructive/60 bg-destructive/15 px-1.5 py-0.5 text-xs font-semibold text-destructive">
                 約{leg.delayMinutes}分遅れ
               </span>
             )}
           </div>
 
-          <p className="text-sm text-gray-400">
+          <p className="text-sm text-muted-foreground">
             {duration(leg.departureTime, leg.arrivalTime)}乗車・
             <Link
               to={`/trains/${encodeURIComponent(leg.train)}`}
-              className="hover:text-[#58a6ff]"
+              className="hover:text-brand"
             >
               列車番号 {leg.trainNumber}
             </Link>
@@ -102,7 +118,7 @@ function Transfer({ prev, next }: { prev: JourneyLeg; next: JourneyLeg }) {
       : `${next.fromName}（${next.railwayName}）へ乗り換え`;
 
   return (
-    <div className="ml-6 flex items-center gap-2 border-l-2 border-dashed border-[#30363d] py-3 pl-12 text-sm text-gray-400">
+    <div className="ml-6 flex items-center gap-2 border-l-2 border-dashed border-border py-3 pl-12 text-sm text-muted-foreground">
       <Repeat size={14} />
       {label}・待ち {duration(prev.arrivalTime, next.departureTime)}
     </div>
@@ -111,19 +127,19 @@ function Transfer({ prev, next }: { prev: JourneyLeg; next: JourneyLeg }) {
 
 function JourneyCard({ journey }: { journey: Journey }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-[#30363d] bg-[#0d1117]">
-      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-[#30363d] px-5 py-4">
-        <p className="flex items-center gap-2 text-2xl font-bold text-white">
+    <div className="overflow-hidden rounded-xl border border-border bg-background">
+      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-border px-5 py-4">
+        <p className="flex items-center gap-2 text-2xl font-bold text-foreground">
           {journey.departureTime}
-          <ArrowDown size={18} className="-rotate-90 text-gray-400" />
+          <ArrowDown size={18} className="-rotate-90 text-muted-foreground" />
           {journey.arrivalTime}
         </p>
 
-        <p className="text-gray-300">
+        <p className="text-foreground/80">
           {duration(journey.departureTime, journey.arrivalTime)}
         </p>
 
-        <span className="rounded-full bg-[#1f6feb]/20 px-2 py-0.5 text-xs text-[#58a6ff]">
+        <span className="rounded-full bg-primary/20 px-2 py-0.5 text-xs text-brand">
           {journey.transfers === 0
             ? "乗り換えなし"
             : `乗り換え${journey.transfers}回`}
