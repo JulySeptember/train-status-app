@@ -21,6 +21,7 @@ import {
 
 import JourneyList from "@/components/JourneyList";
 import RealtimeNotice from "@/components/RealtimeNotice";
+import PageTitle from "@/components/PageTitle";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -248,6 +249,7 @@ export default function Chat() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
+      <PageTitle title="AI に聞く" />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold text-foreground">AI に聞く</h1>

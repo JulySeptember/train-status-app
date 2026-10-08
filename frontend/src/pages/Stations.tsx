@@ -8,6 +8,7 @@ import { api } from "@/api";
 import Loading from "@/components/Loading";
 import Error from "@/components/Error";
 import RailwayBadge from "@/components/RailwayBadge";
+import PageTitle from "@/components/PageTitle";
 
 import { Input } from "@/components/ui/input";
 import { railwayIdOf, useRailways } from "@/lib/railways";
@@ -45,6 +46,7 @@ export default function Stations() {
 
   return (
     <div className="space-y-8">
+      <PageTitle title="駅・時刻表" />
       <div className="space-y-4">
         <h1 className="text-3xl font-bold">駅・時刻表</h1>
 

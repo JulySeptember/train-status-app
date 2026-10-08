@@ -7,6 +7,9 @@ import {
   type Timetable as TimetableEntry,
 } from "@/types";
 import { nowServiceMinutes, timeToServiceMinutes } from "@/lib/time";
+import { cn } from "@/lib/utils";
+
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type Props = {
   weekday?: DirectionTimetable;
@@ -199,161 +202,69 @@ export default function Timetable({
   saturdayHoliday,
   trainLocationAvailable,
 }: Props) {
+  // 「土休日」にまとめた路線と、「土曜・休日」が別ダイヤの路線がある
+  const cards: { tab: Tab; title: string; timetable?: DirectionTimetable }[] =
+    saturdayHoliday
+      ? [
+          { tab: "weekday", title: "平日", timetable: weekday },
+          {
+            tab: "saturdayHoliday",
+            title: "土休日",
+            timetable: saturdayHoliday,
+          },
+        ]
+      : [
+          { tab: "weekday", title: "平日", timetable: weekday },
+          { tab: "saturday", title: "土曜", timetable: saturday },
+          { tab: "holiday", title: "休日", timetable: holiday },
+        ];
+
   // スマホ表示では、本日のダイヤのタブを最初に開く
-  const [tab, setTab] = useState<Tab>(() => {
-    const tabs: [Tab, DirectionTimetable | undefined][] = [
-      ["weekday", weekday],
-      ["saturday", saturday],
-      ["holiday", holiday],
-      ["saturdayHoliday", saturdayHoliday],
-    ];
-    return tabs.find(([, t]) => t?.isToday)?.[0] ?? "weekday";
-  });
-
-  if (saturdayHoliday) {
-    return (
-      <>
-        {/* Mobile */}
-        <div className="lg:hidden">
-          <div className="mb-5 flex overflow-hidden rounded-xl border border-border bg-card">
-            <button
-              onClick={() => setTab("weekday")}
-              className={`flex-1 py-3 text-sm font-medium transition ${
-                tab === "weekday"
-                  ? "bg-primary text-foreground"
-                  : "text-muted-foreground hover:bg-muted"
-              }`}
-            >
-              平日
-            </button>
-
-            <button
-              onClick={() => setTab("saturdayHoliday")}
-              className={`flex-1 py-3 text-sm font-medium transition ${
-                tab === "saturdayHoliday"
-                  ? "bg-primary text-foreground"
-                  : "text-muted-foreground hover:bg-muted"
-              }`}
-            >
-              土休日
-            </button>
-          </div>
-
-          {tab === "weekday" && (
-            <TimetableCard
-              title="平日"
-              timetable={weekday}
-              trainLocationAvailable={trainLocationAvailable}
-            />
-          )}
-
-          {tab === "saturdayHoliday" && (
-            <TimetableCard
-              title="土休日"
-              timetable={saturdayHoliday}
-              trainLocationAvailable={trainLocationAvailable}
-            />
-          )}
-        </div>
-
-        {/* Desktop */}
-        <div className="hidden gap-6 lg:grid lg:grid-cols-2">
-          <TimetableCard
-            title="平日"
-            timetable={weekday}
-            trainLocationAvailable={trainLocationAvailable}
-          />
-          <TimetableCard
-            title="土休日"
-            timetable={saturdayHoliday}
-            trainLocationAvailable={trainLocationAvailable}
-          />
-        </div>
-      </>
-    );
-  }
+  const [tab, setTab] = useState<Tab>(
+    () => cards.find((c) => c.timetable?.isToday)?.tab ?? "weekday",
+  );
 
   return (
     <>
       {/* Mobile */}
       <div className="lg:hidden">
-        <div className="mb-5 flex overflow-hidden rounded-xl border border-border bg-card">
-          <button
-            onClick={() => setTab("weekday")}
-            className={`flex-1 py-3 text-sm font-medium transition ${
-              tab === "weekday"
-                ? "bg-primary text-foreground"
-                : "text-muted-foreground hover:bg-muted"
-            }`}
-          >
-            平日
-          </button>
+        <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
+          <TabsList className="mb-3 h-10! w-full">
+            {cards.map((c) => (
+              <TabsTrigger key={c.tab} value={c.tab}>
+                {c.title}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
 
-          <button
-            onClick={() => setTab("saturday")}
-            className={`flex-1 py-3 text-sm font-medium transition ${
-              tab === "saturday"
-                ? "bg-primary text-foreground"
-                : "text-muted-foreground hover:bg-muted"
-            }`}
-          >
-            土曜
-          </button>
-
-          <button
-            onClick={() => setTab("holiday")}
-            className={`flex-1 py-3 text-sm font-medium transition ${
-              tab === "holiday"
-                ? "bg-primary text-foreground"
-                : "text-muted-foreground hover:bg-muted"
-            }`}
-          >
-            休日
-          </button>
-        </div>
-
-        {tab === "weekday" && (
-          <TimetableCard
-            title="平日"
-            timetable={weekday}
-            trainLocationAvailable={trainLocationAvailable}
-          />
-        )}
-
-        {tab === "saturday" && (
-          <TimetableCard
-            title="土曜"
-            timetable={saturday}
-            trainLocationAvailable={trainLocationAvailable}
-          />
-        )}
-
-        {tab === "holiday" && (
-          <TimetableCard
-            title="休日"
-            timetable={holiday}
-            trainLocationAvailable={trainLocationAvailable}
-          />
-        )}
+        {cards
+          .filter((c) => c.tab === tab)
+          .map((c) => (
+            <TimetableCard
+              key={c.tab}
+              title={c.title}
+              timetable={c.timetable}
+              trainLocationAvailable={trainLocationAvailable}
+            />
+          ))}
       </div>
 
       {/* Desktop */}
-      <div className="hidden gap-6 lg:grid lg:grid-cols-3">
-        <TimetableCard
-          title="平日"
-          timetable={weekday}
-          trainLocationAvailable={trainLocationAvailable}
-        />
-        <TimetableCard
-          title="土曜"
-          timetable={saturday}
-          trainLocationAvailable={trainLocationAvailable}
-        />
-        <TimetableCard
-          title="休日"
-          timetable={holiday}
-          trainLocationAvailable={trainLocationAvailable}
-        />
+      <div
+        className={cn(
+          "hidden gap-6 lg:grid",
+          cards.length === 2 ? "lg:grid-cols-2" : "lg:grid-cols-3",
+        )}
+      >
+        {cards.map((c) => (
+          <TimetableCard
+            key={c.tab}
+            title={c.title}
+            timetable={c.timetable}
+            trainLocationAvailable={trainLocationAvailable}
+          />
+        ))}
       </div>
     </>
   );

@@ -1,4 +1,5 @@
 import { type ReactNode } from "react";
+import PageTitle from "@/components/PageTitle";
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -31,6 +32,7 @@ function ExternalLink({
 export default function License() {
   return (
     <div className="max-w-3xl space-y-8 leading-relaxed">
+      <PageTitle title="データ提供・ライセンス" />
       <div className="space-y-3">
         <h1 className="text-3xl font-bold">データ提供・ライセンス</h1>
 

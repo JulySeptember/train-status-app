@@ -7,6 +7,7 @@ import { api } from "@/api";
 import Loading from "@/components/Loading";
 import Error from "@/components/Error";
 import RailwayBadge from "@/components/RailwayBadge";
+import PageTitle from "@/components/PageTitle";
 
 import { useRailway } from "@/lib/railways";
 
@@ -26,6 +27,7 @@ export default function Route() {
 
   return (
     <div className="space-y-6">
+      <PageTitle title={railway?.name ?? "駅一覧"} />
       <h1 className="flex items-center gap-3 text-3xl font-bold">
         <RailwayBadge railway={railway} className="size-9 text-base" />
         {railway?.name ?? "駅一覧"}

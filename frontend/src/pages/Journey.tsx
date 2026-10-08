@@ -8,6 +8,7 @@ import Loading from "@/components/Loading";
 import JourneyForm, { readJourneyQuery } from "@/components/JourneyForm";
 import JourneyList from "@/components/JourneyList";
 import RealtimeNotice from "@/components/RealtimeNotice";
+import PageTitle from "@/components/PageTitle";
 
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -33,6 +34,7 @@ export default function Journey() {
 
   return (
     <div className="space-y-8">
+      <PageTitle title="経路検索" />
       <h1 className="text-3xl font-bold">経路検索</h1>
 
       <Card>

@@ -6,6 +6,7 @@ import { api } from "@/api";
 import Loading from "@/components/Loading";
 import Error from "@/components/Error";
 import TrainLocation from "@/components/TrainLocation";
+import PageTitle from "@/components/PageTitle";
 
 export default function Train() {
   const { trainId = "" } = useParams();
@@ -38,6 +39,7 @@ export default function Train() {
   if (!data.available) {
     return (
       <div className="rounded-xl border border-border bg-card p-8">
+        <PageTitle title="列車位置" />
         <h1 className="mb-4 text-2xl font-bold text-foreground">列車情報</h1>
 
         <p className="mb-6 text-foreground/80">{data.message}</p>
@@ -56,5 +58,10 @@ export default function Train() {
       </div>
     );
   }
-  return <TrainLocation train={data} />;
+  return (
+    <>
+      <PageTitle title={`${data.railway} ${data.trainNumber} の位置`} />
+      <TrainLocation train={data} />
+    </>
+  );
 }

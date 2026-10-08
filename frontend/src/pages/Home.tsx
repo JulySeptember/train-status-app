@@ -20,6 +20,7 @@ import Error from "@/components/Error";
 import SortableList from "@/components/SortableList";
 import RailwayBadge from "@/components/RailwayBadge";
 import JourneyForm from "@/components/JourneyForm";
+import PageTitle from "@/components/PageTitle";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -267,6 +268,7 @@ function StatusSection() {
 export default function Home() {
   return (
     <div className="space-y-10">
+      <PageTitle />
       <SearchPanel />
       <StatusSection />
     </div>

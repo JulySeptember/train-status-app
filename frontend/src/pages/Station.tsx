@@ -10,6 +10,7 @@ import Error from "@/components/Error";
 import Timetable from "@/components/Timetable";
 import PassengerTable from "@/components/PassengerTable";
 import RailwayBadge from "@/components/RailwayBadge";
+import PageTitle from "@/components/PageTitle";
 
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { directionLabel } from "@/lib/odpt";
@@ -69,6 +70,7 @@ export default function Station() {
 
   return (
     <div className="space-y-8">
+      <PageTitle title={`${data.name}駅の時刻表`} />
       <div className="space-y-2">
         <h1 className="text-3xl font-bold text-foreground">{data.name}</h1>
 
