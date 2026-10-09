@@ -18,14 +18,22 @@ import type { DirectionTimetable } from "@/types";
 
 // 方向の名前（北行・上りなど）だけではどこへ行くのかわからないので、主な行先を添える。
 // 本数の多い行先を2つまで出し、少ない行先（車庫行きなど）は出さない。
-// 大江戸線の環状部のように行先の無い列車がほとんどの方向は、一部の列車の行先を出すと誤解されるので出さない
-function mainDestinations(timetables: DirectionTimetable[]) {
+// 大江戸線の環状部のように行先の無い列車がほとんどの方向は、一部の列車の行先を出すと誤解されるので出さない。
+// この駅止まりの列車（到着だけの列車）の行先は、方面にならないので数えない
+function mainDestinations(
+  timetables: DirectionTimetable[],
+  stationName: string,
+) {
   const counts = new Map<string, number>();
   let total = 0;
   let unknown = 0;
 
   for (const t of timetables) {
     for (const train of t.timetables) {
+      if (train.destination === stationName) {
+        continue;
+      }
+
       total++;
       if (train.destination) {
         counts.set(train.destination, (counts.get(train.destination) ?? 0) + 1);
@@ -47,23 +55,28 @@ function mainDestinations(timetables: DirectionTimetable[]) {
 }
 
 // 「光が丘方面」のように方向の名前に行先が入っているときは、行先を添えない
-function directionHint(direction: string, timetables: DirectionTimetable[]) {
+function directionHint(
+  direction: string,
+  timetables: DirectionTimetable[],
+  stationName: string,
+) {
   if (directionLabel(direction).endsWith("方面")) {
     return [];
   }
 
   return mainDestinations(
     timetables.filter((t) => t.railDirection === direction),
+    stationName,
   );
 }
 
+// 行先は「、」で区切る（「羽田空港第１・第２ターミナル」のように名前に「・」を含む駅がある）。
 // 狭い画面では、行先の名前の途中ではなく行先の区切りで折り返す
-// （「羽田空港第１・第２ターミナル」のように名前に「・」を含む駅がある）
 function Hint({ names }: { names: string[] }) {
   return names.map((name, i) => (
     <span key={name} className="inline-block">
       {name}
-      {i < names.length - 1 ? "・" : "方面"}
+      {i < names.length - 1 ? "、" : "方面"}
     </span>
   ));
 }
@@ -92,7 +105,11 @@ export default function Station() {
     ? direction
     : (directions[0] ?? "");
 
-  const selectedHint = directionHint(selectedDirection, data.timetables);
+  const selectedHint = directionHint(
+    selectedDirection,
+    data.timetables,
+    data.name,
+  );
 
   const weekday = data.timetables.find(
     (t) =>
@@ -146,7 +163,7 @@ export default function Station() {
           <Tabs value={selectedDirection} onValueChange={setDirection}>
             <TabsList className="h-auto! w-full">
               {directions.map((d) => {
-                const hint = directionHint(d, data.timetables);
+                const hint = directionHint(d, data.timetables, data.name);
 
                 return (
                   <TabsTrigger
@@ -170,7 +187,7 @@ export default function Station() {
         {directions.length === 1 && (
           <p className="font-medium text-foreground">
             {directionLabel(selectedDirection)}
-            {selectedHint.length > 0 && `（${selectedHint.join("・")}方面）`}
+            {selectedHint.length > 0 && `（${selectedHint.join("、")}方面）`}
           </p>
         )}
 
