@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 概要
 
-NORIKAE AI（非公式）: 東京都交通局（都営）のオープンデータ（ODPT API, `api-public.odpt.org`、APIキー不要）を使った、運行情報・列車位置・時刻表・遅れを反映した経路検索・AI チャットのアプリ。リポジトリ名（`train-status-app`）は AWS のリソース名に使っているので変えない。
+NORIKAE AI（非公式）: 東京都内の鉄道（都営は ODPT の `api-public.odpt.org`、APIキー不要。他社はキーの要る ODPT の API）のオープンデータを使った、運行情報・列車位置・時刻表・遅れを反映した経路検索・AI チャットのアプリ。リポジトリ名（`train-status-app`）は AWS のリソース名に使っているので変えない。
 Go の REST API（AWS Lambda）と React + TypeScript の SPA（S3 + CloudFront）で構成し、インフラは Terraform で管理する。
 
 ## コマンド
@@ -155,7 +155,7 @@ PR を作ったら、実装時の会話を持たないサブエージェント�
 
 ### インフラ（`infra/`）
 
-CloudFront が `/api/*` を API Gateway（HTTP API）→ Lambda（`provided.al2023`, arm64, 256MB）に流し、それ以外を S3 に流す。リージョンは `ap-northeast-1`。
+CloudFront が `/api/*` を API Gateway（HTTP API）→ Lambda（`provided.al2023`, arm64, 512MB。他社のデータを埋め込むため）に流し、それ以外を S3 に流す。リージョンは `ap-northeast-1`。
 
 AI エージェントの API キー（Gemini）は SSM Parameter Store の SecureString（`/train-status-app/dev/gemini-api-key`）に手で登録する。Terraform・tfvars・Lambda の環境変数には置かない。キーの値がこの会話に出ないよう、ユーザーに `! aws ssm put-parameter --region ap-northeast-1 --type SecureString --overwrite --name /train-status-app/dev/gemini-api-key --value 'AIza...'` を実行してもらう（引用符の中はキーだけにする。以前、例の `<キー>` の `<` `>` まで登録されて Gemini が `API_KEY_INVALID` を返した）。利用上限は DynamoDB（`train-status-app-dev-ai-usage`）で数え、アプリ全体の1日の上限は `ai_calls_per_day`（tfvars）で変える。
 
