@@ -117,7 +117,7 @@ PR を作ったら、実装時の会話を持たないサブエージェント�
 - 層構成は `router` → `handler` → `service` → `client`（ODPT へのリアルタイム取得）/ `assets`（静的データ）
   - `handler` は service のセンチネルエラー（`ErrStationNotFound`、`ErrTrainNotFound`、`ErrExternalAPI` など）を HTTP ステータスに変換する
   - `service` はデータの加工・集約を担い、`model`（ODPT JSON-LD そのままの型）をフロント向けの DTO に変換する。DTO は service.go に定義する
-  - `client` で外部 API を呼ぶのは運行情報（`odpt:TrainInformation`）と列車位置（`odpt:Train`）だけ。共通処理はジェネリクスの `fetch[T]`
+  - `client` で外部 API を呼ぶのは運行情報（`odpt:TrainInformation`）と列車位置（`odpt:Train`）だけ。共通処理はジェネリクスの `fetch[T]`。事業者ごと（`client.Sources`）に並列に取り、一部が失敗しても残りを返す（全部失敗したときだけ `ErrExternalAPI`）。都営以外の事業者は環境変数 `ODPT_OPERATORS`（tfvars の `odpt_operators`）に書いたものだけを取る。キーは手元では `ODPT_CONSUMER_KEY`・`ODPT_CHALLENGE_CONSUMER_KEY`（`backend/.env`）、Lambda では SSM から読む（`internal/odptkey`）。キーは URL に入るので、`*url.Error` をそのままログやエラーに出さない
 - `assets/`: ODPT の静的データ（路線・駅・運賃・駅時刻表・列車時刻表・乗降人員・列車種別）を `go:embed` で埋め込み、起動時に全件読み込む。駅時刻表と列車時刻表は、それぞれ約25MBの JSON を埋め込まず、使う項目に絞って文字列表にまとめた `station_timetable.gob` / `train_timetable.gob`（`assets/slim`、`cmd/gen-assets` で生成）を埋め込む。Lambda のコールドスタートを短くするため。`model.StationTimetableEntry` も約12万件が常駐するので、使う項目以外を足さない。列車時刻表は経路探索用で、`model` の型に戻さず、文字列表の番号と分（3時前は +24時間）のまま `slim.TrainTimetables` で持つ
 - `internal/route`: 経路探索エンジン（RAPTOR）。遅れは `Query.Delays`（路線・方向ごと）で受け取り、パターンの時刻に足して探す（`shift`）。service（`service/realtime.go`）が `odpt:Train` の遅れの中央値と、運行情報の文章による見合わせの判定を30秒キャッシュして渡す。`GET /api/journeys` から使う。`slim.TrainTimetables` を数値のまま使い、駅・路線は ID の文字列で扱う（都営に決め打ちしない）。乗り換えの対応表（`route.Transfer`）は service（`service/transfer.go`）が作って渡す: 同じ名前の駅どうし（一律5分）と、名前が違う駅の組（東日本橋 ⇔ 馬喰横山）。同じ名前の駅は、出発駅・到着駅としては1つの駅にまとめる。設計は `docs/design/route-search.md`
 - `internal/ai`: AI エージェント（`POST /api/chat`）。AI が道具（`tools.go`）を呼び、アプリが service の照会（`service/assistant.go`）を実行して結果を返す、を最大5往復繰り返す。Provider は Gemini（`ai/gemini`、REST を直接呼ぶ）とテスト用の `ai/fake`。駅名の特定は `internal/station`。API キーが無いとき（手元で `GEMINI_API_KEY` を設定していないとき、Lambda では SSM の準備ができるまで）は `/api/chat` が 503 を返す。ログに入力・応答の本文を残さない。設計は `docs/design/ai-api.md`
@@ -156,6 +156,8 @@ PR を作ったら、実装時の会話を持たないサブエージェント�
 CloudFront が `/api/*` を API Gateway（HTTP API）→ Lambda（`provided.al2023`, arm64, 256MB）に流し、それ以外を S3 に流す。リージョンは `ap-northeast-1`。
 
 AI エージェントの API キー（Gemini）は SSM Parameter Store の SecureString（`/train-status-app/dev/gemini-api-key`）に手で登録する。Terraform・tfvars・Lambda の環境変数には置かない。キーの値がこの会話に出ないよう、ユーザーに `! aws ssm put-parameter --region ap-northeast-1 --type SecureString --overwrite --name /train-status-app/dev/gemini-api-key --value 'AIza...'` を実行してもらう（引用符の中はキーだけにする。以前、例の `<キー>` の `<` `>` まで登録されて Gemini が `API_KEY_INVALID` を返した）。利用上限は DynamoDB（`train-status-app-dev-ai-usage`）で数え、アプリ全体の1日の上限は `ai_calls_per_day`（tfvars）で変える。
+
+ODPT のキーも同じく SSM の SecureString（`/train-status-app/dev/odpt-consumer-key`・`/train-status-app/dev/odpt-challenge-consumer-key`）に手で登録する。読む権限は `infra/bootstrap/lambda_odpt.tf`。
 
 SPA のルーティングは CloudFront Function（`infra/main/functions/spa_rewrite.js`）で `/index.html` に書き換えている。`custom_error_response` は `/api/*` のエラーまで `index.html` の 200 にしてしまうので使わない。
 

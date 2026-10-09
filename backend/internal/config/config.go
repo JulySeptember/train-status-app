@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -27,6 +28,17 @@ type Config struct {
 	AILimitPerIPPerMinute int
 	AILimitPerIPPerDay    int
 	AILimitCallsPerDay    int
+
+	// リアルタイムの情報を取る、都営以外の事業者（例: TokyoMetro,JR-East）。空なら都営だけ
+	ODPTOperators []string
+
+	// 手元で使う ODPT のキー（backend/.env）。本番ではキーを環境変数に置かず、SSM から読む
+	ODPTConsumerKey          string
+	ODPTChallengeConsumerKey string
+
+	// Lambda で使う、ODPT のキーを入れた SSM のパラメータ名
+	ODPTKeyParameter          string
+	ODPTChallengeKeyParameter string
 }
 
 func Load() Config {
@@ -45,7 +57,24 @@ func Load() Config {
 		AILimitPerIPPerMinute: intEnv("AI_LIMIT_PER_IP_PER_MINUTE"),
 		AILimitPerIPPerDay:    intEnv("AI_LIMIT_PER_IP_PER_DAY"),
 		AILimitCallsPerDay:    intEnv("AI_LIMIT_CALLS_PER_DAY"),
+
+		ODPTOperators:             listEnv("ODPT_OPERATORS"),
+		ODPTConsumerKey:           os.Getenv("ODPT_CONSUMER_KEY"),
+		ODPTChallengeConsumerKey:  os.Getenv("ODPT_CHALLENGE_CONSUMER_KEY"),
+		ODPTKeyParameter:          os.Getenv("ODPT_KEY_PARAMETER"),
+		ODPTChallengeKeyParameter: os.Getenv("ODPT_CHALLENGE_KEY_PARAMETER"),
 	}
+}
+
+// listEnv は、カンマ区切りの値を返す。空の要素は捨てる。
+func listEnv(name string) []string {
+	var result []string
+	for _, v := range strings.Split(os.Getenv(name), ",") {
+		if v = strings.TrimSpace(v); v != "" {
+			result = append(result, v)
+		}
+	}
+	return result
 }
 
 func intEnv(name string) int {

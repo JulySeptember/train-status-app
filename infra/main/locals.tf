@@ -7,6 +7,10 @@ locals {
   ai_usage_table_name  = "${local.name_prefix}-ai-usage"
   ai_api_key_parameter = "/${var.project_name}/${var.env}/gemini-api-key"
 
+  # ODPT のキー（infra/bootstrap と同じ名前にする）
+  odpt_key_parameter           = "/${var.project_name}/${var.env}/odpt-consumer-key"
+  odpt_challenge_key_parameter = "/${var.project_name}/${var.env}/odpt-challenge-consumer-key"
+
   common_tags = merge(
     var.tags,
     {
