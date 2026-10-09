@@ -156,7 +156,7 @@ PR を作ったら、実装時の会話を持たないサブエージェント�
 
 ### インフラ（`infra/`）
 
-CloudFront が `/api/*` を API Gateway（HTTP API）→ Lambda（`provided.al2023`, arm64, 512MB。他社のデータを埋め込むため）に流し、それ以外を S3 に流す。リージョンは `ap-northeast-1`。
+CloudFront が `/api/*` を API Gateway（HTTP API）→ Lambda（`provided.al2023`, arm64, 1024MB。他社のデータを埋め込むため 512MB 以上が要り、起動を速くするため CPU の多い 1024MB にしている）に流し、それ以外を S3 に流す。リージョンは `ap-northeast-1`。
 
 AI エージェントの API キー（Gemini）は SSM Parameter Store の SecureString（`/train-status-app/dev/gemini-api-key`）に手で登録する。Terraform・tfvars・Lambda の環境変数には置かない。キーの値がこの会話に出ないよう、ユーザーに `! aws ssm put-parameter --region ap-northeast-1 --type SecureString --overwrite --name /train-status-app/dev/gemini-api-key --value 'AIza...'` を実行してもらう（引用符の中はキーだけにする。以前、例の `<キー>` の `<` `>` まで登録されて Gemini が `API_KEY_INVALID` を返した）。利用上限は DynamoDB（`train-status-app-dev-ai-usage`）で数え、アプリ全体の1日の上限は `ai_calls_per_day`（tfvars）で変える。
 
