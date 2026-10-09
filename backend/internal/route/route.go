@@ -281,6 +281,9 @@ type conditions struct {
 	avoid  map[int32]bool
 	delays map[[2]int32]int32
 	until  int32
+
+	// shifts の結果を入れる領域（パターンを調べるたびに割り当てないよう使い回す）
+	buf []shift
 }
 
 func (e *Engine) conditions(q Query) *conditions {
@@ -320,8 +323,12 @@ func (e *Engine) conditions(q Query) *conditions {
 // shifts は、パターンの列車の時刻に足す遅れを区間ごとに返す。
 // 直通運転の列車は、前の区間の遅れを持ち越すとみなし、それまでの区間の遅れの最大を足す
 // （区間ごとに違う遅れを足すと、境目で時刻が逆戻りすることがあるため）。
+// 返す領域は次の呼び出しで上書きされる。
 func (c *conditions) shifts(n *network, p *pattern) []shift {
-	result := make([]shift, len(p.railways))
+	if cap(c.buf) < len(p.railways) {
+		c.buf = make([]shift, len(p.railways))
+	}
+	result := c.buf[:len(p.railways)]
 	var minutes int32
 	for s := range p.railways {
 		minutes = max(minutes, c.delays[[2]int32{p.railways[s], p.directions[s]}])
