@@ -262,11 +262,65 @@ func TestGetRailways(t *testing.T) {
 	if !ok || asakusa.LineCode != "A" || asakusa.Color != "#FF535F" {
 		t.Fatalf("unexpected line code or color: %+v", asakusa)
 	}
+	if asakusa.Operator != "odpt.Operator:Toei" || asakusa.OperatorName != "都営交通" {
+		t.Fatalf("unexpected operator: %+v", asakusa)
+	}
 
 	// 荒川線は路線の色が配信されないので、色は空になる（JSON では省かれる）
 	arakawa, ok := byID["odpt.Railway:Toei.Arakawa"]
 	if !ok || arakawa.LineCode != "SA" || arakawa.Color != "" {
 		t.Fatalf("unexpected line code or color: %+v", arakawa)
+	}
+}
+
+func TestGetAllStations(t *testing.T) {
+
+	loader, err := assets.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	svc := New(&mockClient{}, loader)
+
+	result, err := svc.GetAllStations(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(result) != len(loader.Stations()) {
+		t.Fatalf("expected %d stations, got %d", len(loader.Stations()), len(result))
+	}
+
+	byID := map[string]StationSummary{}
+	for _, st := range result {
+		if _, dup := byID[st.ID]; dup {
+			t.Fatalf("duplicate station %s", st.ID)
+		}
+		byID[st.ID] = st
+	}
+
+	// 路線ごとの一覧（GET /api/routes/{id}/stations）と同じ順に並ぶ
+	first := loader.Railways()[0]
+	stations, err := svc.GetStations(context.Background(), first.SameAs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, st := range stations {
+		if result[i].ID != st.ID || result[i].RailwayID != first.SameAs {
+			t.Fatalf("result[%d] = %+v, want %s on %s", i, result[i], st.ID, first.SameAs)
+		}
+	}
+
+	// 同じ名前の駅（三田線と大江戸線の春日）は、経路検索の代表の駅が同じになる
+	mita := byID["odpt.Station:Toei.Mita.Kasuga"]
+	oedo := byID["odpt.Station:Toei.Oedo.Kasuga"]
+	if mita.JourneyStation == "" || mita.JourneyStation != oedo.JourneyStation {
+		t.Fatalf("Kasuga journey stations: %q, %q", mita.JourneyStation, oedo.JourneyStation)
+	}
+
+	// 名前の違う駅はまとめない
+	if byID["odpt.Station:Toei.Mita.Suidobashi"].JourneyStation == mita.JourneyStation {
+		t.Fatal("Suidobashi must not be grouped with Kasuga")
 	}
 }
 

@@ -3,13 +3,56 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api";
 import { type Railway } from "@/types";
 
+// ODPT が路線の色を配信していない路線に補う色（つくばエクスプレスの赤）
+const RAILWAY_COLORS: Record<string, string> = {
+  "odpt.Railway:MIR.TsukubaExpress": "#e60012",
+};
+
+async function getRailways(): Promise<Railway[]> {
+  const railways = await api.getRoutes();
+  return railways.map((r) =>
+    r.color || !RAILWAY_COLORS[r.id]
+      ? r
+      : { ...r, color: RAILWAY_COLORS[r.id] },
+  );
+}
+
 // 路線一覧（GET /api/routes）。路線の色・記号を引くのに、どの画面からも同じキャッシュを使う
 export function useRailways() {
   return useQuery({
     queryKey: ["routes"],
-    queryFn: api.getRoutes,
+    queryFn: getRailways,
     staleTime: Infinity,
   });
+}
+
+export type OperatorGroup<T> = {
+  // 事業者の ID（例: odpt.Operator:Toei）と表示名
+  operator: string;
+  name: string;
+  items: T[];
+};
+
+// 路線（や路線ごとの項目）を事業者ごとにまとめる。事業者・項目は最初に現れた順に並べる
+export function groupByOperator<T>(
+  items: T[],
+  railwayOf: (item: T) => Railway,
+): OperatorGroup<T>[] {
+  const groups = new Map<string, OperatorGroup<T>>();
+
+  for (const item of items) {
+    const railway = railwayOf(item);
+    const operator = railway.operator ?? "";
+
+    let group = groups.get(operator);
+    if (!group) {
+      group = { operator, name: railway.operatorName ?? "", items: [] };
+      groups.set(operator, group);
+    }
+    group.items.push(item);
+  }
+
+  return [...groups.values()];
 }
 
 // 路線ID から路線を引く。一覧の取得前や、一覧に無い路線では undefined
@@ -46,4 +89,15 @@ export function textColorOn(hex: string): string {
   return 1.05 / (luminance + 0.05) > (luminance + 0.05) / 0.05
     ? "#ffffff"
     : "#0d1117";
+}
+
+// 同じ記号・色の路線（京王線の支線など）は記号を1つだけ出す
+export function uniqueBadges(railways: Railway[]) {
+  const seen = new Set<string>();
+  return railways.filter((r) => {
+    const key = `${r.lineCode ?? ""}-${r.color ?? r.id}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }

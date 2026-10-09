@@ -3,13 +3,16 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowUpDown, Search } from "lucide-react";
 
 import { api } from "@/api";
-import { type JourneyQuery, type Station } from "@/types";
+import { type JourneyQuery, type Railway, type StationSummary } from "@/types";
 
-import StationSelect from "@/components/StationSelect";
+import StationSelect, { type StationOption } from "@/components/StationSelect";
+import RailwayBadge from "@/components/RailwayBadge";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+import { uniqueBadges, useRailways } from "@/lib/railways";
 
 type Mode = "now" | "departAt" | "arriveBy";
 
@@ -37,16 +40,45 @@ export function readJourneyQuery(params: URLSearchParams): JourneyQuery | null {
   };
 }
 
-// 同じ名前の駅（新宿・春日など）は、経路検索では1つの駅として扱われるので、選択肢も1つにまとめる
-function uniqueByName(stations: Station[]) {
-  const seen = new Set<string>();
+// 経路検索で1つの駅として扱われる駅（近くにある同じ名前の駅。新宿・春日など）は、選択肢も1つにまとめる。
+// 選択肢の ID は、まとめた駅の代表（journeyStation）。経路検索に使えない駅は選べない選択肢にする
+function journeyOptions(
+  stations: StationSummary[],
+  railways: Railway[],
+): StationOption[] {
+  const groups = new Map<string, StationSummary[]>();
 
-  return stations.filter((s) => {
-    if (seen.has(s.name)) {
-      return false;
-    }
-    seen.add(s.name);
-    return true;
+  for (const s of stations) {
+    const key = s.journeyStation || s.id;
+    groups.set(key, [...(groups.get(key) ?? []), s]);
+  }
+
+  const railwayById = new Map(railways.map((r) => [r.id, r]));
+
+  return [...groups].map(([id, items]) => {
+    const badges = uniqueBadges(
+      [...new Set(items.map((s) => s.railwayId))].flatMap(
+        (id) => railwayById.get(id) ?? [],
+      ),
+    );
+
+    return {
+      id,
+      name: items[0].name,
+      // 同じ名前でも離れた駅（早稲田の東西線と荒川線など）は別の選択肢になるので、路線の記号で見分ける
+      detail: (
+        <span className="flex flex-wrap gap-1">
+          {badges.map((r) => (
+            <RailwayBadge
+              key={r.id}
+              railway={r}
+              className="size-5 text-[10px]"
+            />
+          ))}
+        </span>
+      ),
+      disabledReason: items[0].journeyStation ? undefined : "経路検索は未対応",
+    };
   });
 }
 
@@ -74,21 +106,27 @@ export default function JourneyForm({ initial, onSearch }: Props) {
     queryFn: api.getAllStations,
   });
 
+  const railways = useRailways();
+
   const options = useMemo(
-    () => uniqueByName(stations.data ?? []),
-    [stations.data],
+    () => journeyOptions(stations.data ?? [], railways.data ?? []),
+    [stations.data, railways.data],
   );
 
-  // URL の駅IDが、まとめた選択肢にない側の駅（例: 大江戸線の春日）でも選択済みとして表示する
-  const selected = (id: string) => {
-    const name = stations.data?.find((s) => s.id === id)?.name;
-    return options.find((s) => s.name === name)?.id ?? id;
-  };
+  // URL の駅IDが、まとめた選択肢の代表でない駅（例: 大江戸線の春日）でも選択済みとして表示する
+  const selected = (id: string) =>
+    stations.data?.find((s) => s.id === id)?.journeyStation || id;
+
+  // 経路検索に使えない駅（古い URL で指定されたものなど）では検索しない
+  const searchable = (id: string) =>
+    !options.find((o) => o.id === selected(id))?.disabledReason;
 
   const canSearch =
     fromId !== "" &&
     toId !== "" &&
     selected(fromId) !== selected(toId) &&
+    searchable(fromId) &&
+    searchable(toId) &&
     (mode === "now" || time !== "");
 
   const search = () => {

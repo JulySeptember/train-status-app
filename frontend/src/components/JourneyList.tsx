@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ArrowDown, MapPin, Repeat } from "lucide-react";
+import { ArrowDown, Footprints, MapPin, Repeat } from "lucide-react";
 
 import { type Journey, type JourneyLeg } from "@/types";
 
@@ -125,7 +125,30 @@ function Transfer({ prev, next }: { prev: JourneyLeg; next: JourneyLeg }) {
   );
 }
 
-function JourneyCard({ journey }: { journey: Journey }) {
+// 出発駅から最初に乗る駅まで・最後に降りる駅から到着駅まで歩く区間（例: 東京を指定して大手町から乗る）
+function Walk({ label }: { label: string }) {
+  return (
+    <div className="ml-6 flex items-center gap-2 border-l-2 border-dotted border-border py-3 pl-12 text-sm text-muted-foreground">
+      <Footprints size={14} />
+      {label}
+    </div>
+  );
+}
+
+type Names = {
+  // 経路検索で指定した出発駅・到着駅の名前。分からなければ「出発駅」「到着駅」と出す
+  origin?: string;
+  destination?: string;
+};
+
+function JourneyCard({
+  journey,
+  origin = "出発駅",
+  destination = "到着駅",
+}: { journey: Journey } & Names) {
+  const first = journey.legs[0];
+  const last = journey.legs[journey.legs.length - 1];
+
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-background">
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-border px-5 py-4">
@@ -147,24 +170,40 @@ function JourneyCard({ journey }: { journey: Journey }) {
       </div>
 
       <div className="px-5 py-4">
+        {journey.walkBeforeMinutes > 0 && (
+          <Walk
+            label={`${origin}から${first.fromName}まで徒歩${journey.walkBeforeMinutes}分`}
+          />
+        )}
+
         {journey.legs.map((leg, i) => (
           <div key={`${leg.train}-${leg.from}`}>
             {i > 0 && <Transfer prev={journey.legs[i - 1]} next={leg} />}
             <Leg leg={leg} />
           </div>
         ))}
+
+        {journey.walkAfterMinutes > 0 && (
+          <Walk
+            label={`${last.toName}から${destination}まで徒歩${journey.walkAfterMinutes}分`}
+          />
+        )}
       </div>
     </div>
   );
 }
 
-export default function JourneyList({ journeys }: { journeys: Journey[] }) {
+export default function JourneyList({
+  journeys,
+  ...names
+}: { journeys: Journey[] } & Names) {
   return (
     <div className="space-y-4">
       {journeys.map((journey) => (
         <JourneyCard
           key={`${journey.transfers}-${journey.departureTime}`}
           journey={journey}
+          {...names}
         />
       ))}
     </div>

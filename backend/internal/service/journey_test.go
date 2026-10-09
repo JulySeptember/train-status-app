@@ -72,9 +72,12 @@ func assertTimetable(t *testing.T, s *Service, journeys []Journey) {
 			t.Errorf("transfers = %d, legs = %d", j.Transfers, len(j.Legs))
 		}
 
-		if j.DepartureTime != j.Legs[0].DepartureTime ||
-			j.ArrivalTime != j.Legs[len(j.Legs)-1].ArrivalTime {
-			t.Errorf("journey times %s-%s do not match legs", j.DepartureTime, j.ArrivalTime)
+		// 経路の時刻は、出発駅・到着駅で歩く時間を含む
+		if j.WalkBeforeMinutes < 0 || j.WalkAfterMinutes < 0 ||
+			clock(t, j.DepartureTime)+j.WalkBeforeMinutes != clock(t, j.Legs[0].DepartureTime) ||
+			clock(t, j.ArrivalTime)-j.WalkAfterMinutes != clock(t, j.Legs[len(j.Legs)-1].ArrivalTime) {
+			t.Errorf("journey times %s-%s (walk %d, %d) do not match legs",
+				j.DepartureTime, j.ArrivalTime, j.WalkBeforeMinutes, j.WalkAfterMinutes)
 		}
 
 		for i, l := range j.Legs {
@@ -607,4 +610,64 @@ func TestSearchJourneysTimetableOnly(t *testing.T) {
 	}
 
 	assertTimetable(t, s, got.Journeys)
+}
+
+// clock は "HH:MM" を運行日の0時からの分にする。
+func clock(t *testing.T, v string) int {
+	t.Helper()
+	m, err := parseClock(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return m
+}
+
+// 出発駅・到着駅から乗り換えの対応表で歩ける駅（東日本橋 ⇔ 馬喰横山）で乗り降りするとき、
+// 歩く時間を経路の時刻に含め、徒歩の分として返す（到着時刻の指定でも前後が入れ替わらない）
+func TestSearchJourneysWalk(t *testing.T) {
+
+	s := newJourneyService(t)
+
+	const (
+		higashiNihombashi = "odpt.Station:Toei.Asakusa.HigashiNihombashi"
+		bakuroYokoyama    = "odpt.Station:Toei.Shinjuku.BakuroYokoyama"
+		ojima             = "odpt.Station:Toei.Shinjuku.Ojima"
+		sengakuji         = "odpt.Station:Toei.Asakusa.Sengakuji"
+	)
+
+	tests := []struct {
+		name   string
+		q      JourneyQuery
+		before bool
+	}{
+		{"depart", JourneyQuery{From: higashiNihombashi, To: ojima, DepartAt: "10:00"}, true},
+		{"arriveBy", JourneyQuery{From: higashiNihombashi, To: ojima, ArriveBy: "11:00"}, true},
+		{"after", JourneyQuery{From: sengakuji, To: bakuroYokoyama, DepartAt: "10:00"}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := s.SearchJourneys(context.Background(), tt.q)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertTimetable(t, s, got.Journeys)
+
+			// 乗り換えなしの経路は、対応表で歩いた駅から乗る（または降りる）
+			for _, j := range got.Journeys {
+				if j.Transfers != 0 {
+					continue
+				}
+				first, last := j.Legs[0], j.Legs[len(j.Legs)-1]
+				if tt.before && (first.From != bakuroYokoyama || j.WalkBeforeMinutes <= 0 || j.WalkAfterMinutes != 0) {
+					t.Errorf("expected a walk before boarding at %s: %+v", bakuroYokoyama, j)
+				}
+				if !tt.before && (last.To != higashiNihombashi || j.WalkAfterMinutes <= 0 || j.WalkBeforeMinutes != 0) {
+					t.Errorf("expected a walk after alighting at %s: %+v", higashiNihombashi, j)
+				}
+				return
+			}
+			t.Fatal("no direct journey")
+		})
+	}
 }

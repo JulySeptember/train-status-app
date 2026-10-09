@@ -42,7 +42,10 @@ export default function Fare() {
       <h1 className="text-3xl font-bold">運賃検索</h1>
 
       <FareSearch
-        stations={stations.data ?? []}
+        // 運賃は都営の駅どうしだけ（他社をまたぐ乗り継ぎの割引が ODPT に無いため）
+        stations={(stations.data ?? []).filter((s) =>
+          s.railwayId.startsWith("odpt.Railway:Toei."),
+        )}
         fromId={fromId}
         toId={toId}
         onFromChange={setFromId}

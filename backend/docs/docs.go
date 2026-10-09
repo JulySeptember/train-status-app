@@ -306,6 +306,38 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/stations": {
+            "get": {
+                "description": "全路線の駅を、路線の順・路線上の駅順に返す。journeyStation が同じ駅は、経路検索で1つの駅として扱う",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Station"
+                ],
+                "summary": "Get all stations",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/service.StationSummary"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/stations/{stationId}": {
             "get": {
                 "produces": [
@@ -586,6 +618,14 @@ const docTemplate = `{
                 },
                 "transfers": {
                     "type": "integer"
+                },
+                "walkAfterMinutes": {
+                    "description": "最後に降りる駅から到着駅まで歩く時間（分）",
+                    "type": "integer"
+                },
+                "walkBeforeMinutes": {
+                    "description": "出発駅から最初に乗る駅まで歩く時間（分）",
+                    "type": "integer"
                 }
             }
         },
@@ -690,6 +730,13 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "operator": {
+                    "description": "事業者（例: odpt.Operator:Toei）と、その表示名（例: 都営交通）。GET /api/routes だけが返す",
+                    "type": "string"
+                },
+                "operatorName": {
+                    "type": "string"
                 }
             }
         },
@@ -728,6 +775,24 @@ const docTemplate = `{
                 "trainLocationAvailable": {
                     "description": "この駅の路線で列車位置情報が配信されているか",
                     "type": "boolean"
+                }
+            }
+        },
+        "service.StationSummary": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "journeyStation": {
+                    "description": "経路検索の選択肢として、この駅とまとめる駅の代表（journeyStations）。\n同じ名前で近くにある駅をつないだまとまりの中で、ID 順に最初の経路検索に使える駅。\n経路検索に使えない駅（列車時刻表の無い事業者の駅で、近くに同じ名前の駅も無いもの）では空になる",
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "railwayId": {
+                    "type": "string"
                 }
             }
         },

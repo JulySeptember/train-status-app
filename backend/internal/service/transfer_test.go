@@ -64,6 +64,38 @@ func TestStationGroups(t *testing.T) {
 	}
 }
 
+func TestJourneyStations(t *testing.T) {
+
+	stations := []model.Station{
+		// 浅草のように、A ⇔ B・B ⇔ C は 600m 以内だが A ⇔ C は離れている
+		testStation("A.Asakusa", "浅草", 35.7110, 139.7960),
+		testStation("B.Asakusa", "浅草", 35.7110, 139.7920), // A から約360m
+		testStation("C.Asakusa", "浅草", 35.7110, 139.7880), // B から約360m、A から約720m
+		testStation("0.Shibuya", "渋谷", 35.658, 139.701),   // 列車時刻表が無い（ID は最小）
+		testStation("D.Shibuya", "渋谷", 35.659, 139.701),
+		testStation("E.Only", "単独", 35, 139), // 対象外で、近くに同じ名前の駅も無い
+	}
+	inNetwork := func(id string) bool { return id != "0.Shibuya" && id != "E.Only" }
+
+	got := journeyStations(stationGroups(stations, inNetwork))
+
+	want := map[string]string{
+		// つながる駅はすべて同じ代表になる。代表は、まとめる駅が最も多い（A・B・C をすべて含む）B
+		"A.Asakusa": "B.Asakusa",
+		"B.Asakusa": "B.Asakusa",
+		"C.Asakusa": "B.Asakusa",
+		// 代表は経路検索に使える駅から選ぶ
+		"0.Shibuya": "D.Shibuya",
+		"D.Shibuya": "D.Shibuya",
+		"E.Only":    "",
+	}
+	for id, w := range want {
+		if got[id] != w {
+			t.Errorf("%s: expected %q, got %q", id, w, got[id])
+		}
+	}
+}
+
 func TestTransfers(t *testing.T) {
 
 	stations := []model.Station{

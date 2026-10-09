@@ -13,11 +13,23 @@ export interface Railway {
   // GET /api/routes だけが返す。ODPT が配信していない路線では無い
   lineCode?: string;
   color?: string;
+
+  // GET /api/routes だけが返す。事業者（例: odpt.Operator:Toei）と表示名（例: 都営交通）
+  operator?: string;
+  operatorName?: string;
 }
 
 export interface Station {
   id: string;
   name: string;
+}
+
+// 全駅の一覧（GET /api/stations）の1駅
+export interface StationSummary extends Station {
+  railwayId: string;
+  // 経路検索で1つの駅として扱う駅の代表。同じ値の駅は経路検索で同じ結果になる。
+  // 経路検索に使えない駅（列車時刻表の無い事業者の駅で、近くに同じ名前の駅も無いもの）では空
+  journeyStation: string;
 }
 
 export interface Timetable {
@@ -103,11 +115,14 @@ export interface JourneyLeg {
   delayMinutes: number;
 }
 
+// 出発・到着の時刻は、出発駅から最初に乗る駅まで・最後に降りる駅から到着駅まで歩く時間を含む
 export interface Journey {
   departureTime: string;
   arrivalTime: string;
   transfers: number;
   legs: JourneyLeg[];
+  walkBeforeMinutes: number;
+  walkAfterMinutes: number;
 }
 
 export interface JourneySearch {

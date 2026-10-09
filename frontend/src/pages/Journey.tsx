@@ -32,6 +32,14 @@ export default function Journey() {
     enabled: query !== null,
   });
 
+  // 徒歩の区間の案内に、指定した駅の名前を使う（検索の入力欄と同じキャッシュ）
+  const stations = useQuery({
+    queryKey: ["stations"],
+    queryFn: api.getAllStations,
+  });
+  const stationName = (id: string) =>
+    stations.data?.find((s) => s.id === id)?.name;
+
   return (
     <div className="space-y-8">
       <PageTitle title="経路検索" />
@@ -83,7 +91,11 @@ export default function Journey() {
       )}
 
       {query && journeys.data && journeys.data.journeys.length > 0 && (
-        <JourneyList journeys={journeys.data.journeys} />
+        <JourneyList
+          journeys={journeys.data.journeys}
+          origin={stationName(query.from)}
+          destination={stationName(query.to)}
+        />
       )}
     </div>
   );
