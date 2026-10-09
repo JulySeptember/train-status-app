@@ -47,7 +47,7 @@ function isNormal(status: string) {
   return NORMAL_WORDS.some((w) => status.includes(w));
 }
 
-// 質問を「AI に聞く」の画面に渡して開く。送るのは向こうの画面で行う
+// 質問を「AI 乗換相談」の画面に渡して開く。送るのは向こうの画面で行う
 function AskForm() {
   const navigate = useNavigate();
   const [input, setInput] = useState("");
@@ -115,7 +115,7 @@ function AskForm() {
         経路・次の電車・運行状況を、話し言葉で聞けます。遅延や運転見合わせを確かめてから経路を提案します。
       </p>
 
-      {/* 送るとすぐに AI に渡るので、「AI に聞く」の画面と同じ注意をここでも出す */}
+      {/* 送るとすぐに AI に渡るので、「AI 乗換相談」の画面と同じ注意をここでも出す */}
       <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
         <Info size={14} className="mt-px shrink-0" />
         入力内容は AI
@@ -146,7 +146,7 @@ function SearchPanel() {
           <TabsList className="h-10! w-full sm:w-fit">
             <TabsTrigger value="ai" className="px-4 text-base">
               <Sparkles />
-              AI に聞く
+              AI 乗換相談
             </TabsTrigger>
             <TabsTrigger value="journey" className="px-4 text-base">
               <Route />

@@ -249,10 +249,10 @@ export default function Chat() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <PageTitle title="AI に聞く" />
+      <PageTitle title="AI 乗換相談" />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">AI に聞く</h1>
+          <h1 className="text-3xl font-bold text-foreground">AI 乗換相談</h1>
 
           <p className="mt-2 text-sm text-muted-foreground">
             東京都内の鉄道の経路・次の電車・運行状況を、話し言葉で聞けます。遅延や運転見合わせを確かめてから経路を提案します。

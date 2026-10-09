@@ -161,7 +161,8 @@ export default function License() {
 
       <Section title="AI の利用について">
         <p className="text-foreground/80">
-          「AI に聞く」では、Google の Gemini API を使っています。入力内容は AI
+          「AI 乗換相談」では、Google の Gemini API を使っています。入力内容は
+          AI
           の提供元（Google）に送信され、サービス改善に利用されることがあります。個人情報は入力しないでください。
         </p>
 
