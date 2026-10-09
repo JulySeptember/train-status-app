@@ -55,6 +55,66 @@ func stationGroups(stations []model.Station, inNetwork func(string) bool) map[st
 	return result
 }
 
+// journeyStations は、駅ID → 経路検索の選択肢としてまとめる駅の代表を返す。
+// stationGroups は駅ごとに 600m 以内を見るので推移的でない（浅草: TX ⇔ 東武 ⇔ 都営・メトロは近いが、
+// TX ⇔ 都営は離れている）。グループでつながる駅をすべて1つにまとめ、その中で、自分のグループに
+// 最も多くの駅を含む駅（同じ数なら ID 順に最初の駅）を代表にする。代表から探すと、まとめた駅の多くから
+// 歩かずに乗れる（浅草では東武の浅草が、TX・都営・メトロの浅草をすべて含む）。
+// グループが空の駅（経路検索に使えない駅）は空にする。
+func journeyStations(groups map[string][]string) map[string]string {
+
+	parent := make(map[string]string)
+	var find func(string) string
+	find = func(id string) string {
+		p, ok := parent[id]
+		if !ok || p == id {
+			parent[id] = id
+			return id
+		}
+		root := find(p)
+		parent[id] = root
+		return root
+	}
+	union := func(a, b string) {
+		parent[find(b)] = find(a)
+	}
+
+	// グループの駅どうしだけをつなぐ（グループには経路探索の対象の駅しか入らない。対象外の駅は自分のグループに入らない）
+	for _, group := range groups {
+		for _, other := range group[min(1, len(group)):] {
+			union(group[0], other)
+		}
+	}
+
+	// まとまりごとの代表。候補は経路探索の対象の駅（自分のグループに自分が入っている駅）
+	better := func(a, b string) bool {
+		if len(groups[a]) != len(groups[b]) {
+			return len(groups[a]) > len(groups[b])
+		}
+		return a < b
+	}
+	best := make(map[string]string)
+	for id, group := range groups {
+		if !slices.Contains(group, id) {
+			continue
+		}
+		root := find(id)
+		if cur, ok := best[root]; !ok || better(id, cur) {
+			best[root] = id
+		}
+	}
+
+	result := make(map[string]string, len(groups))
+	for id, group := range groups {
+		if len(group) == 0 {
+			result[id] = ""
+			continue
+		}
+		result[id] = best[find(group[0])]
+	}
+	return result
+}
+
 // sameStation は、同じ名前の2つの駅を1つの駅として扱うかを返す。座標の無い駅はまとめる。
 func sameStation(a, b model.Station) bool {
 	d, ok := distance(a, b)

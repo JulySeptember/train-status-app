@@ -117,10 +117,16 @@ export default function JourneyForm({ initial, onSearch }: Props) {
   const selected = (id: string) =>
     stations.data?.find((s) => s.id === id)?.journeyStation || id;
 
+  // 経路検索に使えない駅（古い URL で指定されたものなど）では検索しない
+  const searchable = (id: string) =>
+    !options.find((o) => o.id === selected(id))?.disabledReason;
+
   const canSearch =
     fromId !== "" &&
     toId !== "" &&
     selected(fromId) !== selected(toId) &&
+    searchable(fromId) &&
+    searchable(toId) &&
     (mode === "now" || time !== "");
 
   const search = () => {

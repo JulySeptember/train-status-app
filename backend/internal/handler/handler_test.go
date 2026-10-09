@@ -84,3 +84,33 @@ func TestJourneys(t *testing.T) {
 		})
 	}
 }
+
+func TestAllStations(t *testing.T) {
+
+	loader, err := assets.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h := New(service.New(nopClient{}, loader), nil)
+
+	rec := httptest.NewRecorder()
+	h.AllStations(rec, httptest.NewRequest(http.MethodGet, "/api/stations", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var body []service.StationSummary
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body) != len(loader.Stations()) {
+		t.Fatalf("got %d stations, want %d", len(body), len(loader.Stations()))
+	}
+	for _, st := range body {
+		if st.ID == "" || st.Name == "" || st.RailwayID == "" || st.JourneyStation == "" {
+			t.Fatalf("incomplete station: %+v", st)
+		}
+	}
+}

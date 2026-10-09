@@ -60,6 +60,9 @@ type Service struct {
 	// 駅ID → 経路検索の出発駅・到着駅としてまとめる駅の ID（stationGroups）
 	stationGroups map[string][]string
 
+	// 全駅の一覧（GET /api/stations）。起動後に変わらないので、起動時に作る
+	allStations []StationSummary
+
 	routes *route.Engine
 
 	// 駅名から駅を引く索引（AI の道具で使う）
@@ -99,6 +102,8 @@ func New(
 		stationIndex:     station.New(a.Stations()),
 		now:              time.Now,
 	}
+
+	s.allStations = s.indexAllStations()
 
 	s.warnUnknownNames()
 
@@ -379,8 +384,8 @@ type StationSummary struct {
 	Name      string `json:"name"`
 	RailwayID string `json:"railwayId"`
 
-	// 経路検索で、この駅とまとめて1つの駅として扱う駅の代表（ID 順で最初の駅）。
-	// 同じ値の駅は、経路検索の出発駅・到着駅として同じ結果になる。
+	// 経路検索の選択肢として、この駅とまとめる駅の代表（journeyStations）。
+	// 同じ名前で近くにある駅をつないだまとまりの中で、ID 順に最初の経路検索に使える駅。
 	// 経路検索に使えない駅（列車時刻表の無い事業者の駅で、近くに同じ名前の駅も無いもの）では空になる
 	JourneyStation string `json:"journeyStation"`
 }
@@ -409,27 +414,27 @@ func (s *Service) GetStations(
 func (s *Service) GetAllStations(
 	ctx context.Context,
 ) ([]StationSummary, error) {
+	return slices.Clone(s.allStations), nil
+}
 
+func (s *Service) indexAllStations() []StationSummary {
+
+	journey := journeyStations(s.stationGroups)
 	items := make([]StationSummary, 0, len(s.assets.Stations()))
 
 	for _, r := range s.railwaysByOperator() {
 		for _, st := range s.railwayStations(r) {
 
-			journeyStation := ""
-			if group := s.stationGroups[st.ID]; len(group) > 0 {
-				journeyStation = group[0]
-			}
-
 			items = append(items, StationSummary{
 				ID:             st.ID,
 				Name:           st.Name,
 				RailwayID:      r.SameAs,
-				JourneyStation: journeyStation,
+				JourneyStation: journey[st.ID],
 			})
 		}
 	}
 
-	return items, nil
+	return items
 }
 
 // railwaysByOperator は、路線を事業者の順（operatorOrder）に並べる。事業者の中は元の順のまま。
