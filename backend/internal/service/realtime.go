@@ -97,11 +97,15 @@ func (s *Service) railwayConditions(ctx context.Context) (*railwayConditions, er
 		value.statusOperators[name] = true
 	}
 
-	for _, id := range slices.Sorted(maps.Keys(value.texts)) {
-		if isSuspended(value.texts[id]) {
-			value.suspended = append(value.suspended, id)
+	// 見合わせは路線ごとの運行情報だけで判定する。会社全体で1件の運行情報（京急・西武）は、
+	// 1路線の見合わせでも全路線を見合わせにしてしまうので、表示にだけ使う
+	for _, st := range statuses.Items {
+		if _, ok := s.railwayNames[st.Railway]; ok && isSuspended(st.TrainInformationText.Ja) &&
+			!slices.Contains(value.suspended, st.Railway) {
+			value.suspended = append(value.suspended, st.Railway)
 		}
 	}
+	slices.Sort(value.suspended)
 
 	s.realtime.at = now
 	s.realtime.value = value

@@ -178,3 +178,27 @@ func TestGetRailwayConditionsUnknown(t *testing.T) {
 		}
 	}
 }
+
+// 会社全体で1件の運行情報は、見合わせの判定に使わない（1路線の見合わせで全路線を避けないように）。
+func TestOperatorWideStatusIsNotSuspension(t *testing.T) {
+
+	s := newOperatorService(t, &mockClient{
+		trainStatus: []model.TrainStatus{
+			{Operator: "odpt.Operator:Toei", TrainInformationText: model.LocalizedString{Ja: "三田線で運転を見合わせています。"}},
+		},
+	})
+
+	conds, err := s.railwayConditions(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(conds.suspended) != 0 {
+		t.Fatalf("expected no suspended railways, got %v", conds.suspended)
+	}
+
+	// 文章は各路線に表示する
+	if conds.texts[mitaRailway] == "" {
+		t.Fatal("expected the operator-wide text for each railway")
+	}
+}
