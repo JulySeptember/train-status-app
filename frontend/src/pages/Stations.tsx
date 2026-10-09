@@ -18,6 +18,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { groupByOperator, uniqueBadges, useRailways } from "@/lib/railways";
 import { usePrefetchStation } from "@/lib/station";
 
@@ -26,7 +27,21 @@ type Group = {
   stations: StationSummary[];
 };
 
-function StationGrid({ stations }: { stations: StationSummary[] }) {
+// 駅の時刻表を、選んだ方向で開くためのリンク先
+function stationPath(id: string, direction?: string | null) {
+  const path = `/stations/${encodeURIComponent(id)}`;
+  return direction
+    ? `${path}?direction=${encodeURIComponent(direction)}`
+    : path;
+}
+
+function StationGrid({
+  stations,
+  direction,
+}: {
+  stations: StationSummary[];
+  direction?: string | null;
+}) {
   const prefetch = usePrefetchStation();
 
   return (
@@ -34,7 +49,7 @@ function StationGrid({ stations }: { stations: StationSummary[] }) {
       {stations.map((station) => (
         <li key={station.id}>
           <Link
-            to={`/stations/${encodeURIComponent(station.id)}`}
+            to={stationPath(station.id, direction)}
             {...prefetch(station.id)}
             className="flex items-center justify-between rounded-lg border bg-card px-3 py-2.5 text-base no-underline! transition hover:bg-muted"
           >
@@ -51,15 +66,20 @@ function StationGrid({ stations }: { stations: StationSummary[] }) {
   );
 }
 
-// 路線を並べ、選んだ路線の駅だけを開いて見せる
+// 路線を並べ、選んだ路線の駅だけを開いて見せる。
+// 駅の時刻表は方向ごとなので、駅を選ぶ前に方向も選べるようにする（選ばなければ最初の方向で開く）
 function RailwayAccordion({
   groups,
   open,
   onOpen,
+  direction,
+  onDirection,
 }: {
   groups: Group[];
   open: string | null;
   onOpen(route: string | null): void;
+  direction: string | null;
+  onDirection(direction: string): void;
 }) {
   return (
     <Accordion
@@ -67,24 +87,43 @@ function RailwayAccordion({
       onValueChange={(value) => onOpen((value as string[])[0] ?? null)}
       className="gap-3"
     >
-      {groups.map(({ railway, stations }) => (
-        <AccordionItem
-          key={railway.id}
-          value={railway.id}
-          className="rounded-xl border bg-card px-4"
-        >
-          <AccordionTrigger className="items-center py-3 text-base font-semibold hover:no-underline">
-            <span className="flex items-center gap-3">
-              <RailwayBadge railway={railway} className="size-8 text-sm" />
-              {railway.name}
-            </span>
-          </AccordionTrigger>
+      {groups.map(({ railway, stations }) => {
+        const directions = railway.directions ?? [];
+        const selected = directions.some((d) => d.id === direction)
+          ? direction
+          : directions[0]?.id;
 
-          <AccordionContent className="pb-4">
-            <StationGrid stations={stations} />
-          </AccordionContent>
-        </AccordionItem>
-      ))}
+        return (
+          <AccordionItem
+            key={railway.id}
+            value={railway.id}
+            className="rounded-xl border bg-card px-4"
+          >
+            <AccordionTrigger className="items-center py-3 text-base font-semibold hover:no-underline">
+              <span className="flex items-center gap-3">
+                <RailwayBadge railway={railway} className="size-8 text-sm" />
+                {railway.name}
+              </span>
+            </AccordionTrigger>
+
+            <AccordionContent className="space-y-3 pb-4">
+              {directions.length > 1 && (
+                <Tabs value={selected} onValueChange={onDirection}>
+                  <TabsList className="h-10! w-full sm:w-fit">
+                    {directions.map((d) => (
+                      <TabsTrigger key={d.id} value={d.id} className="px-4">
+                        {d.name}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </Tabs>
+              )}
+
+              <StationGrid stations={stations} direction={selected} />
+            </AccordionContent>
+          </AccordionItem>
+        );
+      })}
     </Accordion>
   );
 }
@@ -94,6 +133,7 @@ function OperatorAccordion({ groups }: { groups: Group[] }) {
   // 開いた事業者・路線は URL に残す（駅の時刻表から戻ったとき、同じ路線を開いたままにする）
   const [params, setParams] = useSearchParams();
   const route = params.get("route");
+  const direction = params.get("direction");
 
   const operators = groupByOperator(groups, (g) => g.railway);
 
@@ -103,10 +143,16 @@ function OperatorAccordion({ groups }: { groups: Group[] }) {
     groups.find((g) => g.railway.id === route)?.railway.operator ??
     null;
 
-  const set = (next: { operator?: string | null; route?: string | null }) => {
+  // 方向は開いた路線のものなので、路線を変えたら選び直す
+  const set = (next: {
+    operator?: string | null;
+    route?: string | null;
+    direction?: string | null;
+  }) => {
     const value: Record<string, string> = {};
     if (next.operator) value.operator = next.operator;
     if (next.route) value.route = next.route;
+    if (next.direction) value.direction = next.direction;
     setParams(value, { replace: true });
   };
 
@@ -116,6 +162,8 @@ function OperatorAccordion({ groups }: { groups: Group[] }) {
         groups={groups}
         open={route}
         onOpen={(route) => set({ route })}
+        direction={direction}
+        onDirection={(direction) => set({ route, direction })}
       />
     );
   }
@@ -154,6 +202,10 @@ function OperatorAccordion({ groups }: { groups: Group[] }) {
               groups={op.items}
               open={route}
               onOpen={(route) => set({ operator: op.operator, route })}
+              direction={direction}
+              onDirection={(direction) =>
+                set({ operator: op.operator, route, direction })
+              }
             />
           </AccordionContent>
         </AccordionItem>

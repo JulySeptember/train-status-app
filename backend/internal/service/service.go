@@ -347,6 +347,16 @@ type Railway struct {
 	// 事業者（例: odpt.Operator:Toei）と、その表示名（例: 都営交通）。GET /api/routes だけが返す
 	Operator     string `json:"operator,omitempty"`
 	OperatorName string `json:"operatorName,omitempty"`
+
+	// 路線の方向（上り・下りの順）。駅の一覧で方向を選んでから時刻表を開くのに使う。GET /api/routes だけが返す
+	Directions []RailDirection `json:"directions,omitempty"`
+}
+
+type RailDirection struct {
+	// 方向（例: odpt.RailDirection:Northbound）
+	ID string `json:"id"`
+	// 日本語名（例: 北行、荻窪方面）
+	Name string `json:"name"`
 }
 
 // =========================
@@ -367,10 +377,46 @@ func (s *Service) GetRailways(
 			Color:        r.Color,
 			Operator:     r.Operator,
 			OperatorName: operatorName(r.Operator),
+			Directions:   s.directionsOf(r),
 		})
 	}
 
 	return items, nil
+}
+
+// directionsOf は、路線の上り・下りの方向を名前付きで返す。
+func (s *Service) directionsOf(railway model.Railway) []RailDirection {
+	var items []RailDirection
+
+	for _, id := range []string{railway.AscendingRailDirection, railway.DescendingRailDirection} {
+		if id == "" {
+			continue
+		}
+		items = append(items, RailDirection{ID: id, Name: s.railwayDirectionName(railway, id)})
+	}
+
+	return items
+}
+
+// railwayDirectionName は、方向の日本語名を返す。
+// 東京メトロの方向（odpt.RailDirection:TokyoMetro.Ogikubo など）は終点の駅で表すので、
+// 辞書に無ければ、路線の駅から同じ名前の駅を探して「〇〇方面」にする。
+func (s *Service) railwayDirectionName(railway model.Railway, id string) string {
+	if name, ok := railDirectionNames[id]; ok {
+		return name
+	}
+
+	last := lastSegment(id)
+	for _, o := range railway.StationOrder {
+		if lastSegment(o.Station) != last {
+			continue
+		}
+		if name, ok := s.stationNames[o.Station]; ok {
+			return name + "方面"
+		}
+	}
+
+	return railDirectionName(id)
 }
 
 // =========================

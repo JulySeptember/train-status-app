@@ -271,6 +271,43 @@ func TestGetRailways(t *testing.T) {
 	if !ok || arakawa.LineCode != "SA" || arakawa.Color != "" {
 		t.Fatalf("unexpected line code or color: %+v", arakawa)
 	}
+
+	wantDirections := []RailDirection{
+		{ID: "odpt.RailDirection:Northbound", Name: "北行"},
+		{ID: "odpt.RailDirection:Southbound", Name: "南行"},
+	}
+	if !slices.Equal(asakusa.Directions, wantDirections) {
+		t.Fatalf("directions = %+v, want %+v", asakusa.Directions, wantDirections)
+	}
+}
+
+// 東京メトロの方向は終点の駅で表すので、路線の駅の名前から「〇〇方面」にする
+func TestRailwayDirectionName(t *testing.T) {
+	loader, err := assets.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	svc := New(&mockClient{}, loader)
+	svc.stationNames["odpt.Station:TokyoMetro.Marunouchi.Ogikubo"] = "荻窪"
+
+	railway := model.Railway{
+		SameAs: "odpt.Railway:TokyoMetro.Marunouchi",
+		StationOrder: []model.StationOrder{
+			{Index: 1, Station: "odpt.Station:TokyoMetro.Marunouchi.Ogikubo"},
+		},
+	}
+
+	tests := map[string]string{
+		"odpt.RailDirection:TokyoMetro.Ogikubo":   "荻窪方面",
+		"odpt.RailDirection:Inbound":              "上り",
+		"odpt.RailDirection:TokyoMetro.Ikebukuro": "Ikebukuro",
+	}
+	for id, want := range tests {
+		if got := svc.railwayDirectionName(railway, id); got != want {
+			t.Errorf("railwayDirectionName(%s) = %s, want %s", id, got, want)
+		}
+	}
 }
 
 func TestGetAllStations(t *testing.T) {

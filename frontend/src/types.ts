@@ -17,6 +17,14 @@ export interface Railway {
   // GET /api/routes だけが返す。事業者（例: odpt.Operator:Toei）と表示名（例: 都営交通）
   operator?: string;
   operatorName?: string;
+
+  // GET /api/routes だけが返す。路線の方向（上り・下りの順）
+  directions?: RailDirection[];
+}
+
+export interface RailDirection {
+  id: string;
+  name: string;
 }
 
 export interface Station {
