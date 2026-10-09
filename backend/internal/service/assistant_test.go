@@ -177,12 +177,7 @@ func TestGetDeparturesErrors(t *testing.T) {
 
 func TestOperators(t *testing.T) {
 
-	loader, err := assets.New()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	got := New(&mockClient{}, loader).Operators()
+	got := newJourneyService(t).Operators()
 
 	if len(got) != 1 || got[0].Name != "都営交通" || !got[0].RouteSearch {
 		t.Fatalf("unexpected operators: %+v", got)
