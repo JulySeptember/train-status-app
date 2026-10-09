@@ -15,6 +15,8 @@ import (
 	"encoding/gob"
 	"fmt"
 	"io"
+	"slices"
+	"strings"
 
 	"train-status-app/backend/internal/model"
 )
@@ -44,8 +46,11 @@ type Entry struct {
 	Destination   int32
 }
 
+// destinationSeparator は、行先が2駅以上ある項目（分割・併合する列車。JR・小田急にある）の
+// 行先を1つの文字列にまとめるときの区切り。ODPT の ID には現れない。
+const destinationSeparator = ","
+
 // Encode は駅時刻表を軽量な形式で w に書き出す。
-// 行先が2駅以上ある項目は表現できないため、エラーにする。
 func Encode(w io.Writer, timetables []model.StationTimetable) error {
 
 	b := newStringTable()
@@ -66,17 +71,14 @@ func Encode(w io.Writer, timetables []model.StationTimetable) error {
 
 		for _, obj := range tt.StationTimetableObject {
 
-			if len(obj.DestinationStation) > 1 {
-				return fmt.Errorf(
-					"%s %s: multiple destinations are not supported",
-					tt.SameAs,
-					obj.Train,
-				)
-			}
+			destination := strings.Join(obj.DestinationStation, destinationSeparator)
 
-			destination := ""
-			if len(obj.DestinationStation) == 1 {
-				destination = obj.DestinationStation[0]
+			// 区切りを含む行先や、2駅以上のうちの空の行先は、読み戻すと元に戻らない
+			if slices.ContainsFunc(obj.DestinationStation, func(s string) bool {
+				return strings.Contains(s, destinationSeparator) ||
+					(s == "" && len(obj.DestinationStation) > 1)
+			}) {
+				return fmt.Errorf("%s %s: invalid destinations %q", tt.SameAs, obj.Train, obj.DestinationStation)
 			}
 
 			item.Entries = append(item.Entries, Entry{
@@ -166,7 +168,7 @@ func Decode(r io.Reader) ([]model.StationTimetable, error) {
 					if err != nil {
 						return nil, err
 					}
-					dest = []string{s}
+					dest = strings.Split(s, destinationSeparator)
 					destinations[e.Destination] = dest
 				}
 				obj.DestinationStation = dest

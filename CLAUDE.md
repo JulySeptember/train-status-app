@@ -54,6 +54,8 @@ cd backend && swag init -g cmd/api/main.go -o docs
 make backend-generate   # = cd backend && go generate ./assets
 ```
 
+同じスクリプトが、`backend/.env` のキーがあれば都営以外の事業者のデータも取り、都内に絞って `backend/assets/extra/`（gitignore 済み。コミットしない）に置く。他社のデータだけを取り直すときは `sh scripts/update_assets.sh --extra-only`。取得した元の JSON（約370MB）と区市町村の境界は `backend/.odpt-cache/` に残る。都内の駅の一覧 `assets/tokyo_stations.txt`（駅IDだけなのでコミットする）もこのとき作り直す。`extra/` のデータは `assets.New(assets.WithExtra())` で読み込み、無ければ都営だけで動く。
+
 ### デプロイ（AWS に反映される操作。実行前にユーザーへ確認する）
 
 main へのマージで CI（`.github/workflows/ci.yml`）が、検証が通ったあとに `deploy.yml` を呼んで自動でデプロイする。変更のあった領域だけを backend → `terraform apply` → frontend の順に反映する。全領域をやり直すときは Actions から CI を main で手動実行する（`workflow_dispatch`）。手元の make は、CD が失敗したときや bootstrap の適用に使う。
