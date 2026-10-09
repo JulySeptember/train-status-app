@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 概要
 
-NORIKAE AI（非公式）: 東京都交通局（都営）のオープンデータ（ODPT API, `api-public.odpt.org`、APIキー不要）を使った、運行情報・列車位置・時刻表・遅れを反映した経路検索・AI チャットのアプリ。リポジトリ名（`train-status-app`）は AWS のリソース名に使っているので変えない。
+NORIKAE AI（非公式）: 東京都内の鉄道（都営は ODPT の `api-public.odpt.org`、APIキー不要。他社はキーの要る ODPT の API）のオープンデータを使った、運行情報・列車位置・時刻表・遅れを反映した経路検索・AI チャットのアプリ。リポジトリ名（`train-status-app`）は AWS のリソース名に使っているので変えない。
 Go の REST API（AWS Lambda）と React + TypeScript の SPA（S3 + CloudFront）で構成し、インフラは Terraform で管理する。
 
 ## コマンド
@@ -54,7 +54,9 @@ cd backend && swag init -g cmd/api/main.go -o docs
 make backend-generate   # = cd backend && go generate ./assets
 ```
 
-同じスクリプトが、`backend/.env` のキーがあれば都営以外の事業者のデータも取り、都内に絞って `backend/assets/extra/`（gitignore 済み。コミットしない）に置く。他社のデータだけを取り直すときは `sh scripts/update_assets.sh --extra-only`。取得した元の JSON（約370MB）と区市町村の境界は `backend/.odpt-cache/` に残る。都内の駅の一覧 `assets/tokyo_stations.txt`（駅IDだけなのでコミットする）もこのとき作り直す。`extra/` のデータは `assets.New(assets.WithExtra())` で読み込み、無ければ都営だけで動く。
+同じスクリプトが、`backend/.env` のキーがあれば都営以外の事業者のデータも取り、都内に絞って `backend/assets/extra/`（gitignore 済み。コミットしない）に置く。他社のデータだけを取り直すときは `sh scripts/update_assets.sh --extra-only`。取得した元の JSON（約370MB）と区市町村の境界は `backend/.odpt-cache/` に残る。都内の駅の一覧 `assets/tokyo_stations.txt`（駅IDだけなのでコミットする）もこのとき作り直す。`extra/` のデータは `assets.New(assets.WithExtra())` で読み込み、無ければ都営だけで動く（CI のテスト）。
+
+本番に入れる `extra/` は、非公開の S3（Lambda アーティファクト用のバケットの `assets-extra/<版>/`）に置き、使う版を `backend/assets/extra.version`（版の名前だけなのでコミットする）に書く。他社のデータを取り直したら `make backend-extra-upload`（S3 へのアップロード。AWS に反映される操作なので実行前にユーザーへ確認する）で版を作り、`extra.version` をコミットする。`make backend-build` は `extra/` がそろっていなければ失敗し、`make backend-deploy` は先に `make backend-extra-download` で `extra.version` の版を取ってくる（手元の `extra/` は上書きされる）。
 
 ### デプロイ（AWS に反映される操作。実行前にユーザーへ確認する）
 
@@ -153,7 +155,7 @@ PR を作ったら、実装時の会話を持たないサブエージェント�
 
 ### インフラ（`infra/`）
 
-CloudFront が `/api/*` を API Gateway（HTTP API）→ Lambda（`provided.al2023`, arm64, 256MB）に流し、それ以外を S3 に流す。リージョンは `ap-northeast-1`。
+CloudFront が `/api/*` を API Gateway（HTTP API）→ Lambda（`provided.al2023`, arm64, 512MB。他社のデータを埋め込むため）に流し、それ以外を S3 に流す。リージョンは `ap-northeast-1`。
 
 AI エージェントの API キー（Gemini）は SSM Parameter Store の SecureString（`/train-status-app/dev/gemini-api-key`）に手で登録する。Terraform・tfvars・Lambda の環境変数には置かない。キーの値がこの会話に出ないよう、ユーザーに `! aws ssm put-parameter --region ap-northeast-1 --type SecureString --overwrite --name /train-status-app/dev/gemini-api-key --value 'AIza...'` を実行してもらう（引用符の中はキーだけにする。以前、例の `<キー>` の `<` `>` まで登録されて Gemini が `API_KEY_INVALID` を返した）。利用上限は DynamoDB（`train-status-app-dev-ai-usage`）で数え、アプリ全体の1日の上限は `ai_calls_per_day`（tfvars）で変える。
 

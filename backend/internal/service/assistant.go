@@ -109,6 +109,44 @@ type StationCandidate struct {
 	RailwayName string `json:"railwayName"`
 }
 
+// OperatorCoverage は、アプリが扱う事業者と、その駅で経路検索ができるか。
+type OperatorCoverage struct {
+	Name string
+
+	// 列車時刻表があり、経路検索に使えるか（東急・西武などは駅時刻表と運行情報だけ）
+	RouteSearch bool
+}
+
+// Operators は、アプリが扱う事業者を路線一覧の順に返す。AI への指示に使う。
+func (s *Service) Operators() []OperatorCoverage {
+	return slices.Clone(s.operators)
+}
+
+func (s *Service) indexOperators() []OperatorCoverage {
+
+	routeSearch := make(map[string]bool)
+	for _, st := range s.assets.Stations() {
+		if s.routes.HasStation(st.SameAs) {
+			routeSearch[st.Operator] = true
+		}
+	}
+
+	var result []OperatorCoverage
+	seen := make(map[string]bool)
+	for _, r := range s.railwaysByOperator() {
+		if seen[r.Operator] {
+			continue
+		}
+		seen[r.Operator] = true
+		result = append(result, OperatorCoverage{
+			Name:        operatorName(r.Operator),
+			RouteSearch: routeSearch[r.Operator],
+		})
+	}
+
+	return result
+}
+
 // FindStations は、駅名（表記の揺れを含む）から駅の候補を返す。同じ名前の駅は路線ごとに返す。
 func (s *Service) FindStations(name string) []StationCandidate {
 

@@ -18,6 +18,10 @@ FRONTEND_BUCKET := train-status-app-dev-frontend-assets
 LAMBDA_ARTIFACT_BUCKET := train-status-app-dev-lambda-artifacts
 LAMBDA_ARTIFACT_KEY := lambda/bootstrap.zip
 
+# 都営以外の事業者のデータ（backend/assets/loder.go の extraFiles と合わせる）と、S3 での置き場所
+EXTRA_FILES := railway.json station.json train_type.json station_timetable.gob train_timetable.gob destination_station.json
+EXTRA_PREFIX := assets-extra
+
 # ============================
 # Docker
 # ============================
@@ -103,19 +107,44 @@ backend-vet:
 backend-generate:
 	cd $(BACKEND_DIR) && go generate ./assets
 
-# assets/extra（都営以外の事業者のデータ）は go:embed で埋め込まれる。アプリが使い始めるまでは
-# 本番のバイナリに入れないよう、ビルドの間だけ README 以外を .odpt-cache（gitignore 済み）によけて、
-# 終わったら（失敗・中断しても）戻す。CI で作るものと中身がそろう
+# assets/extra（都営以外の事業者のデータ）は go:embed で埋め込む。ライセンス上リポジトリに置けないので、
+# 非公開の S3（Lambda アーティファクト用のバケット）に置き、どの版を使うかを assets/extra.version に書いてコミットする。
+# 本番のバイナリが都営だけにならないよう、ビルドの前にすべてそろっていて、中身が extra.version の版と同じかを確かめる
+# （S3 に無い版が本番に入らないように。CI のテストはデータ無しで動く）
 backend-build:
 	cd $(BACKEND_DIR) && \
-	mkdir -p .odpt-cache && \
-	hold=$$(mktemp -d .odpt-cache/extra-hold.XXXXXX) && \
-	restore() { find "$$hold" -mindepth 1 -maxdepth 1 -exec mv {} assets/extra/ \; ; rmdir "$$hold"; } && \
-	trap restore EXIT && \
-	trap 'exit 1' INT TERM && \
-	find assets/extra -mindepth 1 -maxdepth 1 ! -name README.md -exec mv {} "$$hold"/ \; && \
+	for f in $(EXTRA_FILES); do \
+		test -f assets/extra/$$f || { echo "assets/extra/$$f is missing: run make backend-extra-download" >&2; exit 1; }; \
+	done && \
+	version=$$(cat assets/extra.version) && \
+	hash=$$(cd assets/extra && cat $(EXTRA_FILES) | sha256sum | cut -c1-12) && \
+	test "$${version##*-}" = "$$hash" || { echo "assets/extra does not match assets/extra.version ($$version): run make backend-extra-download or backend-extra-upload" >&2; exit 1; } && \
 	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 \
 	go build -o $(LAMBDA_BINARY) ./cmd/api
+
+# 手元の assets/extra（scripts/update_assets.sh で作ったもの）を S3 に置き、assets/extra.version をその版にする。
+# 版は「取得日-中身のハッシュ」。同じ中身なら同じ版になる。実行後に assets/extra.version をコミットする
+backend-extra-upload:
+	cd $(BACKEND_DIR) && \
+	for f in $(EXTRA_FILES); do test -f assets/extra/$$f || { echo "assets/extra/$$f is missing" >&2; exit 1; }; done && \
+	hash=$$(cd assets/extra && cat $(EXTRA_FILES) | sha256sum | cut -c1-12) && \
+	version=$$(date -r assets/extra/station.json +%Y-%m-%d)-$$hash && \
+	for f in $(EXTRA_FILES); do \
+		aws s3 cp --only-show-errors assets/extra/$$f s3://$(LAMBDA_ARTIFACT_BUCKET)/$(EXTRA_PREFIX)/$$version/$$f || exit 1; \
+	done && \
+	echo $$version > assets/extra.version && \
+	echo "uploaded $$version (commit backend/assets/extra.version)"
+
+# assets/extra.version の版を S3 から assets/extra に取ってくる（手元の assets/extra は上書きされる）。
+# 中身のハッシュが版と合わなければ失敗する
+backend-extra-download:
+	cd $(BACKEND_DIR) && \
+	version=$$(cat assets/extra.version) && \
+	for f in $(EXTRA_FILES); do \
+		aws s3 cp --only-show-errors s3://$(LAMBDA_ARTIFACT_BUCKET)/$(EXTRA_PREFIX)/$$version/$$f assets/extra/$$f || exit 1; \
+	done && \
+	hash=$$(cd assets/extra && cat $(EXTRA_FILES) | sha256sum | cut -c1-12) && \
+	test "$${version##*-}" = "$$hash" || { echo "assets/extra does not match $$version" >&2; exit 1; }
 
 backend-package:
 	cd $(BACKEND_DIR) && \
@@ -128,6 +157,7 @@ backend-upload:
 		s3://$(LAMBDA_ARTIFACT_BUCKET)/$(LAMBDA_ARTIFACT_KEY)
 
 backend-deploy:
+	$(MAKE) backend-extra-download
 	$(MAKE) backend-build
 	$(MAKE) backend-package
 	$(MAKE) backend-upload

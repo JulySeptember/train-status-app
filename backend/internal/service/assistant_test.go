@@ -174,3 +174,12 @@ func TestGetDeparturesErrors(t *testing.T) {
 		t.Fatalf("expected ErrInvalidDepartureQuery, got %v", err)
 	}
 }
+
+func TestOperators(t *testing.T) {
+
+	got := newJourneyService(t).Operators()
+
+	if len(got) != 1 || got[0].Name != "都営交通" || !got[0].RouteSearch {
+		t.Fatalf("unexpected operators: %+v", got)
+	}
+}

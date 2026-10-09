@@ -273,3 +273,49 @@ func TestToolSearchRouteNoComparison(t *testing.T) {
 		t.Fatalf("unexpected comparison %v", content["comparison"])
 	}
 }
+
+func TestScope(t *testing.T) {
+
+	// 埋め込みの都営のデータだけなら、都営交通だけを対象に書き、経路検索に使えない事業者は書かない
+	scope := newTools(t, &trainClient{}).Scope()
+
+	if !strings.Contains(scope, "都営交通") || strings.Contains(scope, "経路を探せません") {
+		t.Errorf("unexpected scope: %q", scope)
+	}
+}
+
+// operatorsBackend は、扱う事業者だけを差し替えた Backend
+type operatorsBackend struct {
+	ai.Backend
+	operators []service.OperatorCoverage
+}
+
+func (b operatorsBackend) Operators() []service.OperatorCoverage { return b.operators }
+
+func TestScopeWithoutRouteSearch(t *testing.T) {
+
+	loader, err := assets.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tools := ai.NewTools(operatorsBackend{
+		Backend: service.New(&trainClient{}, loader),
+		operators: []service.OperatorCoverage{
+			{Name: "都営交通", RouteSearch: true},
+			{Name: "東京メトロ", RouteSearch: true},
+			{Name: "東急電鉄"},
+			{Name: "西武鉄道"},
+		},
+	})
+
+	scope := tools.Scope()
+
+	// 対象の事業者をすべて書き、経路検索に使えない事業者だけを「経路を探せません」に書く
+	if !strings.Contains(scope, "都営交通・東京メトロ・東急電鉄・西武鉄道") {
+		t.Errorf("operators are missing: %q", scope)
+	}
+	if !strings.Contains(scope, "東急電鉄・西武鉄道の駅は") || !strings.Contains(scope, "経路を探せません") {
+		t.Errorf("operators without route search are missing: %q", scope)
+	}
+}

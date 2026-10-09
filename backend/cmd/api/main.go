@@ -1,6 +1,6 @@
 // @title			Train Status API
 // @version		1.0
-// @description	Toei Transportation API
+// @description	Tokyo railway status, timetable and journey API (ODPT open data)
 // @BasePath		/
 package main
 
@@ -32,8 +32,8 @@ func main() {
 
 	c := client.New(odptSources(cfg.ODPTOperators), odptKeys(cfg, isLambda()))
 
-	// assets/extra に他社のデータがあれば読み込む。本番のビルド（make backend-build・CI）では
-	// extra/ をよけているので、都営だけになる
+	// assets/extra に他社のデータがあれば読み込む。本番のビルド（make backend-build）は S3 から取って埋め込む。
+	// 無ければ（CI のテストなど）都営だけで動く
 	loader, err := assets.New(assets.WithExtra())
 	if err != nil {
 		log.Fatal(err)

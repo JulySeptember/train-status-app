@@ -30,7 +30,8 @@ resource "aws_lambda_function" "this" {
 
   architectures = ["arm64"]
 
-  memory_size = 256
+  # 都営以外の事業者のデータで約250MB を使う（docs/design/multi-operator.md 11.1）
+  memory_size = 512
   timeout     = 30
 
   publish = false

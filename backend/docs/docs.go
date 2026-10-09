@@ -927,7 +927,7 @@ var SwaggerInfo = &swag.Spec{
 	BasePath:         "/",
 	Schemes:          []string{},
 	Title:            "Train Status API",
-	Description:      "Toei Transportation API",
+	Description:      "Tokyo railway status, timetable and journey API (ODPT open data)",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

@@ -279,12 +279,14 @@ function TrainTitle({ train }: Props) {
 export function TrainNotRunning({ train }: Props) {
   const { notRunning, scheduledStationId, scheduledStation, scheduledTime } =
     train;
+  // 直通運転の列車は他社の線内で走り続けるので、どの事業者の線内かを書く
+  const operatorName = useRailway(train.railwayId)?.operatorName;
 
   const heading =
     notRunning === "beforeDeparture"
       ? "まだ出発していません"
       : notRunning === "finished"
-        ? "都営線内の運行を終えました"
+        ? `${operatorName ? `${operatorName}の` : ""}線内の運行を終えました`
         : "位置を取得できません";
 
   return (

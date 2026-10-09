@@ -1,7 +1,7 @@
 {
     "swagger": "2.0",
     "info": {
-        "description": "Toei Transportation API",
+        "description": "Tokyo railway status, timetable and journey API (ODPT open data)",
         "title": "Train Status API",
         "contact": {},
         "version": "1.0"
