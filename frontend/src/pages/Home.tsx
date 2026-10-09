@@ -170,7 +170,7 @@ function StatusCard({
   railway: Railway;
   status?: TrainStatus;
 }) {
-  const normal = status ? isNormal(status.status) : true;
+  const normal = !status || status.unavailable || isNormal(status.status);
 
   return (
     <Link
@@ -187,6 +187,8 @@ function StatusCard({
 
         {!status ? (
           <p className="text-sm text-muted-foreground">運行情報なし</p>
+        ) : status.unavailable ? (
+          <p className="text-sm text-muted-foreground">{status.status}</p>
         ) : normal ? (
           <p className="flex items-center gap-1 text-sm text-brand">
             <CircleCheck size={14} />
@@ -230,7 +232,7 @@ function StatusSection() {
 
   const delayed = railways.data.filter((r) => {
     const s = statusOf(r.id);
-    return s && !isNormal(s.status);
+    return s && !s.unavailable && !isNormal(s.status);
   });
 
   const move = (activeId: string, overId: string) => {

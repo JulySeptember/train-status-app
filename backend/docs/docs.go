@@ -845,6 +845,10 @@ const docTemplate = `{
                 },
                 "status": {
                     "type": "string"
+                },
+                "unavailable": {
+                    "description": "事業者の運行情報を取得できなかったときは true（status は「運行情報を取得できませんでした」）",
+                    "type": "boolean"
                 }
             }
         }

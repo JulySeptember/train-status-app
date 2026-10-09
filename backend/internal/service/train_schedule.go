@@ -11,20 +11,20 @@ import (
 
 // 列車位置（odpt:Train）が配信されていないときの、本日のダイヤから見た列車の状態
 const (
-	// 都営線内の最初の駅をまだ出発していない（始発駅で発車を待っている、直通先から来る前など）
+	// 事業者の線内の最初の駅をまだ出発していない（始発駅で発車を待っている、直通先から来る前など）
 	NotRunningBeforeDeparture = "beforeDeparture"
 
-	// 都営線内の最後の駅に着いた
+	// 事業者の線内の最後の駅に着いた
 	NotRunningFinished = "finished"
 
-	// ダイヤでは都営線内を走っているはずだが、位置が配信されていない（始発駅での遅れなど）
+	// ダイヤでは事業者の線内を走っているはずだが、位置が配信されていない（始発駅での遅れなど）
 	NotRunningNoData = "noData"
 )
 
 // scheduleGraceMinutes は、位置が配信されていない列車を出発前・運行終了とみなす、時刻表の時刻の前後の余裕（分）
 const scheduleGraceMinutes = 2
 
-// trainSchedule は、本日のダイヤでの列車の都営線内の最初と最後の停車駅と時刻（運行日の0時からの分）
+// trainSchedule は、本日のダイヤでの列車の事業者の線内の最初と最後の停車駅と時刻（運行日の0時からの分）
 type trainSchedule struct {
 	railway       string
 	railDirection string
@@ -38,7 +38,7 @@ type trainSchedule struct {
 }
 
 // todaySchedule は、列車ID の本日のダイヤを列車時刻表から探す。
-// 常駐するデータを増やさないよう、索引は作らずに毎回探す（約5,600本）
+// 常駐するデータを増やさないよう、索引は作らずに毎回探す（都営だけで約5,600本）
 func (s *Service) todaySchedule(trainID string, now time.Time) (trainSchedule, bool) {
 
 	tt := s.assets.TrainTimetables()
@@ -112,8 +112,8 @@ func (s *Service) describeNotRunning(item *TrainLocation, sc trainSchedule, now 
 		item.ScheduledStation = s.stationName(sc.lastStation)
 		item.ScheduledTime = formatClock(sc.lastTime)
 		item.Message = fmt.Sprintf(
-			"%sに%sに着き、都営線内の運行を終えました",
-			item.ScheduledStation, item.ScheduledTime,
+			"%sに%sに着き、%s内の運行を終えました",
+			item.ScheduledStation, item.ScheduledTime, operatorLine(operatorOf(sc.railway)),
 		)
 
 	default:

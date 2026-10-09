@@ -2,6 +2,8 @@ export interface TrainStatus {
   railwayId: string;
   railway: string;
   status: string;
+  // 事業者の運行情報を取得できなかったときは true（status は「運行情報を取得できませんでした」）
+  unavailable?: boolean;
 }
 
 export interface Railway {

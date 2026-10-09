@@ -119,7 +119,7 @@ PR を作ったら、実装時の会話を持たないサブエージェント�
   - `service` はデータの加工・集約を担い、`model`（ODPT JSON-LD そのままの型）をフロント向けの DTO に変換する。DTO は service.go に定義する
   - `client` で外部 API を呼ぶのは運行情報（`odpt:TrainInformation`）と列車位置（`odpt:Train`）だけ。共通処理はジェネリクスの `fetch[T]`。事業者ごと（`client.Sources`）に並列に取り、一部が失敗しても残りを返す（全部失敗したときだけ `ErrExternalAPI`）。都営以外の事業者は環境変数 `ODPT_OPERATORS`（tfvars の `odpt_operators`）に書いたものだけを取る。キーは手元では `ODPT_CONSUMER_KEY`・`ODPT_CHALLENGE_CONSUMER_KEY`（`backend/.env`）、Lambda では SSM から読む（`internal/odptkey`）。キーは URL に入るので、`*url.Error` をそのままログやエラーに出さない
 - `assets/`: ODPT の静的データ（路線・駅・運賃・駅時刻表・列車時刻表・乗降人員・列車種別）を `go:embed` で埋め込み、起動時に全件読み込む。駅時刻表と列車時刻表は、それぞれ約25MBの JSON を埋め込まず、使う項目に絞って文字列表にまとめた `station_timetable.gob` / `train_timetable.gob`（`assets/slim`、`cmd/gen-assets` で生成）を埋め込む。Lambda のコールドスタートを短くするため。`model.StationTimetableEntry` も約12万件が常駐するので、使う項目以外を足さない。列車時刻表は経路探索用で、`model` の型に戻さず、文字列表の番号と分（3時前は +24時間）のまま `slim.TrainTimetables` で持つ
-- `internal/route`: 経路探索エンジン（RAPTOR）。遅れは `Query.Delays`（路線・方向ごと）で受け取り、パターンの時刻に足して探す（`shift`）。service（`service/realtime.go`）が `odpt:Train` の遅れの中央値と、運行情報の文章による見合わせの判定を30秒キャッシュして渡す。`GET /api/journeys` から使う。`slim.TrainTimetables` を数値のまま使い、駅・路線は ID の文字列で扱う（都営に決め打ちしない）。乗り換えの対応表（`route.Transfer`）は service（`service/transfer.go`）が作って渡す: 同じ名前の駅どうし（一律5分）と、名前が違う駅の組（東日本橋 ⇔ 馬喰横山）。同じ名前の駅は、出発駅・到着駅としては1つの駅にまとめる。設計は `docs/design/route-search.md`
+- `internal/route`: 経路探索エンジン（RAPTOR）。遅れは `Query.Delays`（路線・方向ごと）で受け取り、パターンの時刻に足して探す（`shift`）。service（`service/realtime.go`）が `odpt:Train` の遅れの中央値と、運行情報の文章による見合わせの判定を30秒キャッシュして渡す。`GET /api/journeys` から使う。`slim.TrainTimetables` を数値のまま使い、駅・路線は ID の文字列で扱う（都営に決め打ちしない）。乗り換えの対応表（`route.Transfer`）は service（`service/transfer.go`）が作って渡す: 600m 以内の同じ名前の駅どうし、他社の駅データの `odpt:connectingStation`（逆向きも足す）、都営の名前が違う駅の組（東日本橋 ⇔ 馬喰横山）。時間は駅の座標の距離から決める。600m 以内の同じ名前の駅は、出発駅・到着駅としては1つの駅にまとめ、出発駅・到着駅から対応表で歩ける駅でも乗り降りする（歩く時間は経路の出発・到着の時刻に含める）。設計は `docs/design/route-search.md`
 - `internal/ai`: AI エージェント（`POST /api/chat`）。AI が道具（`tools.go`）を呼び、アプリが service の照会（`service/assistant.go`）を実行して結果を返す、を最大5往復繰り返す。Provider は Gemini（`ai/gemini`、REST を直接呼ぶ）とテスト用の `ai/fake`。駅名の特定は `internal/station`。API キーが無いとき（手元で `GEMINI_API_KEY` を設定していないとき、Lambda では SSM の準備ができるまで）は `/api/chat` が 503 を返す。ログに入力・応答の本文を残さない。設計は `docs/design/ai-api.md`
 - `internal/calendar`: 運行日（3時前は前日扱い）と、その日に適用されるダイヤ種別（`odpt.Calendar:*`）を判定する。祝日は祝日法に基づいて計算する
 - テストは `service`・`route`・`handler`・`calendar`・`assets`・`ai`・`station` にある。service のテストは `mockClient` と実際の embed アセットを使う。route のテストは小さな架空の路線網で確かめる
@@ -127,12 +127,12 @@ PR を作ったら、実装時の会話を持たないサブエージェント�
 ### ODPT データの注意点
 
 - 列車番号（`odpt:trainNumber`）は路線間で重複し、平日・土休日ダイヤでも使い回される。列車は必ず列車ID（`odpt.Train:Toei.<路線>.<番号>`）で特定する。service は起動時に駅時刻表から列車ID → 路線・列車番号の索引を作る
-- 日暮里・舎人ライナーは `odpt:Train` が配信されない（`trainLocationUnsupported`）。荒川線は `odpt:Train` は配信されるが `odpt:delay` が null（`model` では 0 になる）
+- 日暮里・舎人ライナーは `odpt:Train` が配信されない（`trainLocationUnsupported`）。荒川線は `odpt:Train` は配信されるが `odpt:delay` が null（`model` では 0 になる）。他社は、`odpt:Train` を配信している事業者を `client.Sources` の `Location` で表す（メトロなどは配信していない。京急は `odpt:delay` が null）
 - `odpt:Train` で `toStation` が null の列車は `fromStation` に停車中
 - `odpt:Train` は走り出した列車しか配信しない。始発駅で発車を待つ列車（浅草線の泉岳寺始発など）は、時刻表の次発でも位置が無い。位置の無い列車の状態（出発前・運行終了）は、本日の列車時刻表から判定している（`service/train_schedule.go`）
 - 路線によって「土曜・休日」が別ダイヤのものと「土休日」にまとめられたものがある（フロントの `Timetable.tsx` も両方に対応している）
-- 時刻表の行先には直通運転先（京急・京成・東急など他社）の駅が含まれるが、他社の駅データは公開 API から取れない。駅名は `service/through_service.go` の辞書で引く。assets 更新後に起動ログへ `unknown destination station` が出たら辞書に追加する
-- 駅データ（`station.json`）には乗り換え先の情報がない。経路探索の乗り換えは同じ名前の駅から作り、名前が違う乗り換え駅は `service/transfer.go` の `differentNameTransfers` に手で足す
+- 時刻表の行先には直通運転先（京急・京成・東急など他社）の駅が含まれるが、他社の駅データは公開 API から取れない。駅名は `service/through_service.go` の辞書で引く（`assets/extra` があれば、都外の行先駅は `extra/destination_station.json` から引く）。assets 更新後に起動ログへ `unknown destination station` が出たら辞書に追加する（辞書には ODPT にデータの無い事業者の駅だけを書く）
+- 都営の駅データ（`station.json`）には乗り換え先の情報（`odpt:connectingStation`）がない（他社の駅データにはある）。都営どうしの名前が違う乗り換え駅は `service/transfer.go` の `differentNameTransfers` に手で足す
 - 大江戸線の環状部（外回り・内回り）は、駅時刻表に行先（`odpt:destinationStation`）が入っていない
 - ODPT 公開 API は1回の取得で最大1,000件しか返さない。`railway_fare.json` はちょうど1,000件で、途中までしか取れていない。列車時刻表は全件ダウンロード用の URL（`odpt:TrainTimetable.json`、リダイレクトされる）から取っている
 - ODPT のデータの一覧は `https://ckan.odpt.org/dataset/?_organization_limit=0&tags=%E9%89%84%E9%81%93-railway`（鉄道）。CKAN の API は使えないので HTML から読む。都営は JSON のほかに GTFS / GTFS-RT もあるが使っていない（理由は `docs/design/route-search.md` 3章）

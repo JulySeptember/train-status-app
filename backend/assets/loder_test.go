@@ -176,6 +176,9 @@ func extraTestFiles(t *testing.T) map[string][]byte {
 		"train_type.json":       marshal([]model.TrainType{{SameAs: "odpt.TrainType:Test.Local", Operator: "odpt.Operator:Test"}}),
 		"station_timetable.gob": stationTimetable.Bytes(),
 		"train_timetable.gob":   trainTimetable.Bytes(),
+		"destination_station.json": marshal([]model.Station{
+			{SameAs: "odpt.Station:Test.Line.Outside", StationTitle: model.LocalizedString{Ja: "都外"}},
+		}),
 	}
 }
 
@@ -214,6 +217,7 @@ func TestLoadExtra(t *testing.T) {
 			"train types":        {len(l.TrainTypes()), len(base.TrainTypes()) + 1},
 			"station timetables": {len(l.StationTimetables()), len(base.StationTimetables()) + 1},
 			"trains":             {len(l.TrainTimetables().Trains), len(base.TrainTimetables().Trains) + 1},
+			"destinations":       {len(l.DestinationStations()), 1},
 		} {
 			if pair[0] != pair[1] {
 				t.Errorf("%s: expected %d, got %d", name, pair[1], pair[0])

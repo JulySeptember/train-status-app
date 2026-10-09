@@ -20,6 +20,9 @@ var calendarNames = map[string]string{
 	"odpt.Calendar:Saturday":        "土曜",
 	"odpt.Calendar:Holiday":         "休日",
 	"odpt.Calendar:SaturdayHoliday": "土休日",
+
+	// 京王の競馬開催日の土休日ダイヤ。開催日はデータに無いので、経路検索では使わない
+	"odpt.Calendar:Specific.Keio.SaturdayHolidayOnRaceDay": "土休日（競馬開催日）",
 }
 
 func railDirectionName(id string) string {

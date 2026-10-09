@@ -35,6 +35,7 @@ var extraFiles = []string{
 	"train_type.json",
 	"station_timetable.gob",
 	"train_timetable.gob",
+	"destination_station.json",
 }
 
 type Loader struct {
@@ -45,6 +46,9 @@ type Loader struct {
 	trainTimetables   *slim.TrainTimetables
 	passengerSurveys  []model.PassengerSurvey
 	trainTypes        []model.TrainType
+
+	// 都外の行先駅（駅ID と駅名だけ）。extra/ を読み込んだときだけ
+	destinationStations []model.Station
 
 	hasExtra bool
 }
@@ -140,6 +144,7 @@ func (l *Loader) loadExtra(fsys fs.FS) error {
 		trainTypes        []model.TrainType
 		stationTimetables []model.StationTimetable
 		trainTimetables   *slim.TrainTimetables
+		destinations      []model.Station
 	)
 
 	if err := load(fsys, extraDir+"/railway.json", &railways); err != nil {
@@ -162,11 +167,16 @@ func (l *Loader) loadExtra(fsys fs.FS) error {
 		return err
 	}
 
+	if err := load(fsys, extraDir+"/destination_station.json", &destinations); err != nil {
+		return err
+	}
+
 	l.railways = append(l.railways, railways...)
 	l.stations = append(l.stations, stations...)
 	l.trainTypes = append(l.trainTypes, trainTypes...)
 	l.stationTimetables = append(l.stationTimetables, stationTimetables...)
 	l.trainTimetables = slim.MergeTrainTimetables(l.trainTimetables, trainTimetables)
+	l.destinationStations = destinations
 	l.hasExtra = true
 
 	return nil
@@ -241,6 +251,12 @@ func (l *Loader) StationTimetables() []model.StationTimetable {
 // TrainTimetables は経路探索用の列車時刻表を返す。呼び出し側で書き換えてはいけない。
 func (l *Loader) TrainTimetables() *slim.TrainTimetables {
 	return l.trainTimetables
+}
+
+// DestinationStations は、時刻表の行先に現れる都外の駅（駅ID と駅名だけ）を返す。
+// Stations には含まれず、出発駅・到着駅にはできない。
+func (l *Loader) DestinationStations() []model.Station {
+	return l.destinationStations
 }
 
 func (l *Loader) PassengerSurveys() []model.PassengerSurvey {

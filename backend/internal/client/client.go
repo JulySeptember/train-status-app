@@ -14,6 +14,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"slices"
 	"sync"
 	"time"
 
@@ -21,6 +22,9 @@ import (
 )
 
 var ErrExternalAPI = errors.New("external api error")
+
+// ErrNoSource は、問い合わせる事業者が無いこと（設定していない、または配信していない）。
+var ErrNoSource = errors.New("no source for the operator")
 
 // maxRecords は、ODPT の API が1回に返す件数の上限。
 const maxRecords = 1000
@@ -117,8 +121,18 @@ func New(sources []Source, key KeyFunc) *Client {
 	}
 }
 
-func (c *Client) GetTrainStatus(ctx context.Context) ([]model.TrainStatus, error) {
-	return fetchAll[model.TrainStatus](ctx, c, "odpt:TrainInformation", func(s Source) (string, bool) {
+// Result は、事業者ごとに取得した結果をまとめたもの。
+type Result[T any] struct {
+	Items []T
+
+	// 取得できた事業者と、取得に失敗した事業者（Source.Name。問い合わせた順）
+	Succeeded []string
+	Failed    []string
+}
+
+// GetTrainStatus は、運行情報を全事業者から取る。
+func (c *Client) GetTrainStatus(ctx context.Context) (Result[model.TrainStatus], error) {
+	return fetchAll[model.TrainStatus](ctx, c, c.sources, "odpt:TrainInformation", func(s Source) (string, bool) {
 		operator := s.StatusOperator
 		if operator == "" {
 			operator = s.Name
@@ -127,20 +141,42 @@ func (c *Client) GetTrainStatus(ctx context.Context) ([]model.TrainStatus, error
 	})
 }
 
-func (c *Client) GetTrainLocations(ctx context.Context) ([]model.TrainLocation, error) {
-	return fetchAll[model.TrainLocation](ctx, c, "odpt:Train", func(s Source) (string, bool) {
-		return s.Name, s.Location
-	})
+// GetTrainLocations は、列車位置を全事業者から取る。
+func (c *Client) GetTrainLocations(ctx context.Context) (Result[model.TrainLocation], error) {
+	return fetchAll[model.TrainLocation](ctx, c, c.sources, "odpt:Train", locationTarget)
+}
+
+// GetOperatorTrainLocations は、1つの事業者（odpt.Operator:<Name> の Name）の列車位置だけを取る。
+// その事業者を設定していないか、列車位置を配信していなければ ErrNoSource を返す。
+func (c *Client) GetOperatorTrainLocations(ctx context.Context, operator string) ([]model.TrainLocation, error) {
+
+	i := slices.IndexFunc(c.sources, func(s Source) bool { return s.Name == operator && s.Location })
+	if i < 0 {
+		return nil, ErrNoSource
+	}
+
+	result, err := fetchAll[model.TrainLocation](ctx, c, c.sources[i:i+1], "odpt:Train", locationTarget)
+	if err != nil {
+		return nil, err
+	}
+
+	return result.Items, nil
+}
+
+func locationTarget(s Source) (string, bool) {
+	return s.Name, s.Location
 }
 
 // fetchAll は、各事業者から並列に取得してまとめる。
-// 一部の事業者が失敗しても、残りの結果を返す（失敗はログに出す）。全部失敗したときだけエラーを返す。
+// 一部の事業者が失敗しても、残りの結果を返す（失敗はログに出し、Result.Failed に入れる）。
+// 全部失敗したときだけエラーを返す。
 func fetchAll[T any](
 	ctx context.Context,
 	c *Client,
+	sources []Source,
 	endpoint string,
 	target func(Source) (operator string, ok bool),
-) ([]T, error) {
+) (Result[T], error) {
 
 	type result struct {
 		data []T
@@ -149,10 +185,10 @@ func fetchAll[T any](
 
 	var (
 		wg      sync.WaitGroup
-		results = make([]*result, len(c.sources))
+		results = make([]*result, len(sources))
 	)
 
-	for i, s := range c.sources {
+	for i, s := range sources {
 		operator, ok := target(s)
 		if !ok {
 			continue
@@ -165,34 +201,31 @@ func fetchAll[T any](
 
 	wg.Wait()
 
-	var (
-		data      []T
-		attempted int
-		failed    int
-	)
+	var out Result[T]
 
 	for i, r := range results {
 		if r == nil {
 			continue
 		}
-		attempted++
+		name := sources[i].Name
 		if r.err != nil {
-			failed++
-			log.Printf("odpt %s %s: %v", endpoint, c.sources[i].Name, r.err)
+			out.Failed = append(out.Failed, name)
+			log.Printf("odpt %s %s: %v", endpoint, name, r.err)
 			continue
 		}
 		// ODPT の API は1回に 1,000 件までしか返さない。切れていても分からないので知らせる
 		if len(r.data) >= maxRecords {
-			log.Printf("odpt %s %s: %d records, the result may be truncated", endpoint, c.sources[i].Name, len(r.data))
+			log.Printf("odpt %s %s: %d records, the result may be truncated", endpoint, name, len(r.data))
 		}
-		data = append(data, r.data...)
+		out.Succeeded = append(out.Succeeded, name)
+		out.Items = append(out.Items, r.data...)
 	}
 
-	if attempted > 0 && failed == attempted {
-		return nil, ErrExternalAPI
+	if len(out.Failed) > 0 && len(out.Succeeded) == 0 {
+		return Result[T]{}, ErrExternalAPI
 	}
 
-	return data, nil
+	return out, nil
 }
 
 func fetchSource[T any](ctx context.Context, c *Client, host Host, endpoint, operator string) ([]T, error) {

@@ -80,7 +80,7 @@ func (t *Tools) Definitions() []Tool {
 		},
 		{
 			Name: "get_train_status",
-			Description: "都営交通の全路線の現在の運行状況を返す。state は normal（平常）・delayed（遅延）・suspended（運転見合わせ）。" +
+			Description: "都営交通の全路線の現在の運行状況を返す。state は normal（平常）・delayed（遅延）・suspended（運転見合わせ）・unknown（運行情報を取得できない）。" +
 				"delayMinutes は走っている列車の遅れの目安（分）。",
 			Parameters: json.RawMessage(`{"type": "object", "properties": {}}`),
 		},

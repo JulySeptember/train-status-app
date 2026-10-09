@@ -9,6 +9,7 @@ import (
 	"train-status-app/backend/assets"
 	"train-status-app/backend/internal/ai"
 	"train-status-app/backend/internal/ai/fake"
+	"train-status-app/backend/internal/client"
 	"train-status-app/backend/internal/model"
 	"train-status-app/backend/internal/service"
 )
@@ -19,11 +20,18 @@ type trainClient struct {
 	locations []model.TrainLocation
 }
 
-func (c *trainClient) GetTrainStatus(context.Context) ([]model.TrainStatus, error) {
-	return c.statuses, nil
+func (c *trainClient) GetTrainStatus(context.Context) (client.Result[model.TrainStatus], error) {
+	return client.Result[model.TrainStatus]{Items: c.statuses, Succeeded: []string{"Toei"}}, nil
 }
 
-func (c *trainClient) GetTrainLocations(context.Context) ([]model.TrainLocation, error) {
+func (c *trainClient) GetTrainLocations(context.Context) (client.Result[model.TrainLocation], error) {
+	return client.Result[model.TrainLocation]{Items: c.locations, Succeeded: []string{"Toei"}}, nil
+}
+
+func (c *trainClient) GetOperatorTrainLocations(_ context.Context, operator string) ([]model.TrainLocation, error) {
+	if operator != "Toei" {
+		return nil, client.ErrNoSource
+	}
 	return c.locations, nil
 }
 

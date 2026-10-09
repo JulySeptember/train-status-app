@@ -17,20 +17,64 @@ type mockClient struct {
 	trainStatus    []model.TrainStatus
 	trainLocations []model.TrainLocation
 
+	// 運行情報を取得できた事業者と、失敗した事業者。statusSucceeded が nil なら都営だけが成功
+	statusSucceeded []string
+	statusFailed    []string
+
 	statusErr error
 	locErr    error
+
+	// true なら GetOperatorTrainLocations が client.ErrNoSource を返す（事業者を設定していない）
+	locNoSource bool
+
+	// GetOperatorTrainLocations で問い合わせた事業者
+	locationOperators []string
 }
 
 func (m *mockClient) GetTrainStatus(
 	ctx context.Context,
-) ([]model.TrainStatus, error) {
-	return m.trainStatus, m.statusErr
+) (client.Result[model.TrainStatus], error) {
+	if m.statusErr != nil {
+		return client.Result[model.TrainStatus]{}, m.statusErr
+	}
+	succeeded := m.statusSucceeded
+	if succeeded == nil {
+		succeeded = []string{"Toei"}
+	}
+	return client.Result[model.TrainStatus]{
+		Items:     m.trainStatus,
+		Succeeded: succeeded,
+		Failed:    m.statusFailed,
+	}, nil
 }
 
 func (m *mockClient) GetTrainLocations(
 	ctx context.Context,
+) (client.Result[model.TrainLocation], error) {
+	if m.locErr != nil {
+		return client.Result[model.TrainLocation]{}, m.locErr
+	}
+	return client.Result[model.TrainLocation]{Items: m.trainLocations, Succeeded: []string{"Toei"}}, nil
+}
+
+func (m *mockClient) GetOperatorTrainLocations(
+	ctx context.Context,
+	operator string,
 ) ([]model.TrainLocation, error) {
-	return m.trainLocations, m.locErr
+	m.locationOperators = append(m.locationOperators, operator)
+	if m.locNoSource {
+		return nil, client.ErrNoSource
+	}
+	if m.locErr != nil {
+		return nil, m.locErr
+	}
+	var result []model.TrainLocation
+	for _, t := range m.trainLocations {
+		if operatorOf(t.SameAs) == operator {
+			result = append(result, t)
+		}
+	}
+	return result, nil
 }
 
 func TestAssociateBy(t *testing.T) {
