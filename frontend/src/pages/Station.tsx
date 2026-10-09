@@ -22,9 +22,11 @@ export default function Station() {
 
   const railway = useRailway(railwayIdOf(stationId));
 
-  // 駅の一覧で方向を選んできたときは、その方向で開く
-  const [params] = useSearchParams();
-  const [direction, setDirection] = useState(params.get("direction") ?? "");
+  // 方向は URL に残す。駅の一覧で方向を選んできたときは、その方向で開く
+  const [params, setParams] = useSearchParams();
+  const direction = params.get("direction") ?? "";
+  const setDirection = (value: string) =>
+    setParams({ direction: value }, { replace: true });
   const [showPassengers, setShowPassengers] = useState(false);
 
   if (isPending) {
