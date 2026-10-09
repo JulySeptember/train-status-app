@@ -150,7 +150,10 @@ func Infer(l Line) []Train {
 						}
 						want := expected(c.last, i)
 						// 所要時間の見込みより大きく遅いものはつながない。
-						// 見込みは各駅の所要時間の和なので、途中を通過する急行は見込みより速く着く（下限は設けない）
+						// 見込みは各駅の所要時間の和なので、途中を通過する急行は見込みより速く着く（下限は設けない）。
+						// 下限が無いので、途中の駅から入ってくる列車（直通運転などで始発の印が無い）を、直前に通った
+						// 別の列車の続きとしてつなぐことがある（測った各社で、つなぎの約0.2%）。下限（区間ごとの最短の和）や、
+						// 見込みとの差の小さい組から決める方法も試したが、急行の多い京王・東武・JR で正しさが下がった
 						if gap > want*2+10 {
 							continue
 						}
@@ -233,4 +236,58 @@ func terminalRun(c *chain, dest int, index map[string]int, expected func(from, t
 	}
 
 	return max((want*elapsed+span/2)/span, 1)
+}
+
+// Orient は、駅の並びが列車の進む向きと逆なら、逆にした Line を返す。
+// 路線の駅の並び（odpt:stationOrder）と昇る向き（odpt:ascendingRailDirection）から決めた向きが、
+// 駅時刻表と合わないことがある（東急新横浜線: 並びは新横浜 → 日吉、昇る向きの Outbound は日吉 → 新横浜）。
+// 列車は行先の駅へ向かって進むので、行先が路線の駅である発車のうち、行先が発車の駅より後ろにある数と
+// 前にある数を比べ、前にある方が多ければ逆にする（本数の多い路線では、時刻の進み方ではどちらの向きでも
+// 次の発車が見つかり、見分けられない）。
+func Orient(l Line) Line {
+
+	index := make(map[string]int, len(l.Stations))
+	for i, s := range l.Stations {
+		index[s] = i
+	}
+
+	ahead, behind := 0, 0
+	for station, ds := range l.Departures {
+		from, ok := index[station]
+		if !ok {
+			continue
+		}
+		for _, d := range ds {
+			to, ok := index[d.Destination]
+			switch {
+			case !ok || to == from:
+			case to > from:
+				ahead++
+			default:
+				behind++
+			}
+		}
+	}
+
+	if behind > ahead {
+		reversed := slices.Clone(l.Stations)
+		slices.Reverse(reversed)
+		return Line{Stations: reversed, Departures: l.Departures}
+	}
+	return l
+}
+
+// Unplaced は、駅の並びに無い駅の発車の数を返す（Infer はこれらの発車を使わない）。
+func Unplaced(l Line) int {
+	known := make(map[string]bool, len(l.Stations))
+	for _, s := range l.Stations {
+		known[s] = true
+	}
+	n := 0
+	for station, ds := range l.Departures {
+		if !known[station] {
+			n += len(ds)
+		}
+	}
+	return n
 }

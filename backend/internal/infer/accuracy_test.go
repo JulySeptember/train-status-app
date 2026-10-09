@@ -124,12 +124,19 @@ func buildLines(railways []rawRailway, timetables []rawStationTimetable, operato
 		lines[id] = l
 	}
 
+	for id, l := range lines {
+		lines[id] = Orient(l)
+	}
+
 	return lines
 }
 
 type accuracy struct {
 	links, correctLinks int
 	trains, exact       int
+
+	// 路線の中で2駅以上発車する列車だけ（1駅だけの列車は、1駅の列車として推定すれば必ず正しくなる）
+	longTrains, longExact int
 
 	// 終点の到着時刻の見込みと本物の差（分）。本物の列車時刻表がある列車だけ
 	terminals []int
@@ -147,10 +154,18 @@ func measure(lines map[string]Line, arrivals map[[3]string]int) accuracy {
 		truth := make(map[string]int) // 本物の列車 → 発車の数
 		for _, ds := range l.Departures {
 			for _, d := range ds {
+				if d.Truth == "" {
+					panic("a departure without odpt:train cannot be measured")
+				}
 				truth[d.Truth]++
 			}
 		}
 		a.trains += len(truth)
+		for _, n := range truth {
+			if n >= 2 {
+				a.longTrains++
+			}
+		}
 
 		for _, tr := range Infer(l) {
 			same := true
@@ -164,6 +179,9 @@ func measure(lines map[string]Line, arrivals map[[3]string]int) accuracy {
 			}
 			if same && truth[tr.Stops[0].Truth] == len(tr.Stops) {
 				a.exact++
+				if len(tr.Stops) >= 2 {
+					a.longExact++
+				}
 				if real, ok := arrivals[[3]string{tr.Stops[0].Truth, calendar, tr.Terminal}]; ok && tr.Terminal != "" {
 					a.terminals = append(a.terminals, tr.TerminalMinutes-real)
 				}
@@ -175,9 +193,10 @@ func measure(lines map[string]Line, arrivals map[[3]string]int) accuracy {
 }
 
 func (a accuracy) String() string {
-	s := fmt.Sprintf("links %d/%d (%.1f%%), trains %d/%d (%.1f%%)",
+	s := fmt.Sprintf("links %d/%d (%.1f%%), trains %d/%d (%.1f%%; 2+ stops %.1f%%)",
 		a.correctLinks, a.links, 100*float64(a.correctLinks)/float64(max(a.links, 1)),
-		a.exact, a.trains, 100*float64(a.exact)/float64(max(a.trains, 1)))
+		a.exact, a.trains, 100*float64(a.exact)/float64(max(a.trains, 1)),
+		100*float64(a.longExact)/float64(max(a.longTrains, 1)))
 	if len(a.terminals) > 0 {
 		d := slices.Clone(a.terminals)
 		slices.Sort(d)
@@ -220,11 +239,14 @@ func TestAccuracy(t *testing.T) {
 	assetsDir := filepath.Join("..", "..", "assets")
 	cacheDir := filepath.Join("..", "..", ".odpt-cache")
 
-	railways, _ := readJSONFile[[]rawRailway](t, filepath.Join(assetsDir, "railway.json"))
-	timetables, _ := readJSONFile[[]rawStationTimetable](t, filepath.Join(assetsDir, "station_timetable.json"))
-	trainTimetables, _ := readJSONFile[[]rawTrainTimetable](t, filepath.Join(assetsDir, "train_timetable.json"))
+	railways, ok1 := readJSONFile[[]rawRailway](t, filepath.Join(assetsDir, "railway.json"))
+	timetables, ok2 := readJSONFile[[]rawStationTimetable](t, filepath.Join(assetsDir, "station_timetable.json"))
+	trainTimetables, ok3 := readJSONFile[[]rawTrainTimetable](t, filepath.Join(assetsDir, "train_timetable.json"))
+	if !ok1 || !ok2 || !ok3 {
+		t.Fatal("Toei assets are missing")
+	}
 
-	// 大江戸線の環状部は行先が無いので除く
+	// 大江戸線は環状部に行先が無いので除く
 	toei := buildLines(railways, timetables, "odpt.Operator:Toei")
 	for id := range toei {
 		if strings.HasPrefix(id, "odpt.Railway:Toei.Oedo ") {
@@ -243,7 +265,7 @@ func TestAccuracy(t *testing.T) {
 	}
 	a := measure(subway, arrivalsOf(trainTimetables))
 	t.Logf("Toei subway: %v", a)
-	if a.correctLinks*100 < a.links*99 || a.exact*100 < a.trains*98 {
+	if a.trains < 3000 || a.correctLinks*100 < a.links*99 || a.longExact*100 < a.longTrains*98 {
 		t.Errorf("Toei subway accuracy is too low: %v", a)
 	}
 

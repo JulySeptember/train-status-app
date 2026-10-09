@@ -95,3 +95,74 @@ func TestInferThroughDestination(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
+
+// 所要時間の見込みの2倍＋10分より遅い発車はつながない
+func TestInferGapLimit(t *testing.T) {
+
+	l := Line{
+		Stations: []string{"A", "B"},
+		Departures: map[string][]Departure{
+			"A": {dep("A", 100, "Local", "X"), dep("A", 200, "Local", "X"), dep("A", 300, "Local", "X")},
+			// 所要時間の見込みは2分（中央値）。3本目は 2*2+10 = 14分を超える15分
+			"B": {dep("B", 102, "Local", "X"), dep("B", 202, "Local", "X"), dep("B", 315, "Local", "X")},
+		},
+	}
+
+	want := [][]string{{"A@100", "B@102"}, {"A@200", "B@202"}, {"A@300"}, {"B@315"}}
+	if got := trainsOf(Infer(l)); !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+// 終点の見込みは、その列車が走った区間の速さで縮める（各駅の所要時間の和より速い急行）
+func TestInferTerminalSpeed(t *testing.T) {
+
+	// 各停は A-B-C-D-E を各駅2分。急行は A・C に停まり、A → C を2分（各駅の和の半分）で走る
+	l := Line{
+		Stations: []string{"A", "B", "C", "D", "E"},
+		Departures: map[string][]Departure{
+			"A": {dep("A", 100, "Local", "E"), dep("A", 105, "Express", "E")},
+			"B": {dep("B", 102, "Local", "E")},
+			"C": {dep("C", 104, "Local", "E"), dep("C", 107, "Express", "E")},
+			"D": {dep("D", 106, "Local", "E")},
+		},
+	}
+
+	want := [][]string{
+		{"A@100", "B@102", "C@104", "D@106", "E=108"},
+		// C → E の見込み4分を、速さ（2分 ÷ 4分）で縮めて2分
+		{"A@105", "C@107", "E=109"},
+	}
+	if got := trainsOf(Infer(l)); !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+// 駅の並びが進む向きと逆なら、逆にする
+func TestOrient(t *testing.T) {
+
+	l := Line{
+		Stations: []string{"C", "B", "A"},
+		Departures: map[string][]Departure{
+			"A": {dep("A", 100, "Local", "C")},
+			"B": {dep("B", 102, "Local", "C")},
+		},
+	}
+
+	if got := Orient(l).Stations; !reflect.DeepEqual(got, []string{"A", "B", "C"}) {
+		t.Errorf("got %v", got)
+	}
+	if got := Orient(Orient(l)).Stations; !reflect.DeepEqual(got, []string{"A", "B", "C"}) {
+		t.Errorf("orienting twice: got %v", got)
+	}
+}
+
+func TestUnplaced(t *testing.T) {
+	l := Line{
+		Stations:   []string{"A"},
+		Departures: map[string][]Departure{"A": {dep("A", 100, "L", "A")}, "Z": {dep("Z", 1, "L", "A"), dep("Z", 2, "L", "A")}},
+	}
+	if got := Unplaced(l); got != 2 {
+		t.Errorf("got %d", got)
+	}
+}
