@@ -146,11 +146,8 @@ func (n *network) search(
 			start := first[pi]
 
 			p := &n.patterns[pi]
-			if c.avoid[p.railway] {
-				continue
-			}
 
-			sh := c.shift(n, p)
+			shifts := c.shifts(n, p)
 
 			trip, board := -1, int32(-1)
 
@@ -158,7 +155,15 @@ func (n *network) search(
 
 				s := p.stops[i]
 
-				if trip >= 0 {
+				seg := p.segAt(i)
+				if c.avoided(p, seg) {
+					// 使わない路線の区間には乗り続けない（直通運転の列車は、その手前で降りる）
+					trip = -1
+					continue
+				}
+				sh := shifts[seg]
+
+				if trip >= 0 && p.canAlight(i) {
 					a := sh.apply(p.alightAt(trip, i))
 
 					// 到着駅にすでにもっと早く着けるなら、この先を調べる必要はない
@@ -187,11 +192,11 @@ func (n *network) search(
 
 				// この駅で、今の列車より早い列車に乗れるか
 				r := prev.ready[s]
-				if r >= unreachable {
+				if r >= unreachable || !p.canBoard(i) {
 					continue
 				}
 
-				limit := len(p.trains)
+				limit := p.trips()
 				if trip >= 0 {
 					limit = trip
 				}
@@ -255,7 +260,13 @@ func (n *network) journey(e *Engine, c *conditions, rounds []round, k int, to in
 
 	for {
 		p := &n.patterns[l.pattern]
-		legs = append(legs, n.leg(e, p, c.shift(n, p), l))
+
+		// さかのぼって組み立てるので、元の向きでは後の区間から足す（逆向きでは元の向きの順になる）
+		parts := n.legs(e, p, c.shifts(n, p), l)
+		if !n.reversed {
+			slices.Reverse(parts)
+		}
+		legs = append(legs, parts...)
 
 		b := p.stops[l.board]
 		prev := rounds[l.round-1]
@@ -288,32 +299,77 @@ func (n *network) journey(e *Engine, c *conditions, rounds []round, k int, to in
 	}
 }
 
-// leg は乗った区間を、元の向きの Leg にする。
-func (n *network) leg(e *Engine, p *pattern, sh shift, l tripLabel) Leg {
+// legs は乗った区間を、元の向きの Leg にする。直通運転の列車は、元の列車（区間）ごとに分け、
+// 2つ目からを Through にする。元の向きの順に返す。
+func (n *network) legs(e *Engine, p *pattern, shifts []shift, l tripLabel) []Leg {
 
-	train := e.tt.Trains[p.trains[l.trip]]
+	size := len(p.stops)
+	trip := int(l.trip)
 
-	leg := Leg{
-		Railway:       e.tt.String(train.Railway),
-		RailDirection: e.tt.String(train.RailDirection),
-		Train:         e.tt.String(train.Train),
-		TrainNumber:   e.tt.String(train.TrainNumber),
-		TrainType:     e.tt.String(train.TrainType),
-		Destination:   e.tt.String(train.Destination),
-		From:          e.stationIDs[p.stops[l.board]],
-		To:            e.stationIDs[p.stops[l.alight]],
-		Departure:     int(sh.apply(p.boardAt(int(l.trip), int(l.board)))),
-		Arrival:       int(sh.apply(p.alightAt(int(l.trip), int(l.alight)))),
+	// 元の向きの位置 j を、パターンの位置にする
+	at := func(j int) int {
+		if n.reversed {
+			return size - 1 - j
+		}
+		return j
 	}
 
-	// 遅れは元の向きの発車時刻で求める（逆向きでは、降りる位置の時刻が元の発車時刻）
-	scheduled := p.boardAt(int(l.trip), int(l.board))
+	// 元の向きの位置 j での、遅れを足した発車・到着の時刻と、時刻表の発車時刻
+	departure := func(j int) (int32, int32) {
+		i := at(j)
+		sh := shifts[p.segAt(i)]
+		if n.reversed {
+			return -sh.apply(p.alightAt(trip, i)), -p.alightAt(trip, i)
+		}
+		return sh.apply(p.boardAt(trip, i)), p.boardAt(trip, i)
+	}
+	arrival := func(j int) int32 {
+		i := at(j)
+		sh := shifts[p.segAt(i)]
+		if n.reversed {
+			return -sh.apply(p.boardAt(trip, i))
+		}
+		return sh.apply(p.alightAt(trip, i))
+	}
+
+	from, to := int(l.board), int(l.alight)
 	if n.reversed {
-		leg.From, leg.To = leg.To, leg.From
-		leg.Departure, leg.Arrival = -leg.Arrival, -leg.Departure
-		scheduled = -p.alightAt(int(l.trip), int(l.alight))
+		from, to = at(to), at(from)
 	}
-	leg.Delay = leg.Departure - int(scheduled)
 
-	return leg
+	var result []Leg
+
+	for j := from; j < to; {
+
+		seg := p.segAt(at(j))
+
+		// この区間で降りる位置（区間の終点か、降りる駅）
+		end := j
+		for end < to && p.segAt(at(end+1)) == seg {
+			end++
+		}
+
+		train := e.tt.Trains[p.train(trip, seg)]
+		dep, scheduled := departure(j)
+
+		result = append(result, Leg{
+			Railway:       e.tt.String(train.Railway),
+			RailDirection: e.tt.String(train.RailDirection),
+			Train:         e.tt.String(train.Train),
+			TrainNumber:   e.tt.String(train.TrainNumber),
+			TrainType:     e.tt.String(train.TrainType),
+			Destination:   e.tt.String(train.Destination),
+			From:          e.stationIDs[p.stops[at(j)]],
+			To:            e.stationIDs[p.stops[at(end)]],
+			Departure:     int(dep),
+			Arrival:       int(arrival(end)),
+			Delay:         int(dep - scheduled),
+			Through:       len(result) > 0,
+		})
+
+		// 次の区間は、境目の次の駅（次の区間の始発駅）から
+		j = end + 1
+	}
+
+	return result
 }

@@ -1030,6 +1030,10 @@ type JourneyLeg struct {
 
 	// 乗る駅での発車の遅れ（分）。時刻表の発車時刻は departureTime からこの分を引いた時刻
 	DelayMinutes int `json:"delayMinutes"`
+
+	// 前の区間の列車から、直通運転で乗り続ける区間か（乗り換えではない。transfers に数えない）。
+	// 列車は事業者ごとに分かれているので、train・trainNumber はこの区間の事業者の列車になる
+	Through bool `json:"through"`
 }
 
 // JourneyQuery は経路検索の条件。
@@ -1175,6 +1179,7 @@ func (s *Service) SearchJourneys(
 				DepartureTime:   formatClock(l.Departure),
 				ArrivalTime:     formatClock(l.Arrival),
 				DelayMinutes:    l.Delay,
+				Through:         l.Through,
 			})
 		}
 
