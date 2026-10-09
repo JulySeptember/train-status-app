@@ -82,8 +82,8 @@ func TestGetTrainStatusQueries(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(got) != 3 {
-		t.Fatalf("expected 3 statuses, got %d", len(got))
+	if len(got.Items) != 3 || len(got.Succeeded) != 3 || len(got.Failed) != 0 {
+		t.Fatalf("expected 3 statuses from 3 operators, got %+v", got)
 	}
 
 	slices.Sort(requests)
@@ -128,6 +128,53 @@ func TestGetTrainLocationsOnlyLocationSources(t *testing.T) {
 	}
 }
 
+// 1つの事業者の列車位置は、その事業者にだけ問い合わせる。
+func TestGetOperatorTrainLocations(t *testing.T) {
+
+	var (
+		mu        sync.Mutex
+		operators []string
+	)
+
+	sources := []Source{Sources["Toei"], Sources["TokyoMetro"], Sources["Keio"]}
+
+	c := newTestClient(t, sources, staticKey, func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		operators = append(operators, r.URL.Query().Get("odpt:operator"))
+		mu.Unlock()
+		if strings.HasPrefix(r.URL.Path, "/public/") {
+			http.Error(w, "error", http.StatusInternalServerError)
+			return
+		}
+		w.Write([]byte(`[{"owl:sameAs": "odpt.Train:Keio.Keio.1"}]`))
+	})
+
+	got, err := c.GetOperatorTrainLocations(context.Background(), "Keio")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || !slices.Equal(operators, []string{"odpt.Operator:Keio"}) {
+		t.Fatalf("expected only the Keio request, got %+v %v", got, operators)
+	}
+
+	captureLog(t)
+
+	// 失敗したら ErrExternalAPI
+	if _, err := c.GetOperatorTrainLocations(context.Background(), "Toei"); !errors.Is(err, ErrExternalAPI) {
+		t.Fatalf("expected ErrExternalAPI, got %v", err)
+	}
+
+	// 列車位置を配信していない事業者・設定していない事業者には問い合わせない
+	for _, op := range []string{"TokyoMetro", "Tobu"} {
+		if _, err := c.GetOperatorTrainLocations(context.Background(), op); !errors.Is(err, ErrNoSource) {
+			t.Fatalf("%s: expected ErrNoSource, got %v", op, err)
+		}
+	}
+	if len(operators) != 2 {
+		t.Fatalf("unexpected requests %v", operators)
+	}
+}
+
 func TestPartialFailure(t *testing.T) {
 
 	logs := captureLog(t)
@@ -147,8 +194,13 @@ func TestPartialFailure(t *testing.T) {
 		t.Fatalf("expected the Toei result despite the Metro failure, got %v", err)
 	}
 
-	if len(got) != 1 || got[0].Railway != "odpt.Railway:Toei.Asakusa" {
+	if len(got.Items) != 1 || got.Items[0].Railway != "odpt.Railway:Toei.Asakusa" {
 		t.Fatalf("unexpected result %+v", got)
+	}
+
+	// 失敗した事業者を呼び出し側に知らせる（都営だけが失敗したときも、成功と見分けられるように）
+	if !slices.Equal(got.Succeeded, []string{"Toei"}) || !slices.Equal(got.Failed, []string{"TokyoMetro"}) {
+		t.Fatalf("expected Toei succeeded and TokyoMetro failed, got %v / %v", got.Succeeded, got.Failed)
 	}
 
 	if !strings.Contains(logs(), "TokyoMetro") || strings.Contains(logs(), testKey) {
@@ -189,8 +241,13 @@ func TestKeyError(t *testing.T) {
 		w.Write([]byte(`[]`))
 	})
 
-	if _, err := c.GetTrainStatus(context.Background()); err != nil {
+	got, err := c.GetTrainStatus(context.Background())
+	if err != nil {
 		t.Fatal(err)
+	}
+
+	if !slices.Equal(got.Failed, []string{"Keio"}) {
+		t.Fatalf("expected Keio to be failed, got %v", got.Failed)
 	}
 
 	if len(requested) != 1 || !strings.HasPrefix(requested[0], "/public/") {

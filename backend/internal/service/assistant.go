@@ -27,6 +27,9 @@ const (
 	RailwayNormal    = "normal"
 	RailwayDelayed   = "delayed"
 	RailwaySuspended = "suspended"
+
+	// 運行情報を取得できなかった（事業者の取得に失敗した、または配信していない）
+	RailwayUnknown = "unknown"
 )
 
 // 運行情報の文章に含まれていたら平常とみなす言葉
@@ -85,6 +88,8 @@ func (s *Service) GetRailwayConditions(ctx context.Context) ([]RailwayCondition,
 			item.State = RailwaySuspended
 		case item.DelayMinutes > 0 || !isNormalText:
 			item.State = RailwayDelayed
+		case text == "" && !conds.statusOperators[operatorOf(r.Operator)]:
+			item.State = RailwayUnknown
 		}
 
 		result = append(result, item)

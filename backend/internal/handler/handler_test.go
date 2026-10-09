@@ -9,17 +9,22 @@ import (
 	"testing"
 
 	"train-status-app/backend/assets"
+	"train-status-app/backend/internal/client"
 	"train-status-app/backend/internal/model"
 	"train-status-app/backend/internal/service"
 )
 
 type nopClient struct{}
 
-func (nopClient) GetTrainStatus(ctx context.Context) ([]model.TrainStatus, error) {
-	return nil, nil
+func (nopClient) GetTrainStatus(ctx context.Context) (client.Result[model.TrainStatus], error) {
+	return client.Result[model.TrainStatus]{}, nil
 }
 
-func (nopClient) GetTrainLocations(ctx context.Context) ([]model.TrainLocation, error) {
+func (nopClient) GetTrainLocations(ctx context.Context) (client.Result[model.TrainLocation], error) {
+	return client.Result[model.TrainLocation]{}, nil
+}
+
+func (nopClient) GetOperatorTrainLocations(ctx context.Context, operator string) ([]model.TrainLocation, error) {
 	return nil, nil
 }
 

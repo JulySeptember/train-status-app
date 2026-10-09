@@ -334,6 +334,60 @@ func TestSearchTransferTime(t *testing.T) {
 	}
 }
 
+// 出発駅・到着駅から乗り換えの対応表で歩ける駅（東京に対する大手町など）で乗り降りする。
+// 経路の出発・到着の時刻は歩く時間を含め、区間の時刻は列車の時刻のまま。
+func TestSearchWalkAtEnds(t *testing.T) {
+
+	e := newTestEngine(t)
+
+	tests := []struct {
+		name     string
+		from, to string
+		time     string
+		arriveBy bool
+
+		want                 []string
+		departure, arrival   string
+		legDepart, legArrive string
+	}{
+		// A2 から B2 まで5分歩いて、B2 10:14 の列車に乗る
+		{"walk from origin", "A2", "B3", "10:05", false, []string{"B.1014@B2>B3"}, "10:09", "10:24", "10:14", "10:24"},
+		{"walk from origin, arrive by", "A2", "B3", "10:30", true, []string{"B.1020@B2>B3"}, "10:15", "10:30", "10:20", "10:30"},
+		// A2 で降りて B2 まで5分歩く
+		{"walk to destination", "A1", "B2", "09:58", false, []string{"A.local1000@A1>A2"}, "10:00", "10:15", "10:00", "10:10"},
+		{"walk to destination, arrive by", "A1", "B2", "10:20", true, []string{"A.local1005@A1>A2"}, "10:05", "10:20", "10:05", "10:15"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+
+			got, err := e.Search(Query{
+				From:         []string{tt.from},
+				To:           []string{tt.to},
+				Calendars:    []string{weekday},
+				Time:         hm(tt.time),
+				ArriveBy:     tt.arriveBy,
+				MaxTransfers: DefaultMaxTransfers,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if s := summary(got); !reflect.DeepEqual(s, [][]string{tt.want}) {
+				t.Fatalf("got %v, want %v", s, tt.want)
+			}
+
+			j := got[0]
+			if j.Departure != hm(tt.departure) || j.Arrival != hm(tt.arrival) {
+				t.Errorf("journey %d-%d, want %s-%s", j.Departure, j.Arrival, tt.departure, tt.arrival)
+			}
+			if l := j.Legs[0]; l.Departure != hm(tt.legDepart) || l.Arrival != hm(tt.legArrive) {
+				t.Errorf("leg %d-%d, want %s-%s", l.Departure, l.Arrival, tt.legDepart, tt.legArrive)
+			}
+		})
+	}
+}
+
 // 同じ駅での乗り継ぎ時間が足りなければ、急行に乗り継がない
 func TestSearchSameStationMinutes(t *testing.T) {
 

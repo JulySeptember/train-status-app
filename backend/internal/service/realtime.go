@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"train-status-app/backend/internal/client"
 	"train-status-app/backend/internal/model"
 	"train-status-app/backend/internal/route"
 )
@@ -42,6 +43,10 @@ type railwayConditions struct {
 
 	// 路線ID → 運行情報の文章
 	texts map[string]string
+
+	// 運行情報を取得できた事業者（client.Source の Name）。
+	// 含まれない事業者の路線は、文章が無くても平常とは限らない
+	statusOperators map[string]bool
 }
 
 type realtimeCache struct {
@@ -67,8 +72,8 @@ func (s *Service) railwayConditions(ctx context.Context) (*railwayConditions, er
 
 	var (
 		wg       sync.WaitGroup
-		statuses []model.TrainStatus
-		trains   []model.TrainLocation
+		statuses client.Result[model.TrainStatus]
+		trains   client.Result[model.TrainLocation]
 		errs     [2]error
 	)
 
@@ -83,14 +88,18 @@ func (s *Service) railwayConditions(ctx context.Context) (*railwayConditions, er
 	}
 
 	value := &railwayConditions{
-		delays: medianDelays(trains),
-		texts:  make(map[string]string, len(statuses)),
+		delays:          medianDelays(trains.Items),
+		texts:           s.statusTexts(statuses.Items),
+		statusOperators: make(map[string]bool, len(statuses.Succeeded)),
 	}
 
-	for _, st := range statuses {
-		value.texts[st.Railway] = st.TrainInformationText.Ja
-		if isSuspended(st.TrainInformationText.Ja) {
-			value.suspended = append(value.suspended, st.Railway)
+	for _, name := range statuses.Succeeded {
+		value.statusOperators[name] = true
+	}
+
+	for _, id := range slices.Sorted(maps.Keys(value.texts)) {
+		if isSuspended(value.texts[id]) {
+			value.suspended = append(value.suspended, id)
 		}
 	}
 
@@ -98,6 +107,34 @@ func (s *Service) railwayConditions(ctx context.Context) (*railwayConditions, er
 	s.realtime.value = value
 
 	return value, nil
+}
+
+// statusTexts は、運行情報を路線ID → 文章にする。
+//   - 会社全体で1件の運行情報（京急・西武。odpt:railway が無い）は、その会社の全路線に当てはめる。
+//     路線ごとの運行情報があれば、そちらを使う
+//   - 対象の路線（assets の路線）だけを残す。JR東日本・東武などは都外の路線の運行情報も配信している
+func (s *Service) statusTexts(statuses []model.TrainStatus) map[string]string {
+
+	result := make(map[string]string, len(statuses))
+
+	for _, st := range statuses {
+		if _, ok := s.railwayNames[st.Railway]; ok {
+			result[st.Railway] = st.TrainInformationText.Ja
+		}
+	}
+
+	for _, st := range statuses {
+		if st.Railway != "" {
+			continue
+		}
+		for _, id := range s.operatorRailways[operatorOf(st.Operator)] {
+			if _, ok := result[id]; !ok {
+				result[id] = st.TrainInformationText.Ja
+			}
+		}
+	}
+
+	return result
 }
 
 func isSuspended(text string) bool {

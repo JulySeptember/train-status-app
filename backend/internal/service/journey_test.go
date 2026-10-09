@@ -102,7 +102,7 @@ func assertTimetable(t *testing.T, s *Service, journeys []Journey) {
 				}
 				if l.From != prev.To && !slices.Contains(s.stationGroups[prev.To], l.From) &&
 					!slices.ContainsFunc(differentNameTransfers, func(p [2]string) bool {
-						return p == [2]string{prev.To, l.From}
+						return p == [2]string{prev.To, l.From} || p == [2]string{l.From, prev.To}
 					}) {
 					t.Errorf("cannot transfer from %s to %s", prev.To, l.From)
 				}

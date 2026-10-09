@@ -73,9 +73,21 @@ func (n *network) search(
 	stations := len(e.stationIDs)
 	sameStation := int32(e.cfg.SameStationMinutes)
 
-	isTarget := make([]bool, stations)
+	// toTarget[s] は、駅 s から到着駅のいずれかまで歩く時間（到着駅なら 0。歩けなければ unreachable）。
+	// 到着駅の近くの別の駅（東京に対する大手町など）で降りて歩く経路も探す
+	toTarget := make([]int32, stations)
+	for i := range toTarget {
+		toTarget[i] = unreachable
+	}
 	for _, s := range to {
-		isTarget[s] = true
+		toTarget[s] = 0
+	}
+	for s, paths := range n.transfers {
+		for _, f := range paths {
+			if toTarget[f.to] == 0 && f.minutes < toTarget[s] {
+				toTarget[s] = f.minutes
+			}
+		}
 	}
 
 	rounds := make([]round, 1, maxTransfers+2)
@@ -86,7 +98,20 @@ func (n *network) search(
 	}
 
 	marked := slices.Clone(from)
+
+	// 出発駅から乗り換えの対応表で歩いて、近くの別の駅（大手町に対する東京など）から乗る経路も探す
+	for _, s := range from {
+		for _, f := range n.transfers[s] {
+			if r := int32(t) + f.minutes; r < rounds[0].ready[f.to] {
+				rounds[0].ready[f.to] = r
+				rounds[0].readyFrom[f.to] = readyByOrigin
+				marked = append(marked, f.to)
+			}
+		}
+	}
+
 	slices.Sort(marked)
+	marked = slices.Compact(marked)
 
 	// best[k] は列車に k 本まで乗ったときに、到着駅のいずれかに最も早く着く時刻と、その駅
 	best := []int32{unreachable}
@@ -146,8 +171,8 @@ func (n *network) search(
 						}
 						arrived = append(arrived, s)
 
-						if isTarget[s] {
-							bound, boundStation = a, s
+						if w := toTarget[s]; w < unreachable && a+w < bound {
+							bound, boundStation = a+w, s
 						}
 
 						if a+sameStation < cur.ready[s] {
@@ -204,7 +229,7 @@ func (n *network) search(
 			continue
 		}
 
-		j := n.journey(e, c, rounds, k, bestStation[k])
+		j := n.journey(e, c, rounds, k, bestStation[k], int32(t), toTarget[bestStation[k]])
 
 		// 乗り換えが多いのに、少ない経路より早く着かないものは除く
 		if len(result) > 0 && j.Transfers() <= result[len(result)-1].Transfers() {
@@ -218,7 +243,9 @@ func (n *network) search(
 }
 
 // journey は rounds[k] で駅 to に着いた経路をさかのぼって組み立てる。
-func (n *network) journey(e *Engine, c *conditions, rounds []round, k int, to int32) Journey {
+// t は探索の出発時刻、walk は駅 to から到着駅まで歩く時間。
+// 経路の出発・到着の時刻は、出発駅・到着駅で歩く時間を含める（区間の時刻は列車の時刻のまま）。
+func (n *network) journey(e *Engine, c *conditions, rounds []round, k int, to int32, t, walk int32) Journey {
 
 	var legs []Leg
 
@@ -233,15 +260,22 @@ func (n *network) journey(e *Engine, c *conditions, rounds []round, k int, to in
 
 		switch from := prev.readyFrom[b]; from {
 		case readyByOrigin:
+			// 出発駅から乗った駅まで歩いた時間（出発駅から乗ったなら 0）
+			start := int(prev.ready[b] - t)
+			end := int(walk)
+
 			if !n.reversed {
 				// さかのぼって組み立てたので、出発順に並べ直す
 				for i, j := 0, len(legs)-1; i < j; i, j = i+1, j-1 {
 					legs[i], legs[j] = legs[j], legs[i]
 				}
+			} else {
+				// 逆向きでは、探索の出発駅が元の向きの到着駅
+				start, end = end, start
 			}
 			return Journey{
-				Departure: legs[0].Departure,
-				Arrival:   legs[len(legs)-1].Arrival,
+				Departure: legs[0].Departure - start,
+				Arrival:   legs[len(legs)-1].Arrival + end,
 				Legs:      legs,
 			}
 		case readyByTrain:

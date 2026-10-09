@@ -87,6 +87,9 @@ type Station struct {
 
 	StationTitle LocalizedString `json:"odpt:stationTitle"`
 
+	// 乗り換えられる駅。都営の駅データには無い（他社の駅データにだけある）
+	ConnectingStation []string `json:"odpt:connectingStation"`
+
 	PassengerSurvey []string `json:"odpt:passengerSurvey"`
 
 	StationTimetable []string `json:"odpt:stationTimetable"`

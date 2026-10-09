@@ -54,7 +54,8 @@ type Transfer struct {
 // Query は探索の条件。時刻は運行日の0時からの分（3時前は +24時間）。
 type Query struct {
 	// From のどの駅から出てもよく、To のどの駅に着いてもよい。
-	// 同じ名前で路線ごとに駅が分かれている駅（新宿など）を、まとめて指定するのに使う
+	// 同じ名前で路線ごとに駅が分かれている駅（新宿など）を、まとめて指定するのに使う。
+	// From・To から乗り換えの対応表で歩ける駅でも乗り降りする（歩く時間は経路の時刻に含める）
 	From []string
 	To   []string
 
@@ -85,7 +86,8 @@ type Delay struct {
 	Minutes       int
 }
 
-// Journey は経路1本。
+// Journey は経路1本。Departure と Arrival は、出発駅から乗る駅まで・降りる駅から到着駅まで
+// 歩く時間を含める（Legs の時刻は列車の時刻）。
 type Journey struct {
 	Departure int
 	Arrival   int

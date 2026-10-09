@@ -174,6 +174,16 @@ func genExtra(rawDir, areaPath, outDir string) error {
 		}
 	}
 
+	// 都外の行先駅の駅名（直通運転・都外まで走る列車の行先を表示するため）
+	files, err = operatorFiles("Station.json")
+	if err != nil {
+		return err
+	}
+	destinations, err := destinationStations(files, area, stationTimetables, trainTimetables)
+	if err != nil {
+		return err
+	}
+
 	// 2つの全件版に同じ事業者が入ると、同じ列車・時刻表が2つずつになる
 	if err := checkDuplicates(stationTimetables, trainTimetables); err != nil {
 		return err
@@ -184,9 +194,10 @@ func genExtra(rawDir, areaPath, outDir string) error {
 	}
 
 	for name, data := range map[string][]json.RawMessage{
-		"station.json":    stations,
-		"railway.json":    railways,
-		"train_type.json": trainTypes,
+		"station.json":             stations,
+		"railway.json":             railways,
+		"train_type.json":          trainTypes,
+		"destination_station.json": destinations,
 	} {
 		if err := writeJSON(filepath.Join(outDir, name), data); err != nil {
 			return err
@@ -221,6 +232,61 @@ func genExtra(rawDir, areaPath, outDir string) error {
 	}
 
 	return nil
+}
+
+// destinationStations は、時刻表の行先のうち都外の駅を、駅ID と駅名だけにして返す（ID 順）。
+// 駅のデータに無い駅（京成など ODPT に無い事業者の駅）は含めない。
+func destinationStations(
+	stationFiles []string,
+	area map[string]bool,
+	stationTimetables []model.StationTimetable,
+	trainTimetables []model.TrainTimetable,
+) ([]json.RawMessage, error) {
+
+	wanted := make(map[string]bool)
+	for _, tt := range stationTimetables {
+		for _, obj := range tt.StationTimetableObject {
+			for _, id := range obj.DestinationStation {
+				wanted[id] = !area[id]
+			}
+		}
+	}
+	for _, tt := range trainTimetables {
+		for _, id := range tt.DestinationStation {
+			wanted[id] = !area[id]
+		}
+	}
+
+	type destination struct {
+		SameAs       string                `json:"owl:sameAs"`
+		StationTitle model.LocalizedString `json:"odpt:stationTitle"`
+	}
+
+	found := make(map[string]destination)
+
+	for _, path := range stationFiles {
+		var stations []destination
+		if err := readJSON(path, &stations); err != nil {
+			return nil, err
+		}
+		for _, st := range stations {
+			if wanted[st.SameAs] {
+				found[st.SameAs] = st
+			}
+		}
+	}
+
+	result := make([]json.RawMessage, 0, len(found))
+
+	for _, id := range slices.Sorted(maps.Keys(found)) {
+		data, err := json.Marshal(found[id])
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, data)
+	}
+
+	return result, nil
 }
 
 // clipTrain は、列車時刻表を都内の最初の停車から最後の停車までに切る。

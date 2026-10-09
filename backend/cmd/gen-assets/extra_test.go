@@ -76,7 +76,7 @@ func TestGenExtra(t *testing.T) {
 	writeFile(t, filepath.Join(raw, "operators", "Test", "Station.json"), `[
 		{"owl:sameAs": "odpt.Station:Test.Line.A", "odpt:operator": "odpt.Operator:Test", "odpt:connectingStation": ["odpt.Station:Toei.Line.A"]},
 		{"owl:sameAs": "odpt.Station:Test.Line.B", "odpt:operator": "odpt.Operator:Test"},
-		{"owl:sameAs": "odpt.Station:Test.Line.Outside", "odpt:operator": "odpt.Operator:Test"}
+		{"owl:sameAs": "odpt.Station:Test.Line.Outside", "odpt:operator": "odpt.Operator:Test", "odpt:stationTitle": {"ja": "都外"}}
 	]`)
 	writeFile(t, filepath.Join(raw, "operators", "Test", "Railway.json"), `[
 		{"owl:sameAs": "odpt.Railway:Test.Line", "odpt:operator": "odpt.Operator:Test", "odpt:stationOrder": [{"odpt:station": "odpt.Station:Test.Line.A"}]},
@@ -90,7 +90,10 @@ func TestGenExtra(t *testing.T) {
 	]`)
 
 	writeFile(t, filepath.Join(raw, "dumps", "basic", "StationTimetable.json"), `[
-		{"odpt:operator": "odpt.Operator:Test", "odpt:station": "odpt.Station:Test.Line.A", "odpt:stationTimetableObject": [{"odpt:departureTime": "10:00"}]},
+		{"odpt:operator": "odpt.Operator:Test", "odpt:station": "odpt.Station:Test.Line.A", "odpt:stationTimetableObject": [
+			{"odpt:departureTime": "10:00", "odpt:destinationStation": ["odpt.Station:Test.Line.Outside"]},
+			{"odpt:departureTime": "10:10", "odpt:destinationStation": ["odpt.Station:Test.Line.B", "odpt.Station:Keisei.Main.Unknown"]}
+		]},
 		{"odpt:operator": "odpt.Operator:Test", "odpt:station": "odpt.Station:Test.Line.Outside", "odpt:stationTimetableObject": []},
 		{"odpt:operator": "odpt.Operator:Toei", "odpt:station": "odpt.Station:Toei.Line.A", "odpt:stationTimetableObject": []}
 	]`)
@@ -129,6 +132,9 @@ func TestGenExtra(t *testing.T) {
 		"station.json":    {"odpt.Station:Test.Line.A", "odpt.Station:Test.Line.B"},
 		"railway.json":    {"odpt.Railway:Test.Line"},
 		"train_type.json": {"odpt.TrainType:Test.Local"},
+
+		// 都外の行先だけ。都内の駅（B）と、駅のデータに無い駅は含めない
+		"destination_station.json": {"odpt.Station:Test.Line.Outside"},
 	} {
 		if got := ids(name); !reflect.DeepEqual(got, want) {
 			t.Errorf("%s: expected %v, got %v", name, want, got)
@@ -142,6 +148,15 @@ func TestGenExtra(t *testing.T) {
 	}
 	if !bytes.Contains(data, []byte("odpt:connectingStation")) {
 		t.Error("expected odpt:connectingStation to be kept")
+	}
+
+	// 都外の行先駅は、駅ID と駅名だけを残す
+	data, err = os.ReadFile(filepath.Join(out, "destination_station.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `[{"owl:sameAs":"odpt.Station:Test.Line.Outside","odpt:stationTitle":{"ja":"都外"}}]`; string(data) != want {
+		t.Errorf("destination_station.json: expected %s, got %s", want, data)
 	}
 
 	f, err := os.Open(filepath.Join(out, "station_timetable.gob"))

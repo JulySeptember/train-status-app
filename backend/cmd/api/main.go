@@ -32,9 +32,15 @@ func main() {
 
 	c := client.New(odptSources(cfg.ODPTOperators), odptKeys(cfg, isLambda()))
 
-	loader, err := assets.New()
+	// assets/extra に他社のデータがあれば読み込む。本番のビルド（make backend-build・CI）では
+	// extra/ をよけているので、都営だけになる
+	loader, err := assets.New(assets.WithExtra())
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	if loader.HasExtra() {
+		log.Printf("loaded other operators' assets from assets/extra")
 	}
 
 	svc := service.New(c, loader)
