@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, Search } from "lucide-react";
 
 import { api } from "@/api";
-import { type Railway, type Station } from "@/types";
+import { type Railway, type StationSummary } from "@/types";
 
 import Loading from "@/components/Loading";
 import Error from "@/components/Error";
@@ -18,15 +18,15 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Input } from "@/components/ui/input";
-import { railwayIdOf, useRailways } from "@/lib/railways";
+import { groupByOperator, uniqueBadges, useRailways } from "@/lib/railways";
 import { usePrefetchStation } from "@/lib/station";
 
 type Group = {
   railway: Railway;
-  stations: Station[];
+  stations: StationSummary[];
 };
 
-function StationGrid({ stations }: { stations: Station[] }) {
+function StationGrid({ stations }: { stations: StationSummary[] }) {
   const prefetch = usePrefetchStation();
 
   return (
@@ -52,18 +52,19 @@ function StationGrid({ stations }: { stations: Station[] }) {
 }
 
 // 路線を並べ、選んだ路線の駅だけを開いて見せる
-function RailwayAccordion({ groups }: { groups: Group[] }) {
-  // 開いた路線は URL に残す（駅の時刻表から戻ったとき、同じ路線を開いたままにする）
-  const [params, setParams] = useSearchParams();
-  const open = params.get("route");
-
+function RailwayAccordion({
+  groups,
+  open,
+  onOpen,
+}: {
+  groups: Group[];
+  open: string | null;
+  onOpen(route: string | null): void;
+}) {
   return (
     <Accordion
       value={open ? [open] : []}
-      onValueChange={(value) => {
-        const [route] = value as string[];
-        setParams(route ? { route } : {}, { replace: true });
-      }}
+      onValueChange={(value) => onOpen((value as string[])[0] ?? null)}
       className="gap-3"
     >
       {groups.map(({ railway, stations }) => (
@@ -88,15 +89,103 @@ function RailwayAccordion({ groups }: { groups: Group[] }) {
   );
 }
 
-// 駅名で探したときの結果。路線をまたいで探せるよう、一致した駅を路線ごとに並べる
+// 事業者 → 路線の2段で並べる。事業者が1つ（都営だけ）なら路線だけを並べる
+function OperatorAccordion({ groups }: { groups: Group[] }) {
+  // 開いた事業者・路線は URL に残す（駅の時刻表から戻ったとき、同じ路線を開いたままにする）
+  const [params, setParams] = useSearchParams();
+  const route = params.get("route");
+
+  const operators = groupByOperator(groups, (g) => g.railway);
+
+  // 路線を開いていれば、その路線の事業者も開く
+  const operator =
+    params.get("operator") ??
+    groups.find((g) => g.railway.id === route)?.railway.operator ??
+    null;
+
+  const set = (next: { operator?: string | null; route?: string | null }) => {
+    const value: Record<string, string> = {};
+    if (next.operator) value.operator = next.operator;
+    if (next.route) value.route = next.route;
+    setParams(value, { replace: true });
+  };
+
+  if (operators.length <= 1) {
+    return (
+      <RailwayAccordion
+        groups={groups}
+        open={route}
+        onOpen={(route) => set({ route })}
+      />
+    );
+  }
+
+  return (
+    <Accordion
+      value={operator ? [operator] : []}
+      onValueChange={(value) => set({ operator: (value as string[])[0] })}
+      className="gap-3"
+    >
+      {operators.map((op) => (
+        <AccordionItem
+          key={op.operator}
+          value={op.operator}
+          className="rounded-xl border bg-card px-4"
+        >
+          <AccordionTrigger className="items-center py-3 hover:no-underline">
+            <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+              <span className="text-lg font-semibold">{op.name}</span>
+
+              {/* 閉じていても、どの路線があるか分かるように記号を並べる */}
+              <span className="flex flex-wrap gap-1">
+                {uniqueBadges(op.items.map((g) => g.railway)).map((railway) => (
+                  <RailwayBadge
+                    key={railway.id}
+                    railway={railway}
+                    className="size-5 text-[10px]"
+                  />
+                ))}
+              </span>
+            </span>
+          </AccordionTrigger>
+
+          <AccordionContent className="pb-4">
+            <RailwayAccordion
+              groups={op.items}
+              open={route}
+              onOpen={(route) => set({ operator: op.operator, route })}
+            />
+          </AccordionContent>
+        </AccordionItem>
+      ))}
+    </Accordion>
+  );
+}
+
+// 駅名で探したときの結果。同じ名前の駅を1行にまとめ、路線を選んで時刻表を開く
 function SearchResult({
-  groups,
+  stations,
+  railways,
   keyword,
 }: {
-  groups: Group[];
+  stations: StationSummary[];
+  railways: Map<string, Railway>;
   keyword: string;
 }) {
-  if (groups.length === 0) {
+  const prefetch = usePrefetchStation();
+
+  const byName = useMemo(() => {
+    const result = new Map<string, StationSummary[]>();
+    for (const s of stations) {
+      result.set(s.name, [...(result.get(s.name) ?? []), s]);
+    }
+    // 検索語と同じ名前の駅、検索語で始まる駅、それ以外の順に並べる
+    const rank = (name: string) =>
+      name === keyword ? 0 : name.startsWith(keyword) ? 1 : 2;
+    return [...result].sort(([a], [b]) => rank(a) - rank(b));
+  }, [stations, keyword]);
+
+  if (byName.length === 0) {
     return (
       <p className="text-muted-foreground">
         「{keyword}」を含む駅は見つかりませんでした。
@@ -104,16 +193,33 @@ function SearchResult({
     );
   }
 
-  return groups.map(({ railway, stations }) => (
-    <section key={railway.id} className="space-y-3">
-      <h2 className="flex items-center gap-2 text-lg font-semibold">
-        <RailwayBadge railway={railway} />
-        {railway.name}
-      </h2>
+  return (
+    <ul className="space-y-3">
+      {byName.map(([name, items]) => (
+        <li key={name} className="space-y-2 rounded-xl border bg-card p-4">
+          <h2 className="text-lg font-semibold">{name}</h2>
 
-      <StationGrid stations={stations} />
-    </section>
-  ));
+          <div className="flex flex-wrap gap-2">
+            {items.map((station) => {
+              const railway = railways.get(station.railwayId);
+
+              return (
+                <Link
+                  key={station.id}
+                  to={`/stations/${encodeURIComponent(station.id)}`}
+                  {...prefetch(station.id)}
+                  className="flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm no-underline! transition hover:bg-muted"
+                >
+                  <RailwayBadge railway={railway} className="size-6" />
+                  {railway?.name ?? station.railwayId}
+                </Link>
+              );
+            })}
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 export default function Stations() {
@@ -127,18 +233,27 @@ export default function Stations() {
 
   const word = keyword.trim();
 
-  // 路線ごとに、駅名に検索語を含む駅だけを残す（検索語が空ならすべての駅）
   const groups = useMemo(
     () =>
       (railways.data ?? [])
         .map((railway) => ({
           railway,
           stations: (stations.data ?? []).filter(
-            (s) => railwayIdOf(s.id) === railway.id && s.name.includes(word),
+            (s) => s.railwayId === railway.id,
           ),
         }))
         .filter((g) => g.stations.length > 0),
-    [railways.data, stations.data, word],
+    [railways.data, stations.data],
+  );
+
+  const railwayById = useMemo(
+    () => new Map((railways.data ?? []).map((r) => [r.id, r])),
+    [railways.data],
+  );
+
+  const matched = useMemo(
+    () => (stations.data ?? []).filter((s) => s.name.includes(word)),
+    [stations.data, word],
   );
 
   if (railways.isPending || stations.isPending) {
@@ -173,9 +288,13 @@ export default function Stations() {
       </div>
 
       {word === "" ? (
-        <RailwayAccordion groups={groups} />
+        <OperatorAccordion groups={groups} />
       ) : (
-        <SearchResult groups={groups} keyword={word} />
+        <SearchResult
+          stations={matched}
+          railways={railwayById}
+          keyword={word}
+        />
       )}
     </div>
   );

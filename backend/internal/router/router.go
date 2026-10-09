@@ -28,6 +28,7 @@ func New(h *handler.Handler) http.Handler {
 	mux.HandleFunc("GET /api/routes", h.Railways)
 
 	// Stations
+	mux.HandleFunc("GET /api/stations", h.AllStations)
 	mux.HandleFunc("GET /api/routes/{routeId}/stations", h.Stations)
 
 	// Station Detail

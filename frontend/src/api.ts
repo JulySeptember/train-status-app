@@ -8,6 +8,7 @@ import type {
   Railway,
   Station,
   StationDetail,
+  StationSummary,
   TrainLocation,
   TrainStatus,
 } from "./types";
@@ -69,14 +70,8 @@ export const api = {
     );
   },
 
-  async getAllStations() {
-    const routes = await api.getRoutes();
-
-    const stations = await Promise.all(
-      routes.map((route) => api.getStations(route.id)),
-    );
-
-    return stations.flat();
+  getAllStations() {
+    return request<StationSummary[]>("/stations");
   },
 
   getStation(stationId: string) {

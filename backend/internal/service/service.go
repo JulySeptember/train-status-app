@@ -334,6 +334,10 @@ type Railway struct {
 	// ODPT が配信していない路線では空になる
 	LineCode string `json:"lineCode,omitempty"`
 	Color    string `json:"color,omitempty"`
+
+	// 事業者（例: odpt.Operator:Toei）と、その表示名（例: 都営交通）。GET /api/routes だけが返す
+	Operator     string `json:"operator,omitempty"`
+	OperatorName string `json:"operatorName,omitempty"`
 }
 
 // =========================
@@ -346,12 +350,14 @@ func (s *Service) GetRailways(
 
 	items := make([]Railway, 0, len(s.assets.Railways()))
 
-	for _, r := range s.assets.Railways() {
+	for _, r := range s.railwaysByOperator() {
 		items = append(items, Railway{
-			ID:       r.SameAs,
-			Name:     r.RailwayTitle.Ja,
-			LineCode: r.LineCode,
-			Color:    r.Color,
+			ID:           r.SameAs,
+			Name:         r.RailwayTitle.Ja,
+			LineCode:     r.LineCode,
+			Color:        r.Color,
+			Operator:     r.Operator,
+			OperatorName: operatorName(r.Operator),
 		})
 	}
 
@@ -365,6 +371,18 @@ func (s *Service) GetRailways(
 type Station struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+}
+
+// StationSummary は、全駅の一覧（GET /api/stations）の1駅。
+type StationSummary struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	RailwayID string `json:"railwayId"`
+
+	// 経路検索で、この駅とまとめて1つの駅として扱う駅の代表（ID 順で最初の駅）。
+	// 同じ値の駅は、経路検索の出発駅・到着駅として同じ結果になる。
+	// 経路検索に使えない駅（列車時刻表の無い事業者の駅で、近くに同じ名前の駅も無いもの）では空になる
+	JourneyStation string `json:"journeyStation"`
 }
 
 func (s *Service) GetStations(
@@ -383,12 +401,53 @@ func (s *Service) GetStations(
 		return nil, ErrStationNotFound
 	}
 
-	railway := s.assets.Railways()[idx]
+	return s.railwayStations(s.assets.Railways()[idx]), nil
+}
+
+// GetAllStations は、全路線の駅を路線の順・路線上の駅順に返す。
+// 同じ駅が複数の路線に属することはない（駅ID は路線ごと）。
+func (s *Service) GetAllStations(
+	ctx context.Context,
+) ([]StationSummary, error) {
+
+	items := make([]StationSummary, 0, len(s.assets.Stations()))
+
+	for _, r := range s.railwaysByOperator() {
+		for _, st := range s.railwayStations(r) {
+
+			journeyStation := ""
+			if group := s.stationGroups[st.ID]; len(group) > 0 {
+				journeyStation = group[0]
+			}
+
+			items = append(items, StationSummary{
+				ID:             st.ID,
+				Name:           st.Name,
+				RailwayID:      r.SameAs,
+				JourneyStation: journeyStation,
+			})
+		}
+	}
+
+	return items, nil
+}
+
+// railwaysByOperator は、路線を事業者の順（operatorOrder）に並べる。事業者の中は元の順のまま。
+func (s *Service) railwaysByOperator() []model.Railway {
+	railways := slices.Clone(s.assets.Railways())
+	slices.SortStableFunc(railways, func(a, b model.Railway) int {
+		return operatorRank(a.Operator) - operatorRank(b.Operator)
+	})
+	return railways
+}
+
+// railwayStations は、路線の駅を路線上の駅順に返す。
+func (s *Service) railwayStations(railway model.Railway) []Station {
 
 	stationMap := make(map[string]model.Station)
 
 	for _, station := range s.assets.Stations() {
-		if station.Railway == routeID {
+		if station.Railway == railway.SameAs {
 			stationMap[station.SameAs] = station
 		}
 	}
@@ -428,7 +487,7 @@ func (s *Service) GetStations(
 		})
 	}
 
-	return items, nil
+	return items
 }
 
 // =========================
@@ -876,11 +935,18 @@ type JourneySearch struct {
 	SuspendedRailways []Railway `json:"suspendedRailways"`
 }
 
+// Journey は1つの経路。出発・到着の時刻は、出発駅から最初に乗る駅まで・最後に降りる駅から到着駅まで
+// 歩く時間を含む（例: 東京を指定して大手町から乗るとき）。歩かなければ徒歩の分は 0
 type Journey struct {
 	DepartureTime string       `json:"departureTime"`
 	ArrivalTime   string       `json:"arrivalTime"`
 	Transfers     int          `json:"transfers"`
 	Legs          []JourneyLeg `json:"legs"`
+
+	// 出発駅から最初に乗る駅まで歩く時間（分）
+	WalkBeforeMinutes int `json:"walkBeforeMinutes"`
+	// 最後に降りる駅から到着駅まで歩く時間（分）
+	WalkAfterMinutes int `json:"walkAfterMinutes"`
 }
 
 // JourneyLeg は1本の列車に乗る区間。ID と日本語の名前を両方返す
@@ -1026,6 +1092,9 @@ func (s *Service) SearchJourneys(
 			ArrivalTime:   formatClock(j.Arrival),
 			Transfers:     j.Transfers(),
 			Legs:          make([]JourneyLeg, 0, len(j.Legs)),
+
+			WalkBeforeMinutes: j.Legs[0].Departure - j.Departure,
+			WalkAfterMinutes:  j.Arrival - j.Legs[len(j.Legs)-1].Arrival,
 		}
 
 		for _, l := range j.Legs {

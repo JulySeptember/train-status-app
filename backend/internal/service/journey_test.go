@@ -72,9 +72,12 @@ func assertTimetable(t *testing.T, s *Service, journeys []Journey) {
 			t.Errorf("transfers = %d, legs = %d", j.Transfers, len(j.Legs))
 		}
 
-		if j.DepartureTime != j.Legs[0].DepartureTime ||
-			j.ArrivalTime != j.Legs[len(j.Legs)-1].ArrivalTime {
-			t.Errorf("journey times %s-%s do not match legs", j.DepartureTime, j.ArrivalTime)
+		// 経路の時刻は、出発駅・到着駅で歩く時間を含む
+		if j.WalkBeforeMinutes < 0 || j.WalkAfterMinutes < 0 ||
+			clock(t, j.DepartureTime)+j.WalkBeforeMinutes != clock(t, j.Legs[0].DepartureTime) ||
+			clock(t, j.ArrivalTime)-j.WalkAfterMinutes != clock(t, j.Legs[len(j.Legs)-1].ArrivalTime) {
+			t.Errorf("journey times %s-%s (walk %d, %d) do not match legs",
+				j.DepartureTime, j.ArrivalTime, j.WalkBeforeMinutes, j.WalkAfterMinutes)
 		}
 
 		for i, l := range j.Legs {
@@ -607,4 +610,14 @@ func TestSearchJourneysTimetableOnly(t *testing.T) {
 	}
 
 	assertTimetable(t, s, got.Journeys)
+}
+
+// clock は "HH:MM" を運行日の0時からの分にする。
+func clock(t *testing.T, v string) int {
+	t.Helper()
+	m, err := parseClock(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return m
 }

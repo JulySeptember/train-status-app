@@ -1,5 +1,6 @@
 import { type ReactNode } from "react";
 import PageTitle from "@/components/PageTitle";
+import { groupByOperator, useRailways } from "@/lib/railways";
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -29,6 +30,84 @@ function ExternalLink({
   );
 }
 
+const CC_BY = {
+  name: "クリエイティブ・コモンズ 表示 4.0 国際（CC BY 4.0）",
+  url: "https://creativecommons.org/licenses/by/4.0/deed.ja",
+};
+
+const BASIC = {
+  name: "公共交通オープンデータ基本ライセンス",
+  url: "https://developer.odpt.org/terms/data_basic_license.html",
+};
+
+const CHALLENGE = {
+  name: "公共交通オープンデータチャレンジ限定ライセンス",
+  url: "https://developer.odpt.org/challenge_license",
+};
+
+// 事業者ごとのデータのライセンス（docs/design/multi-operator.md 10章）
+const LICENSES: Record<string, typeof CC_BY> = {
+  "odpt.Operator:Toei": CC_BY,
+  "odpt.Operator:TokyoMetro": BASIC,
+  "odpt.Operator:TWR": BASIC,
+  "odpt.Operator:MIR": BASIC,
+  "odpt.Operator:TamaMonorail": BASIC,
+  "odpt.Operator:Yurikamome": BASIC,
+  "odpt.Operator:JR-East": CHALLENGE,
+  "odpt.Operator:Keio": CHALLENGE,
+  "odpt.Operator:Tobu": CHALLENGE,
+  "odpt.Operator:Keikyu": CHALLENGE,
+  "odpt.Operator:Tokyu": CHALLENGE,
+  "odpt.Operator:Seibu": CHALLENGE,
+  "odpt.Operator:Odakyu": CHALLENGE,
+};
+
+const CONTACT_URL = "https://github.com/JulySeptember/train-status-app/issues";
+
+// このアプリが使っている事業者と、そのデータのライセンス
+function Providers() {
+  const railways = useRailways();
+
+  // 路線一覧を取得できないときも、都営の表示は出す
+  const operators = railways.data
+    ? groupByOperator(railways.data, (r) => r)
+    : [{ operator: "odpt.Operator:Toei", name: "都営交通", items: [] }];
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-left text-sm">
+        <thead className="text-muted-foreground">
+          <tr className="border-b">
+            <th className="py-2 pr-4 font-medium">事業者</th>
+            <th className="py-2 font-medium">ライセンス</th>
+          </tr>
+        </thead>
+
+        <tbody className="text-foreground/80">
+          {operators.map((op) => {
+            const license = LICENSES[op.operator];
+
+            return (
+              <tr key={op.operator} className="border-b last:border-0">
+                <td className="py-2 pr-4">{op.name}</td>
+                <td className="py-2">
+                  {license ? (
+                    <ExternalLink href={license.url}>
+                      {license.name}
+                    </ExternalLink>
+                  ) : (
+                    "—"
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function License() {
   return (
     <div className="max-w-3xl space-y-8 leading-relaxed">
@@ -37,14 +116,16 @@ export default function License() {
         <h1 className="text-3xl font-bold">データ提供・ライセンス</h1>
 
         <p className="text-foreground/80">
-          このページは東京都交通局が公開するオープンデータを加工して利用しています。
+          このアプリは、公共交通オープンデータセンターを通じて各鉄道事業者が公開しているオープンデータを加工して利用しています。
         </p>
       </div>
 
       <Section title="データ提供者">
         <p className="text-foreground/80">
-          東京都交通局・公共交通オープンデータ協議会
+          公共交通オープンデータ協議会（公共交通オープンデータセンター）と、次の事業者のデータを使っています。
         </p>
+
+        <Providers />
       </Section>
 
       <Section title="利用データ">
@@ -55,9 +136,27 @@ export default function License() {
           <li>駅情報</li>
           <li>駅時刻表</li>
           <li>列車時刻表</li>
-          <li>運賃情報</li>
-          <li>乗降者数情報</li>
+          <li>運賃情報（都営のみ）</li>
+          <li>乗降者数情報（都営のみ）</li>
         </ul>
+      </Section>
+
+      <Section title="免責事項">
+        <p className="text-foreground/80">
+          このアプリは個人が開発した非公式のアプリで、公共交通オープンデータセンター・各事業者が提供・保証するものではありません。表示する運行情報・時刻表・経路などの正確性・完全性・即時性は保証しません。実際の運行は各事業者の案内をご確認ください。
+        </p>
+
+        <p className="text-foreground/80">
+          このアプリについて、公共交通オープンデータセンター・各事業者へのお問い合わせはご遠慮ください。
+        </p>
+      </Section>
+
+      <Section title="お問い合わせ">
+        <p className="text-foreground/80">
+          このアプリへのお問い合わせ・不具合の報告は、
+          <ExternalLink href={CONTACT_URL}>GitHub の Issues</ExternalLink>
+          で受け付けています。
+        </p>
       </Section>
 
       <Section title="AI の利用について">
@@ -75,19 +174,6 @@ export default function License() {
         <p className="text-foreground/80">
           AI
           の回答は誤ることがあります。駅・時刻・経路・運行状況は、アプリが持つオープンデータから取得しています。
-        </p>
-      </Section>
-
-      <Section title="ライセンス">
-        <p className="text-foreground/80">
-          このアプリは東京都交通局・公共交通オープンデータ協議会が提供するオープンデータを改変して利用しています。
-        </p>
-
-        <p className="text-foreground/80">
-          ライセンス：
-          <ExternalLink href="https://creativecommons.org/licenses/by/4.0/deed.ja">
-            Creative Commons Attribution 4.0 International (CC BY 4.0)
-          </ExternalLink>
         </p>
       </Section>
     </div>

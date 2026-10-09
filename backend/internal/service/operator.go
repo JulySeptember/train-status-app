@@ -1,6 +1,7 @@
 package service
 
 import (
+	"slices"
 	"strings"
 
 	"train-status-app/backend/internal/client"
@@ -29,6 +30,46 @@ var operatorLines = map[string]string{
 	"Keio":    "京王線",
 	"Tobu":    "東武線",
 	"Keikyu":  "京急線",
+}
+
+// operatorNames は、事業者の表示名（路線一覧を事業者ごとにまとめるのに使う）。
+// ODPT の事業者のデータ（odpt:Operator）は埋め込んでいないので、ここに書く
+var operatorNames = map[string]string{
+	"Toei":         "都営交通",
+	"TokyoMetro":   "東京メトロ",
+	"JR-East":      "JR東日本",
+	"Keio":         "京王電鉄",
+	"Odakyu":       "小田急電鉄",
+	"Tokyu":        "東急電鉄",
+	"Keikyu":       "京急電鉄",
+	"Seibu":        "西武鉄道",
+	"Tobu":         "東武鉄道",
+	"TWR":          "東京臨海高速鉄道",
+	"MIR":          "つくばエクスプレス",
+	"TamaMonorail": "多摩都市モノレール",
+	"Yurikamome":   "ゆりかもめ",
+}
+
+// operatorOrder は、路線一覧で事業者を並べる順。ここに無い事業者は最後に並べる
+var operatorOrder = []string{
+	"Toei", "TokyoMetro", "JR-East", "Tokyu", "Keio", "Odakyu", "Seibu", "Tobu", "Keikyu",
+	"TWR", "MIR", "Yurikamome", "TamaMonorail",
+}
+
+// operatorRank は、事業者の並び順を返す。
+func operatorRank(id string) int {
+	if i := slices.Index(operatorOrder, operatorOf(id)); i >= 0 {
+		return i
+	}
+	return len(operatorOrder)
+}
+
+// operatorName は、事業者の表示名を返す。辞書に無ければ ID の事業者の部分を返す。
+func operatorName(id string) string {
+	if name, ok := operatorNames[operatorOf(id)]; ok {
+		return name
+	}
+	return operatorOf(id)
 }
 
 // operatorOf は、ODPT の ID（odpt.Railway:Toei.Asakusa、odpt.Train:JR-East.Yamanote.1234G、

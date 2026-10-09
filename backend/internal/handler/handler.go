@@ -133,6 +133,34 @@ func (h *Handler) Railways(
 	)
 }
 
+// AllStations godoc
+//
+//	@Summary		Get all stations
+//	@Description	全路線の駅を、路線の順・路線上の駅順に返す。journeyStation が同じ駅は、経路検索で1つの駅として扱う
+//	@Tags			Station
+//	@Produce		json
+//	@Success		200	{array}		service.StationSummary
+//	@Failure		500	{object}	map[string]string
+//	@Router			/api/stations [get]
+func (h *Handler) AllStations(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	data, err := h.service.GetAllStations(
+		r.Context(),
+	)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	writeJSON(
+		w,
+		http.StatusOK,
+		data,
+	)
+}
+
 // Stations godoc
 //
 //	@Summary	Get stations by route
