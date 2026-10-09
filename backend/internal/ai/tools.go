@@ -30,6 +30,7 @@ type Backend interface {
 	GetTrainLocation(ctx context.Context, trainID string) (*service.TrainLocation, error)
 	StationName(id string) string
 	RailwayName(id string) string
+	Operators() []service.OperatorCoverage
 }
 
 // ToolOutput は道具を実行した結果。
@@ -58,6 +59,24 @@ func NewTools(b Backend) *Tools {
 	return &Tools{backend: b}
 }
 
+// Scope は、AI への指示に書く対応範囲（扱う事業者と、経路検索に使えない事業者）。
+func (t *Tools) Scope() string {
+
+	var all, noRoute []string
+	for _, op := range t.backend.Operators() {
+		all = append(all, op.Name)
+		if !op.RouteSearch {
+			noRoute = append(noRoute, op.Name)
+		}
+	}
+
+	scope := fmt.Sprintf("- 対象は東京都内の鉄道のうち、次の事業者の路線です: %s。\n", strings.Join(all, "・"))
+	if len(noRoute) > 0 {
+		scope += fmt.Sprintf("- %sの駅は、運行状況と時刻表には答えられますが、search_route では経路を探せません（近くに同じ名前のほかの事業者の駅があれば、そこから探せます）。search_route がエラーを返したら、そのことを伝えてください。\n", strings.Join(noRoute, "・"))
+	}
+	return scope
+}
+
 var calendarIDs = map[string]string{
 	"weekday":  calendar.Weekday,
 	"saturday": calendar.Saturday,
@@ -68,8 +87,8 @@ func (t *Tools) Definitions() []Tool {
 	return []Tool{
 		{
 			Name: "find_station",
-			Description: "駅名から都営交通の駅を探す。同じ名前の駅は路線ごとに返す。" +
-				"見つからなければ candidates は空で、都営交通の駅ではない。駅の id は必ずこの結果から使う。",
+			Description: "駅名から駅を探す。同じ名前の駅は路線ごとに返す。" +
+				"見つからなければ candidates は空で、このアプリが扱う駅ではない。駅の id は必ずこの結果から使う。",
 			Parameters: json.RawMessage(`{
 				"type": "object",
 				"properties": {
@@ -80,7 +99,7 @@ func (t *Tools) Definitions() []Tool {
 		},
 		{
 			Name: "get_train_status",
-			Description: "都営交通の全路線の現在の運行状況を返す。state は normal（平常）・delayed（遅延）・suspended（運転見合わせ）・unknown（運行情報を取得できない）。" +
+			Description: "全路線の現在の運行状況を返す。state は normal（平常）・delayed（遅延）・suspended（運転見合わせ）・unknown（運行情報を取得できない）。" +
 				"delayMinutes は走っている列車の遅れの目安（分）。",
 			Parameters: json.RawMessage(`{"type": "object", "properties": {}}`),
 		},
@@ -88,6 +107,7 @@ func (t *Tools) Definitions() []Tool {
 			Name: "search_route",
 			Description: "2つの駅の間の経路を探す。現在の遅れと運転見合わせは反映済み（見合わせ中の路線は使わない）。" +
 				"結果は乗り換え回数ごとの候補。時刻は HH:MM、durationMinutes は所要時間（分）。" +
+				"walkBeforeMinutes・walkAfterMinutes は、出発駅から乗る駅まで・降りる駅から到着駅まで歩く時間（分。時刻に含まれる）。" +
 				"10分以上遅れている路線が関わるときは、その路線を使う経路と避けた経路をアプリが比べ、comparison に返す（faster が到着の早い方）。",
 			Parameters: json.RawMessage(`{
 				"type": "object",
@@ -337,6 +357,10 @@ type routeJourney struct {
 	DurationMinutes int        `json:"durationMinutes"`
 	Transfers       int        `json:"transfers"`
 	Legs            []routeLeg `json:"legs"`
+
+	// 出発駅から最初に乗る駅まで・最後に降りる駅から到着駅まで歩く時間（分）。時刻に含まれている
+	WalkBeforeMinutes int `json:"walkBeforeMinutes,omitempty"`
+	WalkAfterMinutes  int `json:"walkAfterMinutes,omitempty"`
 }
 
 type routeLeg struct {
@@ -521,6 +545,9 @@ func trimJourneys(journeys []service.Journey) []routeJourney {
 			ArrivalTime:     j.ArrivalTime,
 			DurationMinutes: clockDiff(j.DepartureTime, j.ArrivalTime),
 			Transfers:       j.Transfers,
+
+			WalkBeforeMinutes: j.WalkBeforeMinutes,
+			WalkAfterMinutes:  j.WalkAfterMinutes,
 		}
 
 		for _, l := range j.Legs {

@@ -273,3 +273,13 @@ func TestToolSearchRouteNoComparison(t *testing.T) {
 		t.Fatalf("unexpected comparison %v", content["comparison"])
 	}
 }
+
+func TestScope(t *testing.T) {
+
+	// 埋め込みの都営のデータだけなら、都営交通だけを対象に書き、経路検索に使えない事業者は書かない
+	scope := newTools(t, &trainClient{}).Scope()
+
+	if !strings.Contains(scope, "都営交通") || strings.Contains(scope, "経路を探せません") {
+		t.Errorf("unexpected scope: %q", scope)
+	}
+}

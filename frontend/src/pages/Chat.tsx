@@ -255,7 +255,7 @@ export default function Chat() {
           <h1 className="text-3xl font-bold text-foreground">AI に聞く</h1>
 
           <p className="mt-2 text-sm text-muted-foreground">
-            都営交通の経路・次の電車・運行状況を、話し言葉で聞けます。遅延や運転見合わせを確かめてから経路を提案します。
+            東京都内の鉄道の経路・次の電車・運行状況を、話し言葉で聞けます。遅延や運転見合わせを確かめてから経路を提案します。
           </p>
         </div>
 

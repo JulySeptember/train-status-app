@@ -290,7 +290,7 @@ definitions:
     type: object
 info:
   contact: {}
-  description: Toei Transportation API
+  description: Tokyo railway status, timetable and journey API (ODPT open data)
   title: Train Status API
   version: "1.0"
 paths:
