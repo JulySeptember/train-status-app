@@ -10,6 +10,7 @@ import Loading from "@/components/Loading";
 import Error from "@/components/Error";
 import RailwayBadge from "@/components/RailwayBadge";
 import PageTitle from "@/components/PageTitle";
+import DirectionTabs, { selectDirection } from "@/components/DirectionTabs";
 
 import {
   Accordion,
@@ -18,29 +19,20 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { groupByOperator, uniqueBadges, useRailways } from "@/lib/railways";
-import { usePrefetchStation } from "@/lib/station";
+import { stationPath, usePrefetchStation } from "@/lib/station";
 
 type Group = {
   railway: Railway;
   stations: StationSummary[];
 };
 
-// 駅の時刻表を、選んだ方向で開くためのリンク先
-function stationPath(id: string, direction?: string | null) {
-  const path = `/stations/${encodeURIComponent(id)}`;
-  return direction
-    ? `${path}?direction=${encodeURIComponent(direction)}`
-    : path;
-}
-
 function StationGrid({
   stations,
   direction,
 }: {
   stations: StationSummary[];
-  direction?: string | null;
+  direction?: string;
 }) {
   const prefetch = usePrefetchStation();
 
@@ -89,9 +81,7 @@ function RailwayAccordion({
     >
       {groups.map(({ railway, stations }) => {
         const directions = railway.directions ?? [];
-        const selected = directions.some((d) => d.id === direction)
-          ? direction
-          : directions[0]?.id;
+        const selected = selectDirection(directions, direction);
 
         return (
           <AccordionItem
@@ -107,17 +97,11 @@ function RailwayAccordion({
             </AccordionTrigger>
 
             <AccordionContent className="space-y-3 pb-4">
-              {directions.length > 1 && (
-                <Tabs value={selected} onValueChange={onDirection}>
-                  <TabsList className="h-10! w-full sm:w-fit">
-                    {directions.map((d) => (
-                      <TabsTrigger key={d.id} value={d.id} className="px-4">
-                        {d.name}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                </Tabs>
-              )}
+              <DirectionTabs
+                directions={directions}
+                value={selected}
+                onChange={onDirection}
+              />
 
               <StationGrid stations={stations} direction={selected} />
             </AccordionContent>
