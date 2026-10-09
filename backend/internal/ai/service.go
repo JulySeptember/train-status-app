@@ -326,7 +326,7 @@ func (s *Service) systemPrompt(now time.Time) string {
 
 	date := calendar.ServiceDate(now)
 
-	scope := "- 対象は東京都内の鉄道のうち、都営交通の路線です。\n"
+	scope := "- 対象は都営交通の路線です。\n"
 	if sc, ok := s.tools.(interface{ Scope() string }); ok {
 		scope = sc.Scope()
 	}
@@ -339,7 +339,8 @@ func (s *Service) systemPrompt(now time.Time) string {
 - 本日のダイヤ: %s
 
 # 対応範囲
-%s- 出発地や目的地が find_station で見つからなければ、対象外であると答えてください。
+%s- find_station で候補が返った駅は、対象の駅です。対象かどうかを駅名から推測しないでください。
+- 出発地や目的地が find_station で見つからなければ、対象外であると答えてください。
 - 運賃には答えられません。
 
 # 守ること

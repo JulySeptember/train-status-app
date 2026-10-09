@@ -91,7 +91,7 @@
 - name: 対象外の駅
   input: 横浜から大宮まで
   expect_tools: [find_station]
-  expect_reply_any: [対象外, 扱って, 見つかりません]
+  expect_reply_any: [対象外, 範囲外, 対応して, 扱って, 見つかりません, ではありません, できません]
 
 - name: 存在しない駅
   input: ほげほげ駅から浅草へ

@@ -70,7 +70,7 @@ func (t *Tools) Scope() string {
 		}
 	}
 
-	scope := fmt.Sprintf("- 対象は東京都内の鉄道のうち、次の事業者の路線です: %s。\n", strings.Join(all, "・"))
+	scope := fmt.Sprintf("- 対象は次の事業者の路線（東京都内）です: %s。これらの駅どうしなら、事業者をまたいでも search_route で経路を探せます。\n", strings.Join(all, "・"))
 	if len(noRoute) > 0 {
 		scope += fmt.Sprintf("- %sの駅は、運行状況と時刻表には答えられますが、search_route では経路を探せません（近くに同じ名前のほかの事業者の駅があれば、そこから探せます）。search_route がエラーを返したら、そのことを伝えてください。\n", strings.Join(noRoute, "・"))
 	}
