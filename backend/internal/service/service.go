@@ -787,6 +787,9 @@ func (s *Service) GetTrainLocation(
 			item.FromStationID = *train.FromStation
 			if station, ok := stationMap[*train.FromStation]; ok {
 				item.FromStation = station.StationTitle.Ja
+			} else if name, ok := s.stationNames[*train.FromStation]; ok {
+				// 都外の駅（行先の駅のデータにあれば）
+				item.FromStation = name
 			}
 		}
 
@@ -794,6 +797,8 @@ func (s *Service) GetTrainLocation(
 			item.ToStationID = *train.ToStation
 			if station, ok := stationMap[*train.ToStation]; ok {
 				item.ToStation = station.StationTitle.Ja
+			} else if name, ok := s.stationNames[*train.ToStation]; ok {
+				item.ToStation = name
 			}
 		}
 

@@ -79,12 +79,14 @@ func (n *network) search(
 	for i := range toTarget {
 		toTarget[i] = unreachable
 	}
+	isTarget := make([]bool, stations)
 	for _, s := range to {
+		isTarget[s] = true
 		toTarget[s] = 0
 	}
 	for s, paths := range n.transfers {
 		for _, f := range paths {
-			if toTarget[f.to] == 0 && f.minutes < toTarget[s] {
+			if isTarget[f.to] && f.minutes < toTarget[s] {
 				toTarget[s] = f.minutes
 			}
 		}
