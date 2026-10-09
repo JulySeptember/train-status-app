@@ -10,7 +10,8 @@ import (
 )
 
 // MaxThroughGapMinutes は、直通運転の境目の駅で、前の列車の到着から次の列車の発車までの上限（分）。
-// 列車番号の数字が同じなら MaxThroughGapSameNumberMinutes まで認める（京王線 4831 → 相模原線 4831 は6分）
+// 同じ事業者の中で列車番号の数字が同じなら MaxThroughGapSameNumberMinutes まで認める
+// （京王線 4831 → 相模原線 4831 は6分）
 const (
 	MaxThroughGapMinutes           = 5
 	MaxThroughGapSameNumberMinutes = 10
@@ -26,8 +27,9 @@ const (
 // （docs/design/multi-operator.md 7.2）:
 //   - 前の列車の終点と次の列車の始発駅が、同じ駅か乗り換えの対応表でつながる駅
 //   - 同じダイヤ種別で、路線が違う
-//   - 前の列車の到着から次の列車の発車まで 0〜MaxThroughGapMinutes 分（列車番号の数字が同じなら
-//     MaxThroughGapSameNumberMinutes 分）
+//   - 前の列車の到着から次の列車の発車まで 0〜MaxThroughGapMinutes 分（同じ事業者の中で列車番号の
+//     数字が同じなら MaxThroughGapSameNumberMinutes 分。事業者をまたぐと番号がたまたま一致することがある:
+//     京王新線 1804 と、新宿始発の都営 1804T）
 //   - 行先が同じ（次の列車が前の列車の行先を通るだけの組は、前の列車の行先より先まで乗り続けさせる
 //     誤った組しか無かった）
 //
@@ -81,6 +83,16 @@ func throughChains(tt *slim.TrainTimetables, transfers []Transfer) [][]int32 {
 		numbers[i] = trainNumberDigits(tt.String(train.TrainNumber))
 	}
 
+	// 路線（Strings の番号）→ 事業者（odpt.Railway:<事業者>.<路線> の事業者の部分）
+	operators := make(map[int32]string)
+	for _, train := range tt.Trains {
+		if _, ok := operators[train.Railway]; !ok {
+			id := tt.String(train.Railway)
+			_, rest, _ := strings.Cut(id, ":")
+			operators[train.Railway], _, _ = strings.Cut(rest, ".")
+		}
+	}
+
 	type link struct {
 		from, to int32
 		gap      int32
@@ -132,7 +144,11 @@ func throughChains(tt *slim.TrainTimetables, transfers []Transfer) [][]int32 {
 					}
 
 					sameNumber := numbers[ai] != "" && numbers[ai] == numbers[c.train]
-					if !sameNumber && gap > MaxThroughGapMinutes || !allowed(a, b) {
+					limit := int32(MaxThroughGapMinutes)
+					if sameNumber && operators[a.Railway] == operators[b.Railway] {
+						limit = MaxThroughGapSameNumberMinutes
+					}
+					if gap > limit || !allowed(a, b) {
 						continue
 					}
 

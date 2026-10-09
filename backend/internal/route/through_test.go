@@ -106,6 +106,17 @@ func TestThroughChains(t *testing.T) {
 			want:         [][]string{{"X.100", "Y.200"}},
 		},
 		{
+			// 事業者をまたぐと番号がたまたま一致することがある（京王新線 1804 → 新宿始発の都営 1804T）
+			name: "事業者をまたぐ組は、列車番号の数字が同じでも5分まで",
+			trains: []testTrain{
+				{"odpt.Train:A.X.100", "odpt.Railway:A.X", weekday, []string{"X1 - 10:00", "X2 10:10 -"}},
+				{"odpt.Train:B.Y.100", "odpt.Railway:B.Y", weekday, []string{"Y2 - 10:18", "Y3 10:30 -"}},
+				{"odpt.Train:B.Y.200", "odpt.Railway:B.Y", weekday, []string{"Y2 - 10:10", "Y3 10:20 -"}},
+			},
+			destinations: map[string]string{"odpt.Train:A.X.100": "Y3", "odpt.Train:B.Y.100": "Y3"},
+			want:         [][]string{{"odpt.Train:A.X.100", "odpt.Train:B.Y.200"}},
+		},
+		{
 			name: "列車番号の数字が同じ列車を、間の短さより優先する",
 			trains: []testTrain{
 				{"X.100", "X", weekday, []string{"X1 - 10:00", "X2 10:10 -"}},
