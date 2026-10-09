@@ -30,8 +30,11 @@ resource "aws_lambda_function" "this" {
 
   architectures = ["arm64"]
 
-  # 都営以外の事業者のデータで約250MB を使う（docs/design/multi-operator.md 11.1）
-  memory_size = 512
+  # 都営以外の事業者のデータで約260MB を使う（docs/design/multi-operator.md 11.1）。
+  # CPU はメモリに比例して割り当てられるので、起動（直通運転の組を作る）と最初の検索（路線網を作る）を
+  # 速くするために 1024MB にする（512MB では Init Duration 約1.1秒・最初の検索 約1.1秒だった）。
+  # 直近30日の実行時間（約480秒）なら、無料枠（月 400,000 GB-秒）の 1% 未満
+  memory_size = 1024
   timeout     = 30
 
   publish = false
