@@ -26,6 +26,14 @@ frontend/node_modules/
 frontend/dist/
 
 # ============================
+# ODPT data (other operators)
+# ============================
+# 基本ライセンス・チャレンジ限定ライセンスのデータは公開できない（backend/assets/extra/README.md）
+backend/assets/extra/*
+!backend/assets/extra/README.md
+backend/.odpt-cache/
+
+# ============================
 # Go
 # ============================
 backend/*.exe

@@ -226,3 +226,54 @@ func DecodeTrainTimetables(r io.Reader) (*TrainTimetables, error) {
 
 	return &t, nil
 }
+
+// MergeTrainTimetables は、複数の列車時刻表を1つにまとめる（都営と他社など）。
+// 文字列表を作り直し、各列車の番号を新しい表の番号に置き換える。入力は書き換えない。
+func MergeTrainTimetables(ts ...*TrainTimetables) *TrainTimetables {
+
+	b := newStringTable()
+
+	total := 0
+	for _, t := range ts {
+		total += len(t.Trains)
+	}
+
+	out := &TrainTimetables{
+		Trains: make([]Train, 0, total),
+	}
+
+	for _, t := range ts {
+
+		ids := make([]int32, len(t.Strings))
+		for i, s := range t.Strings {
+			ids[i] = b.id(s)
+		}
+
+		for _, train := range t.Trains {
+
+			stops := make([]Stop, len(train.Stops))
+			for i, stop := range train.Stops {
+				stops[i] = Stop{
+					Station:   ids[stop.Station],
+					Arrival:   stop.Arrival,
+					Departure: stop.Departure,
+				}
+			}
+
+			out.Trains = append(out.Trains, Train{
+				Train:         ids[train.Train],
+				TrainNumber:   ids[train.TrainNumber],
+				Railway:       ids[train.Railway],
+				Calendar:      ids[train.Calendar],
+				RailDirection: ids[train.RailDirection],
+				TrainType:     ids[train.TrainType],
+				Destination:   ids[train.Destination],
+				Stops:         stops,
+			})
+		}
+	}
+
+	out.Strings = b.strings
+
+	return out
+}

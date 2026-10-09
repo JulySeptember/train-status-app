@@ -65,22 +65,61 @@ func TestEncodeDecode(t *testing.T) {
 	}
 }
 
-func TestEncodeMultipleDestinations(t *testing.T) {
+// 行先が2駅以上ある項目（分割・併合する列車）は、行先をすべて保持する。
+func TestEncodeDecodeMultipleDestinations(t *testing.T) {
 
 	input := []model.StationTimetable{
 		{
+			Station: "odpt.Station:JR-East.ChuoSobuLocal.Kinshicho",
 			StationTimetableObject: []model.StationTimetableEntry{
 				{
-					DestinationStation: []string{"a", "b"},
+					DepartureTime:      "10:00",
+					DestinationStation: []string{"odpt.Station:JR-East.A", "odpt.Station:JR-East.B"},
+				},
+				{
+					DepartureTime:      "10:05",
+					DestinationStation: []string{"odpt.Station:JR-East.A"},
 				},
 			},
 		},
 	}
 
-	err := Encode(&bytes.Buffer{}, input)
+	var buf bytes.Buffer
 
-	if err == nil || !strings.Contains(err.Error(), "multiple destinations") {
-		t.Fatalf("expected multiple destinations error, got %v", err)
+	if err := Encode(&buf, input); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := Decode(&buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !reflect.DeepEqual(got, input) {
+		t.Fatalf("expected %+v, got %+v", input, got)
+	}
+}
+
+func TestEncodeInvalidDestinations(t *testing.T) {
+
+	for _, dest := range [][]string{
+		{"a", ""},
+		{"a", "b,c"},
+		{"b,c"},
+	} {
+		input := []model.StationTimetable{
+			{
+				StationTimetableObject: []model.StationTimetableEntry{
+					{DestinationStation: dest},
+				},
+			},
+		}
+
+		err := Encode(&bytes.Buffer{}, input)
+
+		if err == nil || !strings.Contains(err.Error(), "invalid destinations") {
+			t.Fatalf("%q: expected invalid destinations error, got %v", dest, err)
+		}
 	}
 }
 

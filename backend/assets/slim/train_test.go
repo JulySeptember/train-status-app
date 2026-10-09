@@ -244,3 +244,92 @@ func TestDecodeTrainTimetablesInvalidIndex(t *testing.T) {
 		}
 	}
 }
+
+// まとめた列車時刻表は、それぞれを読み込んだものと同じ列車・文字列を持つ。
+// 同じ文字列（ダイヤ種別など）は1つにまとまる。
+func TestMergeTrainTimetables(t *testing.T) {
+
+	encode := func(timetables []model.TrainTimetable) *TrainTimetables {
+		var buf bytes.Buffer
+		if err := EncodeTrainTimetables(&buf, timetables); err != nil {
+			t.Fatal(err)
+		}
+		tt, err := DecodeTrainTimetables(&buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return tt
+	}
+
+	stops := func(from, to string) []model.TrainTimetableEntry {
+		return []model.TrainTimetableEntry{
+			{DepartureTime: "10:00", DepartureStation: from},
+			{ArrivalTime: "10:05", ArrivalStation: to},
+		}
+	}
+
+	a := encode([]model.TrainTimetable{
+		{
+			Train:                "odpt.Train:Toei.Shinjuku.1001",
+			Calendar:             "odpt.Calendar:Weekday",
+			TrainTimetableObject: stops("odpt.Station:Toei.Shinjuku.Shinjuku", "odpt.Station:Toei.Shinjuku.Ichigaya"),
+		},
+	})
+
+	b := encode([]model.TrainTimetable{
+		{
+			Train:                "odpt.Train:Keio.KeioNew.1001",
+			Calendar:             "odpt.Calendar:Weekday",
+			DestinationStation:   []string{"odpt.Station:Keio.Keio.Hashimoto"},
+			TrainTimetableObject: stops("odpt.Station:Keio.KeioNew.Shinjuku", "odpt.Station:Keio.KeioNew.Hatsudai"),
+		},
+	})
+
+	got := MergeTrainTimetables(a, b)
+
+	if len(got.Trains) != 2 {
+		t.Fatalf("expected 2 trains, got %d", len(got.Trains))
+	}
+
+	if got.Strings[0] != "" {
+		t.Fatalf("expected empty string at index 0, got %q", got.Strings[0])
+	}
+
+	// 文字列の重複が無い
+	seen := map[string]bool{}
+	for _, s := range got.Strings {
+		if seen[s] {
+			t.Fatalf("duplicate string %q", s)
+		}
+		seen[s] = true
+	}
+
+	for i, src := range []*TrainTimetables{a, b} {
+
+		want := src.Trains[0]
+		train := got.Trains[i]
+
+		for _, pair := range [][2]int32{
+			{train.Train, want.Train},
+			{train.Calendar, want.Calendar},
+			{train.Destination, want.Destination},
+		} {
+			if got.String(pair[0]) != src.String(pair[1]) {
+				t.Fatalf("train %d: expected %q, got %q", i, src.String(pair[1]), got.String(pair[0]))
+			}
+		}
+
+		for j, stop := range train.Stops {
+			w := want.Stops[j]
+			if got.String(stop.Station) != src.String(w.Station) ||
+				stop.Arrival != w.Arrival || stop.Departure != w.Departure {
+				t.Fatalf("train %d stop %d: expected %+v, got %+v", i, j, w, stop)
+			}
+		}
+	}
+
+	// 入力は書き換えない
+	if a.String(a.Trains[0].Train) != "odpt.Train:Toei.Shinjuku.1001" {
+		t.Fatal("input was modified")
+	}
+}
