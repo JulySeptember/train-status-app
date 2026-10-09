@@ -170,3 +170,21 @@ func TestGenExtra(t *testing.T) {
 		t.Errorf("expected only the Test train (Toei is excluded), got %d trains", len(trains.Trains))
 	}
 }
+
+func TestCheckDuplicates(t *testing.T) {
+
+	trains := []model.TrainTimetable{
+		{SameAs: "odpt.TrainTimetable:Test.Line.1.Weekday"},
+		{SameAs: "odpt.TrainTimetable:Test.Line.2.Weekday"},
+	}
+
+	if err := checkDuplicates(nil, trains); err != nil {
+		t.Fatal(err)
+	}
+
+	trains = append(trains, model.TrainTimetable{SameAs: "odpt.TrainTimetable:Test.Line.1.Weekday"})
+
+	if err := checkDuplicates(nil, trains); err == nil {
+		t.Fatal("expected duplicate error")
+	}
+}

@@ -174,6 +174,11 @@ func genExtra(rawDir, areaPath, outDir string) error {
 		}
 	}
 
+	// 2つの全件版に同じ事業者が入ると、同じ列車・時刻表が2つずつになる
+	if err := checkDuplicates(stationTimetables, trainTimetables); err != nil {
+		return err
+	}
+
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return err
 	}
@@ -318,4 +323,35 @@ func writeJSON(path string, items []json.RawMessage) error {
 	}
 
 	return os.WriteFile(path, data, 0o644)
+}
+
+// checkDuplicates は、同じ時刻表（owl:sameAs）が2つ以上あればエラーにする。
+func checkDuplicates(stationTimetables []model.StationTimetable, trainTimetables []model.TrainTimetable) error {
+
+	seen := make(map[string]bool, len(stationTimetables)+len(trainTimetables))
+
+	check := func(id string) error {
+		if id == "" {
+			return nil
+		}
+		if seen[id] {
+			return fmt.Errorf("duplicate timetable %s: the same operator is in more than one dump", id)
+		}
+		seen[id] = true
+		return nil
+	}
+
+	for _, tt := range stationTimetables {
+		if err := check(tt.SameAs); err != nil {
+			return err
+		}
+	}
+
+	for _, tt := range trainTimetables {
+		if err := check(tt.SameAs); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

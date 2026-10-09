@@ -103,7 +103,13 @@ backend-vet:
 backend-generate:
 	cd $(BACKEND_DIR) && go generate ./assets
 
+# assets/extra（都営以外の事業者のデータ）は go:embed で埋め込まれる。アプリが使い始めるまでは
+# 本番のバイナリに入れないよう、README 以外があれば止める（CI で作るものと中身をそろえる）
 backend-build:
+	@if [ -n "$$(ls -A $(BACKEND_DIR)/assets/extra | grep -v '^README.md$$')" ]; then \
+		echo "backend/assets/extra has data; move it away before building for deploy" >&2; \
+		exit 1; \
+	fi
 	cd $(BACKEND_DIR) && \
 	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 \
 	go build -o $(LAMBDA_BINARY) ./cmd/api
