@@ -662,6 +662,10 @@ const docTemplate = `{
                 "railwayName": {
                     "type": "string"
                 },
+                "through": {
+                    "description": "前の区間の列車から、直通運転で乗り続ける区間か（乗り換えではない。transfers に数えない）。\n列車は事業者ごとに分かれているので、train・trainNumber はこの区間の事業者の列車になる",
+                    "type": "boolean"
+                },
                 "to": {
                     "type": "string"
                 },

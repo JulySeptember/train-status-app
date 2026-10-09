@@ -1,5 +1,11 @@
 import { Link } from "react-router-dom";
-import { ArrowDown, Footprints, MapPin, Repeat } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowRightLeft,
+  Footprints,
+  MapPin,
+  Repeat,
+} from "lucide-react";
 
 import { type Journey, type JourneyLeg } from "@/types";
 
@@ -110,6 +116,21 @@ function Leg({ leg }: { leg: JourneyLeg }) {
   );
 }
 
+// 直通運転の境目。同じ列車に乗ったまま、次の事業者の路線に入る
+function Through({ prev, next }: { prev: JourneyLeg; next: JourneyLeg }) {
+  const stop =
+    next.departureTime === prev.arrivalTime
+      ? ""
+      : `・${duration(prev.arrivalTime, next.departureTime)}停車`;
+
+  return (
+    <div className="ml-6 flex items-center gap-2 border-l-2 border-border py-3 pl-12 text-sm text-muted-foreground">
+      <ArrowRightLeft size={14} />
+      {prev.toName}からそのまま{next.railwayName}に直通{stop}
+    </div>
+  );
+}
+
 function Transfer({ prev, next }: { prev: JourneyLeg; next: JourneyLeg }) {
   // 同じ駅（同じ路線）での乗り継ぎか、別の路線の駅への乗り換えか
   const label =
@@ -178,7 +199,12 @@ function JourneyCard({
 
         {journey.legs.map((leg, i) => (
           <div key={`${leg.train}-${leg.from}`}>
-            {i > 0 && <Transfer prev={journey.legs[i - 1]} next={leg} />}
+            {i > 0 &&
+              (leg.through ? (
+                <Through prev={journey.legs[i - 1]} next={leg} />
+              ) : (
+                <Transfer prev={journey.legs[i - 1]} next={leg} />
+              ))}
             <Leg leg={leg} />
           </div>
         ))}

@@ -121,6 +121,8 @@ export interface JourneyLeg {
   arrivalTime: string;
   // 乗る駅での発車の遅れ（分）
   delayMinutes: number;
+  // 前の区間の列車から、直通運転で乗り続ける区間（乗り換えではない）
+  through: boolean;
 }
 
 // 出発・到着の時刻は、出発駅から最初に乗る駅まで・最後に降りる駅から到着駅まで歩く時間を含む

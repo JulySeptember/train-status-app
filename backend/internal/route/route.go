@@ -94,8 +94,15 @@ type Journey struct {
 	Legs      []Leg
 }
 
+// Transfers は乗り換えの回数を返す。直通運転で乗り続ける区間（Leg.Through）は数えない。
 func (j Journey) Transfers() int {
-	return len(j.Legs) - 1
+	n := -1
+	for _, l := range j.Legs {
+		if !l.Through {
+			n++
+		}
+	}
+	return n
 }
 
 // Leg は1本の列車に乗る区間。
@@ -114,6 +121,10 @@ type Leg struct {
 
 	// Delay は、乗る駅での発車時刻の遅れ（分）。Departure と Arrival は遅れを足した時刻
 	Delay int
+
+	// Through は、前の区間の列車から直通運転で乗り続ける区間か（乗り換えではない）。
+	// 前の区間の To と、この区間の From は、境目の駅の事業者ごとの駅になる
+	Through bool
 }
 
 type Engine struct {
@@ -126,6 +137,10 @@ type Engine struct {
 	stationOf  []int32
 
 	transfers []Transfer
+
+	// 直通運転で1本の列車として走る列車の並び（throughChains）と、そのどれかに入っている列車
+	chains  [][]int32
+	inChain map[int32]bool
 
 	mu       sync.Mutex
 	networks map[string]*networkPair
@@ -157,6 +172,14 @@ func New(tt *slim.TrainTimetables, transfers []Transfer, cfg Config) *Engine {
 		for _, stop := range train.Stops {
 			e.station(tt.String(stop.Station))
 			e.stationOf[stop.Station] = e.stations[tt.String(stop.Station)]
+		}
+	}
+
+	e.chains = throughChains(tt, transfers)
+	e.inChain = make(map[int32]bool)
+	for _, chain := range e.chains {
+		for _, t := range chain {
+			e.inChain[t] = true
 		}
 	}
 
@@ -258,6 +281,9 @@ type conditions struct {
 	avoid  map[int32]bool
 	delays map[[2]int32]int32
 	until  int32
+
+	// shifts の結果を入れる領域（パターンを調べるたびに割り当てないよう使い回す）
+	buf []shift
 }
 
 func (e *Engine) conditions(q Query) *conditions {
@@ -294,13 +320,30 @@ func (e *Engine) conditions(q Query) *conditions {
 	return c
 }
 
-// shift は、パターンの列車の時刻に足す遅れ。
-func (c *conditions) shift(n *network, p *pattern) shift {
-	return shift{
-		minutes:  c.delays[[2]int32{p.railway, p.direction}],
-		until:    c.until,
-		reversed: n.reversed,
+// shifts は、パターンの列車の時刻に足す遅れを区間ごとに返す。
+// 直通運転の列車は、前の区間の遅れを持ち越すとみなし、それまでの区間の遅れの最大を足す
+// （区間ごとに違う遅れを足すと、境目で時刻が逆戻りすることがあるため）。
+// 返す領域は次の呼び出しで上書きされる。
+func (c *conditions) shifts(n *network, p *pattern) []shift {
+	if cap(c.buf) < len(p.railways) {
+		c.buf = make([]shift, len(p.railways))
 	}
+	result := c.buf[:len(p.railways)]
+	var minutes int32
+	for s := range p.railways {
+		minutes = max(minutes, c.delays[[2]int32{p.railways[s], p.directions[s]}])
+		result[s] = shift{
+			minutes:  minutes,
+			until:    c.until,
+			reversed: n.reversed,
+		}
+	}
+	return result
+}
+
+// avoided は、パターンの区間 s の路線を使わないかを返す。
+func (c *conditions) avoided(p *pattern, s int) bool {
+	return c.avoid[p.railways[s]]
 }
 
 // shift は時刻表の時刻を、遅れを足した時刻にする。

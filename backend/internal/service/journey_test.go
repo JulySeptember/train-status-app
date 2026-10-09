@@ -69,8 +69,15 @@ func assertTimetable(t *testing.T, s *Service, journeys []Journey) {
 
 	for _, j := range journeys {
 
-		if j.Transfers != len(j.Legs)-1 {
-			t.Errorf("transfers = %d, legs = %d", j.Transfers, len(j.Legs))
+		// 直通運転で乗り続ける区間は、乗り換えに数えない
+		through := 0
+		for _, l := range j.Legs {
+			if l.Through {
+				through++
+			}
+		}
+		if j.Transfers != len(j.Legs)-1-through || (len(j.Legs) > 0 && j.Legs[0].Through) {
+			t.Errorf("transfers = %d, legs = %d, through = %d", j.Transfers, len(j.Legs), through)
 		}
 
 		// 経路の時刻は、出発駅・到着駅で歩く時間を含む
@@ -104,7 +111,8 @@ func assertTimetable(t *testing.T, s *Service, journeys []Journey) {
 				if l.DepartureTime < prev.ArrivalTime {
 					t.Errorf("%s departs %s before arriving %s", l.Train, l.DepartureTime, prev.ArrivalTime)
 				}
-				if l.From != prev.To && !slices.Contains(s.stationGroups[prev.To], l.From) &&
+				// 直通運転の境目の駅は、乗り換えの対応表でつながる駅（他社の駅データの odpt:connectingStation など）
+				if !l.Through && l.From != prev.To && !slices.Contains(s.stationGroups[prev.To], l.From) &&
 					!slices.ContainsFunc(differentNameTransfers, func(p [2]string) bool {
 						return p == [2]string{prev.To, l.From} || p == [2]string{l.From, prev.To}
 					}) {
