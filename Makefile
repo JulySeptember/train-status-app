@@ -104,13 +104,16 @@ backend-generate:
 	cd $(BACKEND_DIR) && go generate ./assets
 
 # assets/extra（都営以外の事業者のデータ）は go:embed で埋め込まれる。アプリが使い始めるまでは
-# 本番のバイナリに入れないよう、README 以外があれば止める（CI で作るものと中身をそろえる）
+# 本番のバイナリに入れないよう、ビルドの間だけ README 以外を .odpt-cache（gitignore 済み）によけて、
+# 終わったら（失敗・中断しても）戻す。CI で作るものと中身がそろう
 backend-build:
-	@if [ -n "$$(ls -A $(BACKEND_DIR)/assets/extra | grep -v '^README.md$$')" ]; then \
-		echo "backend/assets/extra has data; move it away before building for deploy" >&2; \
-		exit 1; \
-	fi
 	cd $(BACKEND_DIR) && \
+	mkdir -p .odpt-cache && \
+	hold=$$(mktemp -d .odpt-cache/extra-hold.XXXXXX) && \
+	restore() { find "$$hold" -mindepth 1 -maxdepth 1 -exec mv {} assets/extra/ \; ; rmdir "$$hold"; } && \
+	trap restore EXIT && \
+	trap 'exit 1' INT TERM && \
+	find assets/extra -mindepth 1 -maxdepth 1 ! -name README.md -exec mv {} "$$hold"/ \; && \
 	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 \
 	go build -o $(LAMBDA_BINARY) ./cmd/api
 
