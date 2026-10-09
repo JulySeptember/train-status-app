@@ -95,8 +95,8 @@ func TestThroughChains(t *testing.T) {
 			want:         [][]string{{"X.100", "Y.100"}},
 		},
 		{
-			// 隣の駅をすぐに出る別の列車（行先を通るだけ）より、数分停車する本当の直通先（行先が同じ）を選ぶ
-			name: "行先が同じ列車を、間の短さより優先する",
+			// 行先を通るだけの列車（行先より先まで走る）は、間が短くてもつながない
+			name: "行先が同じ列車だけをつなぐ",
 			trains: []testTrain{
 				{"X.100", "X", weekday, []string{"X1 - 10:00", "X2 10:10 -"}},
 				{"Y.900", "Y", weekday, []string{"Y2 - 10:10", "Y3 10:20 10:20", "Y4 10:30 -"}},
@@ -106,11 +106,11 @@ func TestThroughChains(t *testing.T) {
 			want:         [][]string{{"X.100", "Y.200"}},
 		},
 		{
-			name: "列車番号の数字が同じ列車を、行先・間より優先する",
+			name: "列車番号の数字が同じ列車を、間の短さより優先する",
 			trains: []testTrain{
 				{"X.100", "X", weekday, []string{"X1 - 10:00", "X2 10:10 -"}},
 				{"Y.900", "Y", weekday, []string{"Y2 - 10:10", "Y3 10:20 -"}},
-				{"Y.100", "Y", weekday, []string{"Y2 - 10:13", "Y3 10:23 10:23", "Y4 10:30 -"}},
+				{"Y.100", "Y", weekday, []string{"Y2 - 10:13", "Y3 10:23 -"}},
 			},
 			destinations: map[string]string{"X.100": "Y3"},
 			want:         [][]string{{"X.100", "Y.100"}},
