@@ -87,10 +87,11 @@
   expect_tools: [get_train_status]
   expect_reply_any: [見合わせ]
 
-- name: 都営以外の駅
-  input: 新宿から渋谷まで
+# 都外の駅（他社のデータを読み込んでも対象外）
+- name: 対象外の駅
+  input: 横浜から大宮まで
   expect_tools: [find_station]
-  expect_reply_any: [対象外, 都営]
+  expect_reply_any: [対象外, 扱って, 見つかりません]
 
 - name: 存在しない駅
   input: ほげほげ駅から浅草へ

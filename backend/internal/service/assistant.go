@@ -119,6 +119,10 @@ type OperatorCoverage struct {
 
 // Operators は、アプリが扱う事業者を路線一覧の順に返す。AI への指示に使う。
 func (s *Service) Operators() []OperatorCoverage {
+	return slices.Clone(s.operators)
+}
+
+func (s *Service) indexOperators() []OperatorCoverage {
 
 	routeSearch := make(map[string]bool)
 	for _, st := range s.assets.Stations() {

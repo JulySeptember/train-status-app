@@ -109,12 +109,16 @@ backend-generate:
 
 # assets/extra（都営以外の事業者のデータ）は go:embed で埋め込む。ライセンス上リポジトリに置けないので、
 # 非公開の S3（Lambda アーティファクト用のバケット）に置き、どの版を使うかを assets/extra.version に書いてコミットする。
-# 本番のバイナリが都営だけにならないよう、ビルドの前にすべてそろっているかを確かめる（CI のテストはデータ無しで動く）
+# 本番のバイナリが都営だけにならないよう、ビルドの前にすべてそろっていて、中身が extra.version の版と同じかを確かめる
+# （S3 に無い版が本番に入らないように。CI のテストはデータ無しで動く）
 backend-build:
 	cd $(BACKEND_DIR) && \
 	for f in $(EXTRA_FILES); do \
 		test -f assets/extra/$$f || { echo "assets/extra/$$f is missing: run make backend-extra-download" >&2; exit 1; }; \
 	done && \
+	version=$$(cat assets/extra.version) && \
+	hash=$$(cd assets/extra && cat $(EXTRA_FILES) | sha256sum | cut -c1-12) && \
+	test "$${version##*-}" = "$$hash" || { echo "assets/extra does not match assets/extra.version ($$version): run make backend-extra-download or backend-extra-upload" >&2; exit 1; } && \
 	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 \
 	go build -o $(LAMBDA_BINARY) ./cmd/api
 

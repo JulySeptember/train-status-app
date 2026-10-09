@@ -63,6 +63,9 @@ type Service struct {
 	// 全駅の一覧（GET /api/stations）。起動後に変わらないので、起動時に作る
 	allStations []StationSummary
 
+	// アプリが扱う事業者（AI への指示に使う）
+	operators []OperatorCoverage
+
 	routes *route.Engine
 
 	// 駅名から駅を引く索引（AI の道具で使う）
@@ -104,6 +107,7 @@ func New(
 	}
 
 	s.allStations = s.indexAllStations()
+	s.operators = s.indexOperators()
 
 	s.warnUnknownNames()
 
