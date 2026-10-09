@@ -134,6 +134,10 @@ PR を作ったら、実装時の会話を持たないサブエージェント�
 - 大江戸線の環状部（外回り・内回り）は、駅時刻表に行先（`odpt:destinationStation`）が入っていない
 - ODPT 公開 API は1回の取得で最大1,000件しか返さない。`railway_fare.json` はちょうど1,000件で、途中までしか取れていない。列車時刻表は全件ダウンロード用の URL（`odpt:TrainTimetable.json`、リダイレクトされる）から取っている
 - ODPT のデータの一覧は `https://ckan.odpt.org/dataset/?_organization_limit=0&tags=%E9%89%84%E9%81%93-railway`（鉄道）。CKAN の API は使えないので HTML から読む。都営は JSON のほかに GTFS / GTFS-RT もあるが使っていない（理由は `docs/design/route-search.md` 3章）
+- 都営以外の事業者のデータは、キーの要る `api.odpt.org`（公共交通オープンデータ基本ライセンス）と `api-challenge.odpt.org`（チャレンジ限定ライセンス）から取る。どちらのライセンスも第8条4項で、データと派生データ（gob のように元のデータを復元できるもの）を第三者が再利用できる状態で公開することを禁じている。このリポジトリは公開なので、**他社のデータは JSON も gob もコミットしない**（一度入れると履歴から消すのに force push が要り、main では禁止している）。今の `backend/assets` は都営（CC BY 4.0）だけなので置いてよい。置き場所は `docs/design/multi-operator.md` 4章
+- ODPT のキーは手元では `backend/.env`（gitignore 済み）の `ODPT_CONSUMER_KEY`（`api.odpt.org`）・`ODPT_CHALLENGE_CONSUMER_KEY`（`api-challenge.odpt.org`）。キーは URL のクエリ（`acl:consumerKey=`）に入るので、`.env` の中身や、キーを入れた URL を画面・会話・ログに出さない（`.env` の変数名を見るときは `sed 's/=.*/=<hidden>/' backend/.env`）
+- 事業者ごとの API は列車時刻表・駅時刻表が 1,000 件で切れる。各ホストの全件ダウンロード用の URL（`/api/v4/odpt:TrainTimetable.json`・`odpt:StationTimetable.json`）で取る
+- チャレンジ限定ライセンスのデータ（JR東日本・京王・東武・京急・東急・西武・小田急）は、公共交通オープンデータチャレンジへの応募が前提で、2027年3月12日に許諾が終わる
 
 ### フロントエンド（`frontend/`）
 
