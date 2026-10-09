@@ -17,6 +17,6 @@ export type NavItem = {
 export const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "運行情報", icon: Activity },
   { to: "/journeys", label: "経路検索", icon: Route },
-  { to: "/chat", label: "AI に聞く", icon: Sparkles },
+  { to: "/chat", label: "AI 乗換相談", icon: Sparkles },
   { to: "/stations", label: "駅・時刻表", icon: MapPin },
 ];

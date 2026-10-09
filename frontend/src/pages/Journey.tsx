@@ -83,9 +83,9 @@ export default function Journey() {
               className="inline-flex items-center gap-1 text-brand hover:underline"
             >
               <Sparkles size={14} />
-              AI に聞く
+              AI 乗換相談
             </Link>
-            と、行き方を相談できます。
+            なら、話し言葉で行き方を調べられます。
           </p>
         </div>
       )}
