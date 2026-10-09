@@ -3,6 +3,14 @@ import { queryOptions, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "@/api";
 
+// 駅の時刻表へのリンク先。方向を選んでいれば、その方向で開く
+export function stationPath(id: string, direction?: string) {
+  const path = `/stations/${encodeURIComponent(id)}`;
+  return direction
+    ? `${path}?direction=${encodeURIComponent(direction)}`
+    : path;
+}
+
 // 駅の詳細（時刻表・乗降人員）。駅の画面と先読みで同じキャッシュを使う
 export function stationQuery(id: string) {
   return queryOptions({

@@ -708,11 +708,31 @@
                 }
             }
         },
+        "service.RailDirection": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "description": "方向（例: odpt.RailDirection:Northbound）",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "日本語名（例: 北行、荻窪方面）",
+                    "type": "string"
+                }
+            }
+        },
         "service.Railway": {
             "type": "object",
             "properties": {
                 "color": {
                     "type": "string"
+                },
+                "directions": {
+                    "description": "路線の方向（上り・下りの順）。駅の一覧で方向を選んでから時刻表を開くのに使う。GET /api/routes だけが返す",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/service.RailDirection"
+                    }
                 },
                 "id": {
                     "type": "string"

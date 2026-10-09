@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -461,7 +462,7 @@ func TestSearchJourneysSuspended(t *testing.T) {
 	}
 
 	want := []Railway{{ID: mitaRailway, Name: "三田線"}}
-	if !slices.Equal(got.SuspendedRailways, want) {
+	if !reflect.DeepEqual(got.SuspendedRailways, want) {
 		t.Errorf("suspendedRailways = %v, want %v", got.SuspendedRailways, want)
 	}
 

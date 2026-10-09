@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronUp } from "lucide-react";
 
@@ -22,7 +22,11 @@ export default function Station() {
 
   const railway = useRailway(railwayIdOf(stationId));
 
-  const [direction, setDirection] = useState("");
+  // 方向は URL に残す。駅の一覧で方向を選んできたときは、その方向で開く
+  const [params, setParams] = useSearchParams();
+  const direction = params.get("direction") ?? "";
+  const setDirection = (value: string) =>
+    setParams({ direction: value }, { replace: true });
   const [showPassengers, setShowPassengers] = useState(false);
 
   if (isPending) {
@@ -90,7 +94,8 @@ export default function Station() {
           <TabsList>
             {directions.map((d) => (
               <TabsTrigger key={d} value={d}>
-                {directionLabel(d)}
+                {railway?.directions?.find((r) => r.id === d)?.name ??
+                  directionLabel(d)}
               </TabsTrigger>
             ))}
           </TabsList>
