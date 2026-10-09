@@ -177,6 +177,7 @@ data "aws_iam_policy_document" "github_deploy" {
       values = [
         "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
         aws_iam_policy.lambda_ai.arn,
+        aws_iam_policy.lambda_odpt.arn,
       ]
     }
   }

@@ -19,6 +19,7 @@ import (
 	"train-status-app/backend/internal/config"
 	"train-status-app/backend/internal/handler"
 	"train-status-app/backend/internal/middleware"
+	"train-status-app/backend/internal/odptkey"
 	"train-status-app/backend/internal/router"
 	"train-status-app/backend/internal/service"
 
@@ -29,7 +30,7 @@ import (
 func main() {
 	cfg := config.Load()
 
-	c := client.New()
+	c := client.New(odptSources(cfg.ODPTOperators), odptKeys(cfg, isLambda()))
 
 	loader, err := assets.New()
 	if err != nil {
@@ -38,7 +39,7 @@ func main() {
 
 	svc := service.New(c, loader)
 
-	_, onLambda := os.LookupEnv("AWS_LAMBDA_RUNTIME_API")
+	onLambda := isLambda()
 
 	h := handler.New(svc, newChat(cfg, svc, onLambda))
 
@@ -119,4 +120,37 @@ func newChat(cfg config.Config, svc *service.Service, onLambda bool) handler.Cha
 		ai.NewMemoryLimiter(limits),
 		ai.DefaultConfig(),
 	)
+}
+
+func isLambda() bool {
+	_, ok := os.LookupEnv("AWS_LAMBDA_RUNTIME_API")
+	return ok
+}
+
+// odptSources は、リアルタイムの情報を取る事業者を返す。都営は常に含める。
+func odptSources(operators []string) []client.Source {
+
+	sources := []client.Source{client.Sources["Toei"]}
+
+	seen := map[string]bool{"Toei": true}
+
+	for _, name := range operators {
+		s, ok := client.Sources[name]
+		if !ok || seen[name] {
+			log.Printf("ignore unknown or duplicate operator in ODPT_OPERATORS: %q", name)
+			continue
+		}
+		seen[name] = true
+		sources = append(sources, s)
+	}
+
+	return sources
+}
+
+// odptKeys は、ODPT のキーを返す関数を作る。Lambda では SSM から、手元では環境変数から読む。
+func odptKeys(cfg config.Config, lambda bool) client.KeyFunc {
+	if lambda {
+		return odptkey.SSM(cfg.ODPTKeyParameter, cfg.ODPTChallengeKeyParameter)
+	}
+	return odptkey.Static(cfg.ODPTConsumerKey, cfg.ODPTChallengeConsumerKey)
 }

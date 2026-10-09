@@ -44,6 +44,11 @@ resource "aws_lambda_function" "this" {
       AI_USAGE_TABLE         = aws_dynamodb_table.ai_usage.name
       AI_MODEL               = var.ai_model
       AI_LIMIT_CALLS_PER_DAY = tostring(var.ai_calls_per_day)
+
+      # 都営以外の事業者。キーの値ではなく、キーを入れた SSM のパラメータ名を渡す
+      ODPT_OPERATORS               = join(",", var.odpt_operators)
+      ODPT_KEY_PARAMETER           = local.odpt_key_parameter
+      ODPT_CHALLENGE_KEY_PARAMETER = local.odpt_challenge_key_parameter
     }
   }
 

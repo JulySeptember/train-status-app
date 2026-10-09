@@ -32,3 +32,13 @@ resource "aws_iam_role_policy_attachment" "lambda_ai" {
   role       = aws_iam_role.lambda.name
   policy_arn = data.aws_iam_policy.lambda_ai.arn
 }
+
+# ODPT のキー（SSM）の読み取り。ポリシーは infra/bootstrap で作る
+data "aws_iam_policy" "lambda_odpt" {
+  name = "${local.name_prefix}-lambda-odpt"
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_odpt" {
+  role       = aws_iam_role.lambda.name
+  policy_arn = data.aws_iam_policy.lambda_odpt.arn
+}

@@ -47,3 +47,9 @@ variable "ai_calls_per_day" {
   type        = number
   default     = 200
 }
+
+variable "odpt_operators" {
+  description = "リアルタイムの情報（運行情報・列車位置）を取る、都営以外の事業者（backend の client.Sources の名前）。空なら都営だけ。チャレンジ限定ライセンスの事業者は 2027-03-12 までに外す"
+  type        = list(string)
+  default     = []
+}

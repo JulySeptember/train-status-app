@@ -26,6 +26,10 @@ services:
       - ./backend:/app
     ports:
       - "8080:8080"
+    # ODPT のキーなど（gitignore 済み。無くても起動する）
+    env_file:
+      - path: ./backend/.env
+        required: false
     command: go run ./cmd/api
     stdin_open: true
     tty: true
