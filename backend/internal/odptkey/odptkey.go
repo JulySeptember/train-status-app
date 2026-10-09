@@ -57,6 +57,7 @@ type loader func(ctx context.Context, name string) (string, error)
 
 type cached struct {
 	mu      sync.Mutex
+	hostMu  map[client.Host]*sync.Mutex
 	load    loader
 	names   map[client.Host]string
 	values  map[client.Host]string
@@ -69,24 +70,24 @@ type cached struct {
 func SSM(basicParam, challengeParam string) client.KeyFunc {
 
 	var (
-		once   sync.Once
+		mu     sync.Mutex
 		ssmCli *ssm.Client
-		cfgErr error
 	)
 
 	load := func(ctx context.Context, name string) (string, error) {
-		once.Do(func() {
-			var c aws.Config
-			c, cfgErr = config.LoadDefaultConfig(ctx)
-			if cfgErr == nil {
-				ssmCli = ssm.NewFromConfig(c)
+		mu.Lock()
+		if ssmCli == nil {
+			c, err := config.LoadDefaultConfig(ctx)
+			if err != nil {
+				mu.Unlock()
+				return "", err
 			}
-		})
-		if cfgErr != nil {
-			return "", cfgErr
+			ssmCli = ssm.NewFromConfig(c)
 		}
+		cli := ssmCli
+		mu.Unlock()
 
-		out, err := ssmCli.GetParameter(ctx, &ssm.GetParameterInput{
+		out, err := cli.GetParameter(ctx, &ssm.GetParameterInput{
 			Name:           aws.String(name),
 			WithDecryption: aws.Bool(true),
 		})
@@ -110,6 +111,10 @@ func newCached(load loader, basicParam, challengeParam string, now func() time.T
 			client.HostBasic:     basicParam,
 			client.HostChallenge: challengeParam,
 		},
+		hostMu: map[client.Host]*sync.Mutex{
+			client.HostBasic:     {},
+			client.HostChallenge: {},
+		},
 		values:  make(map[client.Host]string),
 		retryAt: make(map[client.Host]time.Time),
 		now:     now,
@@ -118,35 +123,52 @@ func newCached(load loader, basicParam, challengeParam string, now func() time.T
 
 func (c *cached) key(ctx context.Context, host client.Host) (string, error) {
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	// 読み込みはホストごとに1つずつ（basic と challenge は並列に読める）
+	hm, ok := c.hostMu[host]
+	if !ok {
+		return "", fmt.Errorf("%s: %w", host, ErrNotConfigured)
+	}
+	hm.Lock()
+	defer hm.Unlock()
 
-	if v, ok := c.values[host]; ok {
+	c.mu.Lock()
+	v, ok := c.values[host]
+	name := c.names[host]
+	retryAt := c.retryAt[host]
+	c.mu.Unlock()
+
+	if ok {
 		return v, nil
 	}
 
-	name := c.names[host]
 	if name == "" {
 		return "", fmt.Errorf("%s: %w", host, ErrNotConfigured)
 	}
 
-	if c.now().Before(c.retryAt[host]) {
+	if c.now().Before(retryAt) {
 		return "", fmt.Errorf("%s: %w", host, errUnavailable)
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, loadTimeout)
+	loadCtx, cancel := context.WithTimeout(ctx, loadTimeout)
 	defer cancel()
 
-	v, err := c.load(ctx, name)
+	v, err := c.load(loadCtx, name)
 	if err == nil && v == "" {
 		err = errors.New("empty value")
 	}
 	if err != nil {
-		c.retryAt[host] = c.now().Add(retryInterval)
+		// 呼び出し側が待てなくなった（期限切れ・キャンセル）だけなら、次の呼び出しですぐ読み直す
+		if ctx.Err() == nil {
+			c.mu.Lock()
+			c.retryAt[host] = c.now().Add(retryInterval)
+			c.mu.Unlock()
+		}
 		return "", fmt.Errorf("%s: %w", host, err)
 	}
 
+	c.mu.Lock()
 	c.values[host] = v
+	c.mu.Unlock()
 
 	return v, nil
 }

@@ -132,12 +132,15 @@ func odptSources(operators []string) []client.Source {
 
 	sources := []client.Source{client.Sources["Toei"]}
 
+	seen := map[string]bool{"Toei": true}
+
 	for _, name := range operators {
 		s, ok := client.Sources[name]
-		if !ok || name == "Toei" {
-			log.Printf("ignore unknown operator in ODPT_OPERATORS: %q", name)
+		if !ok || seen[name] {
+			log.Printf("ignore unknown or duplicate operator in ODPT_OPERATORS: %q", name)
 			continue
 		}
+		seen[name] = true
 		sources = append(sources, s)
 	}
 

@@ -22,6 +22,9 @@ import (
 
 var ErrExternalAPI = errors.New("external api error")
 
+// maxRecords は、ODPT の API が1回に返す件数の上限。
+const maxRecords = 1000
+
 // Host は ODPT の API のホスト。ライセンスとキーがホストごとに違う。
 type Host int
 
@@ -177,6 +180,10 @@ func fetchAll[T any](
 			failed++
 			log.Printf("odpt %s %s: %v", endpoint, c.sources[i].Name, r.err)
 			continue
+		}
+		// ODPT の API は1回に 1,000 件までしか返さない。切れていても分からないので知らせる
+		if len(r.data) >= maxRecords {
+			log.Printf("odpt %s %s: %d records, the result may be truncated", endpoint, c.sources[i].Name, len(r.data))
 		}
 		data = append(data, r.data...)
 	}

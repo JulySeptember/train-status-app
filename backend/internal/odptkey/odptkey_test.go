@@ -77,3 +77,34 @@ func TestCachedEmptyValue(t *testing.T) {
 		t.Fatal("expected an error for an empty value")
 	}
 }
+
+// 呼び出し側の ctx が終わって失敗したときは、読み直しを止めない。
+func TestCachedCallerCanceled(t *testing.T) {
+
+	calls := 0
+	load := func(ctx context.Context, _ string) (string, error) {
+		calls++
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		return "value", nil
+	}
+
+	c := newCached(load, "/basic", "", time.Now)
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if _, err := c.key(canceled, client.HostBasic); err == nil {
+		t.Fatal("expected an error")
+	}
+
+	v, err := c.key(context.Background(), client.HostBasic)
+	if err != nil || v != "value" {
+		t.Fatalf("expected the value right after a canceled call, got %q %v", v, err)
+	}
+
+	if calls != 2 {
+		t.Fatalf("expected 2 loads, got %d", calls)
+	}
+}
