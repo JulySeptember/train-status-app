@@ -293,7 +293,7 @@ Gemini API の規約では、無料枠に送った内容と応答は、Google �
 - `/api/chat` が初めて呼ばれたときに1回だけ読み込み、メモリに置いておく（`internal/ai/awssetup`）。AI 以外の API のコールドスタートを遅くしないため。
 - キーがまだ登録されていなければ 503 を返し、1分ごとに読み直す。登録すれば再デプロイせずに使える。Gemini がキーを拒否したら（`ErrAuth`）、次の質問で読み直す（キーを差し替えたとき）。
 - パラメータ名は `/<project>/<env>/gemini-api-key`。Terraform では作らず、手で登録する（値を tfstate に残さないため）。
-- Lambda の実行ロールに付ける権限（このパラメータの `ssm:GetParameter`、利用上限のテーブルの `dynamodb:UpdateItem`）は `infra/bootstrap` で作る。CD の deploy 用ロールには、そのポリシーを付け外しすることだけを許す。
+- Lambda の実行ロールに付ける権限（このパラメータの `ssm:GetParameter`、利用上限のテーブルの `dynamodb:UpdateItem`）は `infra/bootstrap` で作る。実行ロールへの付与も `infra/bootstrap`（`lambda_role.tf`）で行い、CD の deploy 用ロールには実行ロールの `iam:PassRole` だけを許す。
 - キーは、ソースコード、Git、CLAUDE.md、tfvars、Lambda の環境変数のどれにも書かない。
 
 ### 10.2 BYOK（Phase 4）

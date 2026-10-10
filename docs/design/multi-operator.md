@@ -125,7 +125,7 @@ deploy.yml（CD）
 
 - Gemini のキーと同じく、Terraform・tfvars・Lambda の環境変数・ログ・レスポンスにキーを出さない。リクエストの URL にキーが入るので、ODPT の取得に失敗したときのログやエラーに URL をそのまま出さない（今の `client` はエラーに URL を含めていないが、テストで確かめる）。
 - Lambda は、他社のリアルタイムの情報を初めて取るときに SSM から読み、プロセスが続く間は持ち続ける（AI のキーと同じ）。SSM を読めないあいだは、都営だけを返す。
-- SSM を読む権限は、`infra/bootstrap` にポリシーを作り、deploy 用ロールの `LambdaExecutionRolePolicy` の条件にその ARN を足す（CLAUDE.md の手順）。
+- SSM を読む権限は、`infra/bootstrap` にポリシーを作り、Lambda の実行ロール（`infra/bootstrap/lambda_role.tf`）に付ける（CLAUDE.md の手順）。
 
 ---
 

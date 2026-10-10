@@ -71,8 +71,8 @@ main への push が続くと、待機中の実行は新しいものに置き換
 - `make backend-deploy`: linux/arm64 でビルドして zip にし、S3 にアップロードする。Lambda への反映は `make tf-main-apply`（`s3_object_version` を参照している）
 - `make frontend-deploy`: ビルドして S3 に sync し、CloudFront を invalidate する
 - `make tf-main-plan` / `tf-main-apply`: `infra/main` を `infra/env/dev.tfvars` で適用する。`tf-*-apply` / `destroy` は `-auto-approve` 付き
-- `infra/bootstrap`: tfstate 用 S3・DynamoDB、Lambda アーティファクト用 S3、GitHub Actions 用の OIDC プロバイダと IAM ロール（PR の plan 用・main のデプロイ用）、Lambda に付ける AI 用のポリシー（`lambda_ai.tf`）を作る。state はローカルにあるので、手元から `make tf-bootstrap-apply` で適用する。bootstrap を変えた PR は、マージ（CD の `terraform apply`）の前に bootstrap を適用する
-- Lambda の実行ロールに権限を足すときは、`infra/bootstrap` でポリシーを作り、deploy 用ロールの `LambdaExecutionRolePolicy` の条件にその ARN を足す。deploy 用ロールに任意のポリシーを付けられる権限を与えない（CD を経由して権限を広げられないように）
+- `infra/bootstrap`: tfstate 用 S3・DynamoDB、Lambda アーティファクト用 S3、GitHub Actions 用の OIDC プロバイダと IAM ロール（PR の plan 用・main のデプロイ用）、Lambda の実行ロール（`lambda_role.tf`）とそれに付けるポリシー（`lambda_ai.tf`・`lambda_odpt.tf`）を作る。state はローカルにあるので、手元から `make tf-bootstrap-apply` で適用する。bootstrap を変えた PR は、マージ（CD の `terraform apply`）の前に bootstrap を適用する
+- Lambda の実行ロールとそれに付けるポリシーは `infra/bootstrap`（`lambda_role.tf`）で作る。権限を足すときは、ポリシーを作って `aws_iam_role_policy_attachment.lambda` に足す。deploy 用ロールには、そのロールの `iam:PassRole` 以外の IAM の権限を与えない（信頼ポリシーやポリシーを変えられると、SSM の API キーを読めるロールを引き受けたり、権限を広げたりできる）
 
 手元でデプロイするときは、make を1つずつ順に実行し、前のコマンドが成功したのを確かめてから次に進む（同時に実行すると、途中で止まったときに片方だけ反映される）。
 
@@ -104,7 +104,7 @@ PR を作ったら、実装時の会話を持たないサブエージェント�
 - 観点は正しさ（バグ、境界値、エラー処理）、セキュリティ、テストの欠落に絞る。命名や整形などの書き方は指摘させない
 - このリポジトリで特に見させる点:
   - API キーや AI への入力・応答の本文が、ログ・レスポンス・Terraform・tfvars・Lambda の環境変数に出ていないか
-  - deploy 用ロールに任意のポリシーを付けられる権限を与えていないか（Lambda の権限は `infra/bootstrap` のポリシーを条件に足す）
+  - deploy 用ロールに IAM を変える権限（ロール・信頼ポリシー・ポリシーの付け外し）を与えていないか（Lambda の実行ロールは `infra/bootstrap` で管理する）
   - 列車を列車番号ではなく列車ID で特定しているか
   - 運行日（3時前は前日扱い）と、24時以降の時刻の扱い
   - DTO（`service.go`）と `src/types.ts`、handler のアノテーションと `backend/docs/` がずれていないか

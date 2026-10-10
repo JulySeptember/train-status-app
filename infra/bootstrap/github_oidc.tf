@@ -131,7 +131,7 @@ data "aws_iam_policy_document" "github_deploy" {
     sid     = "Lambda"
     actions = ["lambda:*"]
     resources = [
-      "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:${local.name_prefix}-*",
+      "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:${local.name_prefix}-api",
     ]
   }
 
@@ -143,42 +143,18 @@ data "aws_iam_policy_document" "github_deploy" {
     ]
   }
 
-  # Lambda の実行ロールだけを操作できるようにする（このロール自身の権限は変えられない）
+  # Lambda の実行ロールは bootstrap（lambda_role.tf）で作り、ここでは関数に渡すことだけを許す。
+  # ロールの作成・信頼ポリシーの書き換え・ポリシーの付け外しを許すと、
+  # 自分を信頼させてロールを引き受けたり、強いポリシーを付けたりして権限を広げられる
   statement {
-    sid = "LambdaExecutionRole"
-    actions = [
-      "iam:CreateRole",
-      "iam:DeleteRole",
-      "iam:UpdateRole",
-      "iam:UpdateAssumeRolePolicy",
-      "iam:TagRole",
-      "iam:UntagRole",
-      "iam:PassRole",
-    ]
-    resources = [
-      "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.name_prefix}-lambda-role",
-    ]
-  }
-
-  # 付け外しできるポリシーも限る（強いポリシーを付けた Lambda を経由して権限を広げられないように）
-  statement {
-    sid = "LambdaExecutionRolePolicy"
-    actions = [
-      "iam:AttachRolePolicy",
-      "iam:DetachRolePolicy",
-    ]
-    resources = [
-      "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.name_prefix}-lambda-role",
-    ]
+    sid       = "PassLambdaExecutionRole"
+    actions   = ["iam:PassRole"]
+    resources = [aws_iam_role.lambda.arn]
 
     condition {
-      test     = "ArnEquals"
-      variable = "iam:PolicyARN"
-      values = [
-        "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
-        aws_iam_policy.lambda_ai.arn,
-        aws_iam_policy.lambda_odpt.arn,
-      ]
+      test     = "StringEquals"
+      variable = "iam:PassedToService"
+      values   = ["lambda.amazonaws.com"]
     }
   }
 
