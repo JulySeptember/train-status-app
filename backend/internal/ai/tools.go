@@ -107,6 +107,7 @@ func (t *Tools) Definitions() []Tool {
 			Name: "search_route",
 			Description: "2つの駅の間の経路を探す。現在の遅れと運転見合わせは反映済み（見合わせ中の路線は使わない）。" +
 				"結果は乗り換え回数ごとの候補。時刻は HH:MM、durationMinutes は所要時間（分）。" +
+				"legs の estimated が true の区間は、駅時刻表から推定した列車で、到着時刻は目安。" +
 				"legs の through が true の区間は、前の区間の列車に乗ったまま直通運転で入る（乗り換えではない）。" +
 				"walkBeforeMinutes・walkAfterMinutes は、出発駅から乗る駅まで・降りる駅から到着駅まで歩く時間（分。時刻に含まれる）。" +
 				"10分以上遅れている路線が関わるときは、その路線を使う経路と避けた経路をアプリが比べ、comparison に返す（faster が到着の早い方）。",
@@ -377,6 +378,9 @@ type routeLeg struct {
 
 	// 前の区間の列車から直通運転で乗り続ける（乗り換えではない）
 	Through bool `json:"through,omitempty"`
+
+	// 駅時刻表から推定した列車（到着時刻は目安）
+	Estimated bool `json:"estimated,omitempty"`
 }
 
 func (t *Tools) searchRoute(ctx context.Context, raw json.RawMessage) (ToolOutput, error) {
@@ -566,6 +570,7 @@ func trimJourneys(journeys []service.Journey) []routeJourney {
 				Arrival:      l.ArrivalTime,
 				DelayMinutes: l.DelayMinutes,
 				Through:      l.Through,
+				Estimated:    l.Estimated,
 			})
 		}
 

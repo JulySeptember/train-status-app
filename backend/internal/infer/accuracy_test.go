@@ -15,31 +15,6 @@ import (
 //
 // 都営のデータ（assets）は常にある。他社のデータ（.odpt-cache/dumps）は手元にあるときだけ測る。
 
-type rawRailway struct {
-	SameAs       string `json:"owl:sameAs"`
-	Operator     string `json:"odpt:operator"`
-	Ascending    string `json:"odpt:ascendingRailDirection"`
-	StationOrder []struct {
-		Index   int    `json:"odpt:index"`
-		Station string `json:"odpt:station"`
-	} `json:"odpt:stationOrder"`
-}
-
-type rawStationTimetable struct {
-	Operator      string `json:"odpt:operator"`
-	Railway       string `json:"odpt:railway"`
-	Station       string `json:"odpt:station"`
-	Calendar      string `json:"odpt:calendar"`
-	RailDirection string `json:"odpt:railDirection"`
-	Objects       []struct {
-		DepartureTime string   `json:"odpt:departureTime"`
-		Train         string   `json:"odpt:train"`
-		TrainType     string   `json:"odpt:trainType"`
-		Destination   []string `json:"odpt:destinationStation"`
-		IsOrigin      bool     `json:"odpt:isOrigin"`
-	} `json:"odpt:stationTimetableObject"`
-}
-
 func readJSONFile[T any](t *testing.T, path string) (T, bool) {
 	t.Helper()
 	var v T
@@ -56,79 +31,19 @@ func readJSONFile[T any](t *testing.T, path string) (T, bool) {
 	return v, true
 }
 
-// minutes は "HH:MM" を運行日の0時からの分にする（3時前は +24時間）。
-func minutes(v string) (int, bool) {
-	var h, m int
-	if _, err := fmt.Sscanf(v, "%d:%d", &h, &m); err != nil {
-		return 0, false
-	}
-	if h < 3 {
-		h += 24
-	}
-	return h*60 + m, true
-}
-
-// buildLines は、駅時刻表を路線・方向・ダイヤ種別ごとの Line にする。
-func buildLines(railways []rawRailway, timetables []rawStationTimetable, operator string) map[string]Line {
-
-	byRailway := make(map[string]rawRailway)
+// buildLines は、事業者の駅時刻表を Line にする。
+func buildLines(railways []RawRailway, timetables []RawStationTimetable, operator string) map[string]Line {
+	ops := make(map[string]bool)
 	for _, r := range railways {
-		byRailway[r.SameAs] = r
+		if r.Operator == operator {
+			ops[r.SameAs] = true
+		}
 	}
-
-	lines := make(map[string]Line)
-
-	for _, tt := range timetables {
-		if tt.Operator != operator {
-			continue
-		}
-		r, ok := byRailway[tt.Railway]
-		if !ok {
-			continue
-		}
-
-		id := tt.Railway + " " + tt.RailDirection + " " + tt.Calendar
-		l, ok := lines[id]
-		if !ok {
-			order := slices.Clone(r.StationOrder)
-			slices.SortFunc(order, func(a, b struct {
-				Index   int    `json:"odpt:index"`
-				Station string `json:"odpt:station"`
-			}) int {
-				return a.Index - b.Index
-			})
-			for _, o := range order {
-				l.Stations = append(l.Stations, o.Station)
-			}
-			if tt.RailDirection != r.Ascending {
-				slices.Reverse(l.Stations)
-			}
-			l.Departures = make(map[string][]Departure)
-		}
-
-		for _, o := range tt.Objects {
-			m, ok := minutes(o.DepartureTime)
-			if !ok {
-				continue
-			}
-			l.Departures[tt.Station] = append(l.Departures[tt.Station], Departure{
-				Station:     tt.Station,
-				Minutes:     m,
-				TrainType:   o.TrainType,
-				Destination: strings.Join(o.Destination, ","),
-				Origin:      o.IsOrigin,
-				Truth:       o.Train,
-			})
-		}
-
-		lines[id] = l
+	result := make(map[string]Line)
+	for k, l := range Lines(railways, timetables, func(r string) bool { return ops[r] }) {
+		result[k.Railway+" "+k.RailDirection+" "+k.Calendar] = l
 	}
-
-	for id, l := range lines {
-		lines[id] = Orient(l)
-	}
-
-	return lines
+	return result
 }
 
 type accuracy struct {
@@ -226,7 +141,7 @@ func arrivalsOf(tts []rawTrainTimetable) map[[3]string]int {
 	result := make(map[[3]string]int)
 	for _, tt := range tts {
 		for _, o := range tt.Objects {
-			if m, ok := minutes(o.ArrivalTime); ok && o.ArrivalStation != "" {
+			if m, ok := Minutes(o.ArrivalTime); ok && o.ArrivalStation != "" {
 				result[[3]string{tt.Train, tt.Calendar, o.ArrivalStation}] = m
 			}
 		}
@@ -239,8 +154,8 @@ func TestAccuracy(t *testing.T) {
 	assetsDir := filepath.Join("..", "..", "assets")
 	cacheDir := filepath.Join("..", "..", ".odpt-cache")
 
-	railways, ok1 := readJSONFile[[]rawRailway](t, filepath.Join(assetsDir, "railway.json"))
-	timetables, ok2 := readJSONFile[[]rawStationTimetable](t, filepath.Join(assetsDir, "station_timetable.json"))
+	railways, ok1 := readJSONFile[[]RawRailway](t, filepath.Join(assetsDir, "railway.json"))
+	timetables, ok2 := readJSONFile[[]RawStationTimetable](t, filepath.Join(assetsDir, "station_timetable.json"))
 	trainTimetables, ok3 := readJSONFile[[]rawTrainTimetable](t, filepath.Join(assetsDir, "train_timetable.json"))
 	if !ok1 || !ok2 || !ok3 {
 		t.Fatal("Toei assets are missing")
@@ -270,7 +185,7 @@ func TestAccuracy(t *testing.T) {
 	}
 
 	for _, op := range []string{"TokyoMetro", "Keio", "Tobu", "JR-East", "TWR", "MIR"} {
-		rs, ok := readJSONFile[[]rawRailway](t, filepath.Join(cacheDir, "operators", op, "Railway.json"))
+		rs, ok := readJSONFile[[]RawRailway](t, filepath.Join(cacheDir, "operators", op, "Railway.json"))
 		if !ok {
 			continue
 		}
@@ -287,17 +202,17 @@ func TestAccuracy(t *testing.T) {
 }
 
 var dumps struct {
-	stationTimetables []rawStationTimetable
+	stationTimetables []RawStationTimetable
 	arrivals          map[[3]string]int
 }
 
 // cachedDumps は、全件版の駅時刻表と列車時刻表を読む（大きいので1回だけ）。
-func cachedDumps(t *testing.T, cacheDir string) ([]rawStationTimetable, map[[3]string]int) {
+func cachedDumps(t *testing.T, cacheDir string) ([]RawStationTimetable, map[[3]string]int) {
 	t.Helper()
 	if dumps.arrivals == nil {
 		var trains []rawTrainTimetable
 		for _, host := range []string{"basic", "challenge"} {
-			if v, ok := readJSONFile[[]rawStationTimetable](t, filepath.Join(cacheDir, "dumps", host, "StationTimetable.json")); ok {
+			if v, ok := readJSONFile[[]RawStationTimetable](t, filepath.Join(cacheDir, "dumps", host, "StationTimetable.json")); ok {
 				dumps.stationTimetables = append(dumps.stationTimetables, v...)
 			}
 			if v, ok := readJSONFile[[]rawTrainTimetable](t, filepath.Join(cacheDir, "dumps", host, "TrainTimetable.json")); ok {

@@ -291,3 +291,127 @@ func Unplaced(l Line) int {
 	}
 	return n
 }
+
+// Partner は、直通先の列車の始発（駅・発車の分・行先）。
+type Partner struct {
+	Station     string
+	Minutes     int
+	Destination string
+
+	// 推定した列車なら、その路線（同じ路線の推定列車は直通先にしない。途中で切れた列車の始発のため）
+	Railway string
+}
+
+// MaxExtendStations は、直通先を探す、最後の発車より先の駅の数の上限。
+// 境目の駅は、最後の発車から多くても数駅先（小田急の急行が下北沢 → 代々木上原で6駅）
+const MaxExtendStations = 8
+
+// MaxExtendMinutes は、最後の発車から境目の駅までの所要時間の上限（分）。
+// 停車の少ない区間では各駅の所要時間の見込みが膨らむので、見込みだけでは上限にならない
+const MaxExtendMinutes = 20
+
+// ExtendToPartners は、行先が路線の外の列車（直通運転で他の路線へ行く）を、直通先の列車へ渡す境目の駅まで延ばす。
+//
+// 直通する列車は、境目の駅（田園都市線 → 半蔵門線の渋谷、小田急 → 千代田線の代々木上原、西武池袋線 → 西武有楽町線の練馬）
+// では発車しない（駅時刻表には直通先の事業者の発車として載る）ので、推定した列車は境目の手前の最後の発車で終わる。
+// 最後の発車の駅から MaxExtendStations 駅先までのうち、その駅（か乗り換えでつながる駅）から同じ行先の列車が
+// 出ている最初の駅を境目とし、その駅を終点にして、到着をその直通先の発車の分にする（乗り継ぐ間を0分とみなす）。
+// 最後の発車の駅そのものが境目なら、その駅の発車の分を到着にする。
+//
+// 別の列車（1本前の列車の直通先、途中から出る別の列車）を取らないよう、
+//   - 所要時間が見込み（各駅の所要時間の和）の半分以上・1.5倍＋3分以下・MaxExtendMinutes 以下の直通先だけを使う
+//   - 境目の駅に着く見込みの早い列車から順に、まだ使っていない最も早い直通先を割り当てる。境目の手前は追い越しが
+//     できない区間が多い（三軒茶屋 → 渋谷）ので、見込みとの差の小さい組から決めると、急行と各停の直通先が入れ替わる
+//   - 1つの直通先には1本だけをつなぐ（used は路線・方向をまたいで共有する）
+//   - 同じ路線の推定列車の始発（途中で切れた列車）は使わない
+//
+// partners は駅（とつながる駅）から出る列車の始発を返す（同じダイヤ種別のもの）。
+func ExtendToPartners(l Line, railway string, trains []Train, partners func(station string) []Partner, used map[Partner]bool) []Train {
+
+	run := runTimes(l)
+	index := make(map[string]int, len(l.Stations))
+	for i, s := range l.Stations {
+		index[s] = i
+	}
+
+	inRange := func(gap, want int, last bool) bool {
+		if last {
+			// 最後の発車の駅が境目: その駅の発車と同じか少し後に出る直通先
+			return gap >= 0 && gap <= 5
+		}
+		return gap*2 >= want && gap*2 <= want*3+6 && gap <= MaxExtendMinutes
+	}
+
+	// 列車ごとに境目の駅（同じ行先の直通先が範囲内に出ている最初の駅）と、そこに着く見込みを決める
+	type target struct {
+		train   int
+		station int
+		want    int
+		arrival int
+	}
+	var targets []target
+
+	for n, tr := range trains {
+
+		last := tr.Stops[len(tr.Stops)-1]
+		if tr.Terminal != "" {
+			continue
+		}
+		if _, ok := index[last.Destination]; ok {
+			continue
+		}
+
+		from := index[last.Station]
+		want := 0
+
+	search:
+		for j := from; j < len(l.Stations) && j <= from+MaxExtendStations; j++ {
+			if j > from {
+				want += run[j]
+			}
+			for _, p := range partners(l.Stations[j]) {
+				if p.Destination == last.Destination && (p.Railway == "" || p.Railway != railway) &&
+					inRange(p.Minutes-last.Minutes, want, j == from) {
+					targets = append(targets, target{train: n, station: j, want: want, arrival: last.Minutes + want})
+					break search
+				}
+			}
+		}
+	}
+
+	slices.SortStableFunc(targets, func(a, b target) int {
+		return cmp.Or(cmp.Compare(a.station, b.station), cmp.Compare(a.arrival, b.arrival), cmp.Compare(a.train, b.train))
+	})
+
+	result := slices.Clone(trains)
+
+	for _, t := range targets {
+
+		last := result[t.train].Stops[len(result[t.train].Stops)-1]
+
+		best := -1
+		var chosen Partner
+		for _, p := range partners(l.Stations[t.station]) {
+			if used[p] || p.Destination != last.Destination || (p.Railway != "" && p.Railway == railway) ||
+				!inRange(p.Minutes-last.Minutes, t.want, t.station == index[last.Station]) {
+				continue
+			}
+			if best < 0 || p.Minutes < best {
+				best, chosen = p.Minutes, p
+			}
+		}
+		if best < 0 {
+			continue
+		}
+
+		used[chosen] = true
+		result[t.train].Terminal = l.Stations[t.station]
+		result[t.train].TerminalMinutes = chosen.Minutes
+		if t.station == index[last.Station] {
+			// 最後の発車の駅が境目: 到着はその駅の発車（到着が発車より後にならないように）
+			result[t.train].TerminalMinutes = last.Minutes
+		}
+	}
+
+	return result
+}

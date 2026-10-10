@@ -34,6 +34,7 @@ type operatorSummary struct {
 	trains            int
 	droppedStops      int // 時刻の無い停車
 	multiDestinations int // 行先が2駅以上ある列車
+	estimatedTrains   int // 駅時刻表から推定した列車（列車時刻表の無い路線）
 }
 
 type extraSummary map[string]*operatorSummary
@@ -95,7 +96,10 @@ func genExtra(rawDir, areaPath, outDir string) error {
 		return err
 	}
 	operators := make(map[string]bool)
+	keptRailways := make(map[string]bool)
+	railwayFiles := files
 	railways, err := filterRaw(files, func(v struct {
+		SameAs       string               `json:"owl:sameAs"`
 		Operator     string               `json:"odpt:operator"`
 		StationOrder []model.StationOrder `json:"odpt:stationOrder"`
 	}) bool {
@@ -104,6 +108,7 @@ func genExtra(rawDir, areaPath, outDir string) error {
 		})
 		if ok {
 			operators[v.Operator] = true
+			keptRailways[v.SameAs] = true
 			summary.of(v.Operator).railways++
 		}
 		return ok
@@ -151,6 +156,7 @@ func genExtra(rawDir, areaPath, outDir string) error {
 		return err
 	}
 	var trainTimetables []model.TrainTimetable
+	hasTrains := make(map[string]bool) // 列車時刻表のある路線
 	for _, path := range files {
 		var all []model.TrainTimetable
 		if err := readJSON(path, &all); err != nil {
@@ -160,6 +166,7 @@ func genExtra(rawDir, areaPath, outDir string) error {
 			if tt.Operator == toeiOperator {
 				continue
 			}
+			hasTrains[tt.Railway] = true
 			s := summary.of(tt.Operator)
 			clipped, dropped, ok := clipTrain(tt, area)
 			s.droppedStops += dropped
@@ -172,6 +179,32 @@ func genExtra(rawDir, areaPath, outDir string) error {
 			trainTimetables = append(trainTimetables, clipped)
 			s.trains++
 		}
+	}
+
+	// 列車時刻表の無い路線（東急・西武・小田急・京急・ゆりかもめ）は、駅時刻表から列車を推定する。
+	// 推定は都内に絞る前の全駅の駅時刻表で行い、列車時刻表と同じく都内の停車に切る
+	stationFiles, err := operatorFiles("Station.json")
+	if err != nil {
+		return err
+	}
+	estimated, err := estimateFromRaw(railwayFiles, stationFiles, files, func(railway string) bool {
+		return keptRailways[railway] && !hasTrains[railway]
+	})
+	if err != nil {
+		return err
+	}
+	for _, tt := range estimated {
+		s := summary.of(tt.Operator)
+		clipped, _, ok := clipTrain(tt, area)
+		if !ok {
+			continue
+		}
+		if len(tt.DestinationStation) > 1 {
+			s.multiDestinations++
+		}
+		trainTimetables = append(trainTimetables, clipped)
+		s.trains++
+		s.estimatedTrains++
 	}
 
 	// 都外の行先駅の駅名（直通運転・都外まで走る列車の行先を表示するため）
@@ -226,8 +259,8 @@ func genExtra(rawDir, areaPath, outDir string) error {
 			continue // 都内に駅の無い事業者（全件版に含まれる相鉄など）
 		}
 		log.Printf(
-			"%s: %d railways, %d stations, %d station timetables, %d trains (dropped %d stops without time, %d trains with multiple destinations keep the first)",
-			op, s.railways, s.stations, s.stationTimetables, s.trains, s.droppedStops, s.multiDestinations,
+			"%s: %d railways, %d stations, %d station timetables, %d trains (%d estimated from station timetables; dropped %d stops without time, %d trains with multiple destinations keep the first)",
+			op, s.railways, s.stations, s.stationTimetables, s.trains, s.estimatedTrains, s.droppedStops, s.multiDestinations,
 		)
 	}
 

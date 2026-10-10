@@ -14,6 +14,7 @@ import (
 	"train-status-app/backend/assets"
 	"train-status-app/backend/internal/calendar"
 	"train-status-app/backend/internal/client"
+	"train-status-app/backend/internal/infer"
 	"train-status-app/backend/internal/model"
 	"train-status-app/backend/internal/route"
 	"train-status-app/backend/internal/station"
@@ -1034,6 +1035,11 @@ type JourneyLeg struct {
 	// 前の区間の列車から、直通運転で乗り続ける区間か（乗り換えではない。transfers に数えない）。
 	// 列車は事業者ごとに分かれているので、train・trainNumber はこの区間の事業者の列車になる
 	Through bool `json:"through"`
+
+	// 列車時刻表の無い事業者（東急・西武・小田急・京急・ゆりかもめ）の列車で、駅時刻表の発車をつないで
+	// 推定したものか（docs/design/multi-operator.md 8章）。発車時刻は駅時刻表のとおりだが、どの発車が同じ列車かと
+	// 終点の到着時刻は推定。trainNumber は空で、列車の位置は引けない
+	Estimated bool `json:"estimated"`
 }
 
 // JourneyQuery は経路検索の条件。
@@ -1180,6 +1186,7 @@ func (s *Service) SearchJourneys(
 				ArrivalTime:     formatClock(l.Arrival),
 				DelayMinutes:    l.Delay,
 				Through:         l.Through,
+				Estimated:       infer.IsEstimated(l.Train),
 			})
 		}
 

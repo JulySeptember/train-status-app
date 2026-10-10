@@ -129,6 +129,7 @@ PR を作ったら、実装時の会話を持たないサブエージェント�
 ### ODPT データの注意点
 
 - 列車番号（`odpt:trainNumber`）は路線間で重複し、平日・土休日ダイヤでも使い回される。列車は必ず列車ID（`odpt.Train:Toei.<路線>.<番号>`）で特定する。service は起動時に駅時刻表から列車ID → 路線・列車番号の索引を作る
+- 東急・西武・小田急・京急・ゆりかもめは列車時刻表が無く、駅時刻表にも列車ID・到着時刻が無い。データ生成（`cmd/gen-assets -kind extra`）で、駅時刻表の発車をつないで列車を推定して列車時刻表に足す（`internal/infer`。列車ID に `.Estimated.` が入り、列車番号は空）。推定の正しさは列車時刻表のある事業者で測っている（`internal/infer/accuracy_test.go`）
 - 直通運転の列車は、事業者（路線）ごとに別の列車として載っていて、`odpt:nextTrainTimetable` も事業者をまたがない。列車番号も事業者ごとに付け方が違う（JR 1016K ⇔ メトロ A1017K）。経路探索は境目の駅で行先と時刻からつなぐ（`internal/route/through.go`。結果の区間は `through`）
 - 日暮里・舎人ライナーは `odpt:Train` が配信されない（`trainLocationUnsupported`）。荒川線は `odpt:Train` は配信されるが `odpt:delay` が null（`model` では 0 になる）。他社は、`odpt:Train` を配信している事業者を `client.Sources` の `Location` で表す（メトロなどは配信していない。京急は `odpt:delay` が null）
 - `odpt:Train` で `toStation` が null の列車は `fromStation` に停車中

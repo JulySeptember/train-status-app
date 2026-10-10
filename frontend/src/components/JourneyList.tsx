@@ -99,15 +99,25 @@ function Leg({ leg }: { leg: JourneyLeg }) {
             )}
           </div>
 
-          <p className="text-sm text-muted-foreground">
-            {duration(leg.departureTime, leg.arrivalTime)}乗車・
-            <Link
-              to={`/trains/${encodeURIComponent(leg.train)}`}
-              className="hover:text-brand"
-            >
-              列車番号 {leg.trainNumber}
-            </Link>
-          </p>
+          {leg.estimated ? (
+            // 駅時刻表から推定した列車には列車番号が無く、位置も引けないので、詳細へのリンクを出さない
+            <p className="text-sm text-muted-foreground">
+              {duration(leg.departureTime, leg.arrivalTime)}乗車・
+              <span title="この事業者は列車ごとの時刻表を公開していないため、駅の時刻表から列車を推定しています。発車時刻は時刻表どおりですが、到着時刻は目安です">
+                時刻表から推定（到着は目安）
+              </span>
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {duration(leg.departureTime, leg.arrivalTime)}乗車・
+              <Link
+                to={`/trains/${encodeURIComponent(leg.train)}`}
+                className="hover:text-brand"
+              >
+                列車番号 {leg.trainNumber}
+              </Link>
+            </p>
+          )}
         </div>
       </div>
 
