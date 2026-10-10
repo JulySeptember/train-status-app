@@ -3,12 +3,6 @@ data "aws_s3_object" "lambda" {
   key    = var.lambda_artifact_key
 }
 
-# Lambda が自動で作ったロググループを取り込んで、保持期間を設定する
-import {
-  to = aws_cloudwatch_log_group.lambda
-  id = "/aws/lambda/${local.name_prefix}-api"
-}
-
 resource "aws_cloudwatch_log_group" "lambda" {
   name              = "/aws/lambda/${local.name_prefix}-api"
   retention_in_days = 30
