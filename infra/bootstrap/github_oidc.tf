@@ -210,3 +210,42 @@ resource "aws_iam_role_policy" "github_deploy" {
   role   = aws_iam_role.github_deploy.id
   policy = data.aws_iam_policy_document.github_deploy.json
 }
+
+# ============================
+# plan・deploy 共通
+# ============================
+
+# ReadOnlyAccess には ssm:GetParameter（復号つき）が含まれ、SSM の API キー（Gemini・ODPT）まで読めてしまう。
+# ワークフローを書き換えてキーを取り出せないよう、明示的に拒否する。
+# infra/main はパラメータ名を文字列で Lambda に渡すだけで、aws_ssm_parameter の data source を使っていないので plan・apply には要らない。
+data "aws_iam_policy_document" "github_deny_ssm" {
+  statement {
+    sid     = "DenyReadAppParameters"
+    effect  = "Deny"
+    actions = ["ssm:GetParameter*"]
+    resources = [
+      "arn:aws:ssm:*:${data.aws_caller_identity.current.account_id}:parameter/${var.project_name}",
+      "arn:aws:ssm:*:${data.aws_caller_identity.current.account_id}:parameter/${var.project_name}/*",
+    ]
+  }
+
+  # 上の階層（"/" など）を再帰的に読めば、下のパラメータも返ってくるので、パスでの取得はすべて拒否する
+  # （/aws/service/... の公開パラメータもパスでは取れなくなる。aws_ssm_parameters_by_path を使うときは見直す）
+  statement {
+    sid       = "DenyReadParametersByPath"
+    effect    = "Deny"
+    actions   = ["ssm:GetParametersByPath"]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "github_deny_ssm" {
+  for_each = {
+    plan   = aws_iam_role.github_plan.id
+    deploy = aws_iam_role.github_deploy.id
+  }
+
+  name   = "${local.name_prefix}-github-deny-ssm"
+  role   = each.value
+  policy = data.aws_iam_policy_document.github_deny_ssm.json
+}
