@@ -203,3 +203,51 @@ func TestCheckDuplicates(t *testing.T) {
 		t.Fatal("expected duplicate error")
 	}
 }
+
+func TestFillTerminalsFromNext(t *testing.T) {
+
+	stop := func(dep, depTime, arr, arrTime string) model.TrainTimetableEntry {
+		return model.TrainTimetableEntry{DepartureStation: dep, DepartureTime: depTime, ArrivalStation: arr, ArrivalTime: arrTime}
+	}
+
+	all := []model.TrainTimetable{
+		// 終点（立川）に時刻が無く、次の列車（青梅線）が分かっている
+		{SameAs: "odpt.TrainTimetable:A", Operator: "odpt.Operator:JR-East", Calendar: "Weekday",
+			NextTrainTimetable: []string{"odpt.TrainTimetable:B"},
+			TrainTimetableObject: []model.TrainTimetableEntry{
+				stop("Kunitachi", "11:35", "", ""),
+				stop("", "", "ChuoRapid.Tachikawa", ""),
+			}},
+		{SameAs: "odpt.TrainTimetable:B", Operator: "odpt.Operator:JR-East", Calendar: "Weekday",
+			TrainTimetableObject: []model.TrainTimetableEntry{
+				stop("Ome.Tachikawa", "11:40", "", ""),
+				stop("", "", "Ome", "12:10"),
+			}},
+		// 次の列車のダイヤ種別が違えば入れない
+		{SameAs: "odpt.TrainTimetable:C", Operator: "odpt.Operator:JR-East", Calendar: "Holiday",
+			NextTrainTimetable: []string{"odpt.TrainTimetable:B"},
+			TrainTimetableObject: []model.TrainTimetableEntry{
+				stop("Kunitachi", "11:35", "", ""),
+				stop("", "", "ChuoRapid.Tachikawa", ""),
+			}},
+		// 次の列車の始発が終点と違う駅なら入れない（大崎で終わり、次の列車は品川から）
+		{SameAs: "odpt.TrainTimetable:D", Operator: "odpt.Operator:JR-East", Calendar: "Weekday",
+			NextTrainTimetable: []string{"odpt.TrainTimetable:B"},
+			TrainTimetableObject: []model.TrainTimetableEntry{
+				stop("Gotanda", "11:35", "", ""),
+				stop("", "", "ShonanShinjuku.Osaki", ""),
+			}},
+	}
+
+	filled := fillTerminalsFromNext(all)
+
+	if len(filled) != 1 || all[0].TrainTimetableObject[1].ArrivalTime != "11:40" {
+		t.Errorf("filled %v, terminal %+v", filled, all[0].TrainTimetableObject[1])
+	}
+	if all[2].TrainTimetableObject[1].ArrivalTime != "" {
+		t.Errorf("a different calendar must not be filled: %+v", all[2].TrainTimetableObject[1])
+	}
+	if all[3].TrainTimetableObject[1].ArrivalTime != "" {
+		t.Errorf("a different station must not be filled: %+v", all[3].TrainTimetableObject[1])
+	}
+}

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"train-status-app/backend/assets/slim"
 	"train-status-app/backend/internal/model"
@@ -33,6 +34,7 @@ type operatorSummary struct {
 	stationTimetables int
 	trains            int
 	droppedStops      int // 時刻の無い停車
+	filledTerminals   int // 時刻の無い終点に、次の列車の始発の発車時刻を入れた列車
 	multiDestinations int // 行先が2駅以上ある列車
 	estimatedTrains   int // 駅時刻表から推定した列車（列車時刻表の無い路線）
 }
@@ -162,6 +164,9 @@ func genExtra(rawDir, areaPath, outDir string) error {
 		if err := readJSON(path, &all); err != nil {
 			return err
 		}
+		for _, filled := range fillTerminalsFromNext(all) {
+			summary.of(filled).filledTerminals++
+		}
 		for _, tt := range all {
 			if tt.Operator == toeiOperator {
 				continue
@@ -259,8 +264,8 @@ func genExtra(rawDir, areaPath, outDir string) error {
 			continue // 都内に駅の無い事業者（全件版に含まれる相鉄など）
 		}
 		log.Printf(
-			"%s: %d railways, %d stations, %d station timetables, %d trains (%d estimated from station timetables; dropped %d stops without time, %d trains with multiple destinations keep the first)",
-			op, s.railways, s.stations, s.stationTimetables, s.trains, s.estimatedTrains, s.droppedStops, s.multiDestinations,
+			"%s: %d railways, %d stations, %d station timetables, %d trains (%d estimated from station timetables; %d terminals filled from the next train; dropped %d stops without time, %d trains with multiple destinations keep the first)",
+			op, s.railways, s.stations, s.stationTimetables, s.trains, s.estimatedTrains, s.filledTerminals, s.droppedStops, s.multiDestinations,
 		)
 	}
 
@@ -453,4 +458,55 @@ func checkDuplicates(stationTimetables []model.StationTimetable, trainTimetables
 	}
 
 	return nil
+}
+
+// lastSegment は ID の最後の部分（odpt.Station:JR-East.Ome.Tachikawa → Tachikawa）を返す。
+func lastSegment(id string) string {
+	return id[strings.LastIndex(id, ".")+1:]
+}
+
+// fillTerminalsFromNext は、終点に時刻が無く、次の列車（odpt:nextTrainTimetable）が分かっている列車の終点に、
+// 次の列車の始発の発車時刻を到着時刻として入れる。入れた列車の事業者を返す。
+//
+// JR の中央線快速 → 青梅線のように、同じ事業者の中で路線が変わって走り続ける列車は、前の列車の終点（立川）に
+// 到着時刻が無いことがある。時刻の無い停車は捨てるので、前の列車が1つ手前の駅（国立）で終わり、
+// 直通のつなぎ（internal/route/through.go。前の列車の終点の到着時刻を使う）にならない。
+// 到着を次の列車の発車の時刻とみなす（停車の分だけ遅めになる）。
+func fillTerminalsFromNext(all []model.TrainTimetable) []string {
+
+	bySameAs := make(map[string]int, len(all))
+	for i, tt := range all {
+		bySameAs[tt.SameAs] = i
+	}
+
+	var filled []string
+
+	for i := range all {
+		tt := &all[i]
+		if len(tt.NextTrainTimetable) != 1 || len(tt.TrainTimetableObject) == 0 {
+			continue
+		}
+		last := &tt.TrainTimetableObject[len(tt.TrainTimetableObject)-1]
+		if last.ArrivalTime != "" || last.DepartureTime != "" || last.ArrivalStation == "" {
+			continue
+		}
+		j, ok := bySameAs[tt.NextTrainTimetable[0]]
+		if !ok {
+			continue
+		}
+		next := all[j]
+		if next.Calendar != tt.Calendar || len(next.TrainTimetableObject) == 0 {
+			continue
+		}
+		first := next.TrainTimetableObject[0]
+		// 次の列車の始発が終点と同じ駅（路線ごとに ID が違うので、ID の駅名の部分で比べる）のときだけ入れる。
+		// 違う駅なら（湘南新宿ラインの大崎 → 横須賀線の品川）、その駅の発車は終点の到着にならない
+		if first.DepartureTime == "" || lastSegment(first.DepartureStation) != lastSegment(last.ArrivalStation) {
+			continue
+		}
+		last.ArrivalTime = first.DepartureTime
+		filled = append(filled, tt.Operator)
+	}
+
+	return filled
 }

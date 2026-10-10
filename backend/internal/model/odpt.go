@@ -192,6 +192,10 @@ type TrainTimetable struct {
 	OriginStation      []string `json:"odpt:originStation"`
 	DestinationStation []string `json:"odpt:destinationStation"`
 
+	// 次の列車の時刻表（odpt.TrainTimetable:...）。同じ事業者の中で路線が変わって走り続けるときに入る。
+	// データの生成（cmd/gen-assets）だけが使う
+	NextTrainTimetable []string `json:"odpt:nextTrainTimetable,omitempty"`
+
 	TrainTimetableObject []TrainTimetableEntry `json:"odpt:trainTimetableObject"`
 }
 
