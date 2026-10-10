@@ -33,25 +33,3 @@ resource "aws_iam_role_policy_attachment" "lambda" {
   role       = aws_iam_role.lambda.name
   policy_arn = each.value
 }
-
-# infra/main で作ったものを取り込む。
-# 実行ロールが無い新しい環境（destroy の後など）では import が失敗するので、この import ブロックを消してから適用する
-import {
-  to = aws_iam_role.lambda
-  id = "${local.name_prefix}-lambda-role"
-}
-
-import {
-  to = aws_iam_role_policy_attachment.lambda["basic_execution"]
-  id = "${local.name_prefix}-lambda-role/arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-}
-
-import {
-  to = aws_iam_role_policy_attachment.lambda["ai"]
-  id = "${local.name_prefix}-lambda-role/arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/${local.name_prefix}-lambda-ai"
-}
-
-import {
-  to = aws_iam_role_policy_attachment.lambda["odpt"]
-  id = "${local.name_prefix}-lambda-role/arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/${local.name_prefix}-lambda-odpt"
-}
