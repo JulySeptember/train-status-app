@@ -315,3 +315,44 @@ func TestExtendToPartnersAtLastStopWithGap(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
+
+// 途中で列車種別が変わる列車（西武新宿線の拝島行きの急行は、上石神井から先は各停）は、1本につなぐ
+func TestInferTrainTypeChange(t *testing.T) {
+
+	// A・B は急行、C・D は各停として載る。急行の発車は B より先に無い
+	l := Line{
+		Stations: []string{"A", "B", "C", "D", "E"},
+		Departures: map[string][]Departure{
+			"A": {dep("A", 100, "Express", "E")},
+			"B": {dep("B", 105, "Express", "E")},
+			"C": {dep("C", 108, "Local", "E")},
+			"D": {dep("D", 110, "Local", "E")},
+		},
+	}
+
+	got := trainsOf(Infer(l))
+	if len(got) != 1 || len(got[0]) != 5 || got[0][0] != "A@100" || got[0][3] != "D@110" {
+		t.Errorf("got %v", got)
+	}
+}
+
+// 前の種別がその駅より先にも現れる（途中を通過する急行）なら、別の種別の発車にはつながない
+func TestInferNoTrainTypeChangeWhenContinuing(t *testing.T) {
+
+	l := Line{
+		Stations: []string{"A", "B", "C", "D"},
+		Departures: map[string][]Departure{
+			"A": {dep("A", 100, "Express", "D")},
+			// 急行は B を通過して C に停まる。B から始まる各停がある
+			"B": {dep("B", 103, "Local", "D")},
+			"C": {dep("C", 106, "Express", "D"), dep("C", 107, "Local", "D")},
+		},
+	}
+
+	// 急行は A → C、各停は B → C（B から始まる）。急行が B の各停を取り込まない
+	got := trainsOf(Infer(l))
+	want := [][]string{{"A@100", "C@106", "D=108"}, {"B@103", "C@107", "D=109"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}

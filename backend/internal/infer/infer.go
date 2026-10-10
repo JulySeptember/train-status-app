@@ -119,10 +119,21 @@ func Infer(l Line) []Train {
 		return total
 	}
 
+	// 列車種別・行先ごとの、発車のある最後の駅の位置（途中で種別が変わる列車を見分ける）
+	lastIndex := make(map[key]int)
+	for i, station := range l.Stations {
+		for _, d := range l.Departures[station] {
+			lastIndex[key{d.TrainType, d.Destination}] = i
+		}
+	}
+
 	var done []*chain
 	active := make(map[key][]*chain)
 
 	for i, station := range l.Stations {
+
+		// この駅で新しく始まった列車（種別が変わった列車の続きかを、あとで調べる）
+		var started []*chain
 
 		groups := groupByKey(l.Departures[station])
 
@@ -165,7 +176,11 @@ func Infer(l Line) []Train {
 				}
 
 				if best < 0 {
-					candidates = append(candidates, &chain{stops: []Departure{d}, key: k, last: i})
+					c := &chain{stops: []Departure{d}, key: k, last: i}
+					candidates = append(candidates, c)
+					if !d.Origin {
+						started = append(started, c)
+					}
 					continue
 				}
 
@@ -176,6 +191,8 @@ func Infer(l Line) []Train {
 
 			active[k] = candidates
 		}
+
+		changeTrainType(active, started, i, lastIndex, expected)
 
 		// 行先の駅に着いた列車は終える（行先の駅では発車しない）
 		for k, cs := range active {
@@ -414,4 +431,62 @@ func ExtendToPartners(l Line, railway string, trains []Train, partners func(stat
 	}
 
 	return result
+}
+
+// changeTrainType は、駅 i で新しく始まった列車（started）のうち、途中で列車種別が変わった列車の続きを、前の列車につなぐ。
+//
+// 途中の駅で種別が変わる列車がある（西武新宿線の拝島行きの急行は、上石神井から先は各停として駅時刻表に載る）。
+// 同じ種別・行先の発車しかつながないと、種別が変わる駅で2本に分かれ、行先や直通運転の境目まで届かない。
+// 前の列車と行先が同じで、前の列車の種別・行先の発車がこの駅より先に1つも無い（その種別はこの駅の手前で終わる）とき、
+// 所要時間の見込みの範囲なら、種別が変わったとみなしてつなぐ。前の種別がこの駅より先にも現れるなら、
+// 前の列車はまだ先へ走るので（途中を通過する急行）、つながない。見込みとの差の小さい組から決める。
+func changeTrainType(active map[key][]*chain, started []*chain, i int, lastIndex map[key]int, expected func(from, to int) int) {
+
+	type pair struct {
+		next, prev *chain
+		score      int
+	}
+	var pairs []pair
+
+	for _, next := range started {
+		d := next.stops[0]
+		for k, cs := range active {
+			if k.destination != next.key.destination || k.trainType == next.key.trainType || lastIndex[k] >= i {
+				continue
+			}
+			for _, prev := range cs {
+				gap := d.Minutes - prev.stops[len(prev.stops)-1].Minutes
+				if prev.last >= i || gap <= 0 {
+					continue
+				}
+				want := expected(prev.last, i)
+				if gap > want*2+10 {
+					continue
+				}
+				pairs = append(pairs, pair{next, prev, abs(gap - want)})
+			}
+		}
+	}
+
+	slices.SortStableFunc(pairs, func(a, b pair) int {
+		return cmp.Or(cmp.Compare(a.score, b.score), cmp.Compare(a.next.stops[0].Minutes, b.next.stops[0].Minutes))
+	})
+
+	joined := make(map[*chain]bool)
+	for _, p := range pairs {
+		if joined[p.next] || joined[p.prev] {
+			continue
+		}
+		joined[p.next], joined[p.prev] = true, true
+
+		// 前の列車を新しい種別の列車として続け、新しく始まった列車は消す
+		old := p.prev.key
+		p.prev.stops = append(p.prev.stops, p.next.stops...)
+		p.prev.last = i
+		p.prev.key = p.next.key
+
+		active[old] = slices.DeleteFunc(active[old], func(c *chain) bool { return c == p.prev })
+		active[p.next.key] = slices.DeleteFunc(active[p.next.key], func(c *chain) bool { return c == p.next })
+		active[p.next.key] = append(active[p.next.key], p.prev)
+	}
 }
