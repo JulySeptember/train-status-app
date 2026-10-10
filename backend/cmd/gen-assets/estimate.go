@@ -70,6 +70,9 @@ func estimateTrains(
 
 	var result []model.TrainTimetable
 
+	// 1つの直通先には1本だけをつなぐ（路線・方向をまたいで共有する。京急本線の上りと下りが同じ京急蒲田の始発を取らないように）
+	used := make(map[infer.Partner]bool)
+
 	for _, k := range keys {
 
 		partners := func(station string) []infer.Partner {
@@ -80,7 +83,7 @@ func estimateTrains(
 			return ps
 		}
 
-		for n, tr := range infer.ExtendToPartners(lines[k], k.Railway, inferred[k], partners) {
+		for n, tr := range infer.ExtendToPartners(lines[k], k.Railway, inferred[k], partners, used) {
 
 			first := tr.Stops[0]
 			id := infer.TrainID(k, n+1)

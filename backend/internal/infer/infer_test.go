@@ -196,7 +196,7 @@ func TestExtendToPartners(t *testing.T) {
 		return nil
 	}
 
-	got := trainsOf(ExtendToPartners(l, "Self", Infer(l), partners))
+	got := trainsOf(ExtendToPartners(l, "Self", Infer(l), partners, map[Partner]bool{}))
 	want := [][]string{
 		{"A@100", "B@102", "C=104"},
 		{"A@110", "B@112", "C=114"},
@@ -226,7 +226,7 @@ func TestExtendToPartnersOnePerPartner(t *testing.T) {
 	}
 
 	extended := 0
-	for _, tr := range ExtendToPartners(l, "Self", Infer(l), partners) {
+	for _, tr := range ExtendToPartners(l, "Self", Infer(l), partners, map[Partner]bool{}) {
 		if tr.Terminal != "" {
 			extended++
 		}
@@ -253,7 +253,64 @@ func TestExtendToPartnersAtLastStop(t *testing.T) {
 		return nil
 	}
 
-	got := trainsOf(ExtendToPartners(l, "Self", Infer(l), partners))
+	got := trainsOf(ExtendToPartners(l, "Self", Infer(l), partners, map[Partner]bool{}))
+	if want := [][]string{{"A@100", "B@102", "B=102"}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+// 境目の手前で追い越しが無いので、境目に着く見込みの早い列車から順に、早い直通先を割り当てる。
+// 境目の所要時間が分からない（境目に自社の発車が無いので既定の2分になる）とき、見込みとの差で決めると、
+// 各停が直前の急行の直通先を取ってしまう（三軒茶屋 → 池尻大橋 → 渋谷）
+func TestExtendToPartnersKeepsOrder(t *testing.T) {
+
+	// A - B - C（C が境目）。急行は A に 9:14 に停まり B を通過、各停は A 9:16・B 9:18
+	l := Line{
+		Stations: []string{"A", "B", "C"},
+		Departures: map[string][]Departure{
+			"A": {dep("A", 554, "Express", "Other.Z"), dep("A", 556, "Local", "Other.Z")},
+			"B": {dep("B", 558, "Local", "Other.Z")},
+		},
+	}
+	partners := func(station string) []Partner {
+		if station == "C" {
+			// 急行の続き 9:19、各停の続き 9:22
+			return []Partner{
+				{Station: "Other.C", Minutes: 559, Destination: "Other.Z"},
+				{Station: "Other.C", Minutes: 562, Destination: "Other.Z"},
+			}
+		}
+		return nil
+	}
+
+	got := trainsOf(ExtendToPartners(l, "Self", Infer(l), partners, map[Partner]bool{}))
+	want := [][]string{
+		{"A@554", "C=559"},
+		{"A@556", "B@558", "C=562"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+// 最後の発車の駅が境目で、直通先がその駅の発車の少し後なら、到着はその駅の発車の分にする（到着が発車より後にならない）
+func TestExtendToPartnersAtLastStopWithGap(t *testing.T) {
+
+	l := Line{
+		Stations: []string{"A", "B", "C"},
+		Departures: map[string][]Departure{
+			"A": {dep("A", 100, "Local", "Other.Z")},
+			"B": {dep("B", 102, "Local", "Other.Z")},
+		},
+	}
+	partners := func(station string) []Partner {
+		if station == "B" {
+			return []Partner{{Station: "Other.B", Minutes: 105, Destination: "Other.Z"}}
+		}
+		return nil
+	}
+
+	got := trainsOf(ExtendToPartners(l, "Self", Infer(l), partners, map[Partner]bool{}))
 	if want := [][]string{{"A@100", "B@102", "B=102"}}; !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
