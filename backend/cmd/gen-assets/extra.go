@@ -199,6 +199,9 @@ func genExtra(rawDir, areaPath, outDir string) error {
 		if !ok {
 			continue
 		}
+		if len(tt.DestinationStation) > 1 {
+			s.multiDestinations++
+		}
 		trainTimetables = append(trainTimetables, clipped)
 		s.trains++
 		s.estimatedTrains++

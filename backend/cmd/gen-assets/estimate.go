@@ -64,7 +64,7 @@ func estimateTrains(
 	for k, trains := range inferred {
 		for _, tr := range trains {
 			first := tr.Stops[0]
-			add(k.Calendar, infer.Partner{Station: first.Station, Minutes: first.Minutes, Destination: first.Destination})
+			add(k.Calendar, infer.Partner{Station: first.Station, Minutes: first.Minutes, Destination: first.Destination, Railway: k.Railway})
 		}
 	}
 
@@ -80,7 +80,7 @@ func estimateTrains(
 			return ps
 		}
 
-		for n, tr := range infer.ExtendToPartners(lines[k], inferred[k], partners) {
+		for n, tr := range infer.ExtendToPartners(lines[k], k.Railway, inferred[k], partners) {
 
 			first := tr.Stops[0]
 			id := infer.TrainID(k, n+1)
@@ -104,7 +104,13 @@ func estimateTrains(
 					DepartureTime:    clock(s.Minutes),
 				})
 			}
-			if tr.Terminal != "" {
+			switch last := &tt.TrainTimetableObject[len(tt.TrainTimetableObject)-1]; {
+			case tr.Terminal == "" || tr.TerminalMinutes >= 27*60:
+			case tr.Terminal == last.DepartureStation:
+				// 最後の発車の駅が直通運転の境目: その駅に到着時刻も付ける（直通のつなぎは到着時刻を使う）
+				last.ArrivalStation = tr.Terminal
+				last.ArrivalTime = clock(tr.TerminalMinutes)
+			default:
 				tt.TrainTimetableObject = append(tt.TrainTimetableObject, model.TrainTimetableEntry{
 					ArrivalStation: tr.Terminal,
 					ArrivalTime:    clock(tr.TerminalMinutes),
@@ -119,6 +125,7 @@ func estimateTrains(
 }
 
 // clock は運行日の0時からの分を "HH:MM"（24時以降は翌日の時刻）にする。
+// 27時（翌3時）以降は、読み戻すと運行日の始めの時刻になって逆戻りするので、呼び出し側で除く。
 func clock(minutes int) string {
 	return fmt.Sprintf("%02d:%02d", minutes/60%24, minutes%60)
 }
