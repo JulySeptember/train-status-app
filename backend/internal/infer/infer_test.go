@@ -166,3 +166,37 @@ func TestUnplaced(t *testing.T) {
 		t.Errorf("got %d", got)
 	}
 }
+
+// 直通先の列車が境目の駅（か乗り換えでつながる駅）から出ていれば、その駅まで延ばす
+func TestExtendToPartners(t *testing.T) {
+
+	// A - B - C（C が境目。直通する列車は C で発車しない）
+	l := Line{
+		Stations: []string{"A", "B", "C"},
+		Departures: map[string][]Departure{
+			"A": {dep("A", 100, "Local", "Other.Z"), dep("A", 110, "Local", "Other.Y")},
+			"B": {dep("B", 102, "Local", "Other.Z"), dep("B", 112, "Local", "Other.Y")},
+		},
+	}
+
+	partners := func(station string) []Partner {
+		if station != "C" {
+			return nil
+		}
+		// C とつながる駅 Other.C から、Z 行きが 10:45（1本目の続き）と 11:30（遠すぎる）に出る。Y 行きは無い
+		return []Partner{
+			{Station: "Other.C", Minutes: 105, Destination: "Other.Z"},
+			{Station: "Other.C", Minutes: 130, Destination: "Other.Z"},
+		}
+	}
+
+	got := trainsOf(ExtendToPartners(l, Infer(l), partners))
+	want := [][]string{
+		{"A@100", "B@102", "C=105"},
+		// 直通先が見つからない列車は延ばさない
+		{"A@110", "B@112"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}

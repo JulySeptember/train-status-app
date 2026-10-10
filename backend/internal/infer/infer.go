@@ -291,3 +291,66 @@ func Unplaced(l Line) int {
 	}
 	return n
 }
+
+// Partner は、直通先の列車の始発（駅・発車の分・行先）。
+type Partner struct {
+	Station     string
+	Minutes     int
+	Destination string
+}
+
+// ExtendToPartners は、行先が路線の外の列車（直通運転で他の路線へ行く）を、直通先の列車へ渡す境目の駅まで延ばす。
+//
+// 直通する列車は、境目の駅（田園都市線 → 半蔵門線の渋谷、小田急 → 千代田線の代々木上原、西武池袋線 → 西武有楽町線の練馬）
+// では発車しない（駅時刻表には直通先の事業者の発車として載る）ので、推定した列車は境目の手前の最後の発車で終わる。
+// 最後の発車より先の駅を順に見て、その駅（か乗り換えでつながる駅）から、同じ行先の列車が、所要時間の見込みの範囲で
+// 発車していれば、その駅を終点にし、到着をその発車の分にする（直通先の列車へ乗り継ぐ間を0分とみなす）。
+// partners は駅（とつながる駅）から出る列車の始発を返す（同じダイヤ種別のもの）。
+func ExtendToPartners(l Line, trains []Train, partners func(station string) []Partner) []Train {
+
+	run := runTimes(l)
+	index := make(map[string]int, len(l.Stations))
+	for i, s := range l.Stations {
+		index[s] = i
+	}
+
+	result := slices.Clone(trains)
+
+	for n, tr := range result {
+
+		last := tr.Stops[len(tr.Stops)-1]
+		dest := last.Destination
+		if tr.Terminal != "" {
+			continue
+		}
+		if _, ok := index[dest]; ok {
+			continue
+		}
+
+		from := index[last.Station]
+		want := 0
+
+		for j := from + 1; j < len(l.Stations); j++ {
+			want += run[j]
+
+			best := -1
+			for _, p := range partners(l.Stations[j]) {
+				gap := p.Minutes - last.Minutes
+				if p.Destination != dest || gap <= 0 || gap > want*2+10 {
+					continue
+				}
+				if best < 0 || p.Minutes < best {
+					best = p.Minutes
+				}
+			}
+
+			if best >= 0 {
+				result[n].Terminal = l.Stations[j]
+				result[n].TerminalMinutes = best
+				break
+			}
+		}
+	}
+
+	return result
+}

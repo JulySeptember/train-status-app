@@ -101,6 +101,12 @@ definitions:
         type: string
       destinationName:
         type: string
+      estimated:
+        description: |-
+          列車時刻表の無い事業者（東急・西武・小田急・京急・ゆりかもめ）の列車で、駅時刻表の発車をつないで
+          推定したものか（docs/design/multi-operator.md 8章）。発車時刻は駅時刻表のとおりだが、どの発車が同じ列車かと
+          終点の到着時刻は推定。trainNumber は空で、列車の位置は引けない
+        type: boolean
       from:
         type: string
       fromName:
