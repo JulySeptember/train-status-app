@@ -216,11 +216,11 @@ func TestFillTerminalsFromNext(t *testing.T) {
 			NextTrainTimetable: []string{"odpt.TrainTimetable:B"},
 			TrainTimetableObject: []model.TrainTimetableEntry{
 				stop("Kunitachi", "11:35", "", ""),
-				stop("", "", "Tachikawa", ""),
+				stop("", "", "ChuoRapid.Tachikawa", ""),
 			}},
 		{SameAs: "odpt.TrainTimetable:B", Operator: "odpt.Operator:JR-East", Calendar: "Weekday",
 			TrainTimetableObject: []model.TrainTimetableEntry{
-				stop("OmeTachikawa", "11:40", "", ""),
+				stop("Ome.Tachikawa", "11:40", "", ""),
 				stop("", "", "Ome", "12:10"),
 			}},
 		// 次の列車のダイヤ種別が違えば入れない
@@ -228,7 +228,14 @@ func TestFillTerminalsFromNext(t *testing.T) {
 			NextTrainTimetable: []string{"odpt.TrainTimetable:B"},
 			TrainTimetableObject: []model.TrainTimetableEntry{
 				stop("Kunitachi", "11:35", "", ""),
-				stop("", "", "Tachikawa", ""),
+				stop("", "", "ChuoRapid.Tachikawa", ""),
+			}},
+		// 次の列車の始発が終点と違う駅なら入れない（大崎で終わり、次の列車は品川から）
+		{SameAs: "odpt.TrainTimetable:D", Operator: "odpt.Operator:JR-East", Calendar: "Weekday",
+			NextTrainTimetable: []string{"odpt.TrainTimetable:B"},
+			TrainTimetableObject: []model.TrainTimetableEntry{
+				stop("Gotanda", "11:35", "", ""),
+				stop("", "", "ShonanShinjuku.Osaki", ""),
 			}},
 	}
 
@@ -239,5 +246,8 @@ func TestFillTerminalsFromNext(t *testing.T) {
 	}
 	if all[2].TrainTimetableObject[1].ArrivalTime != "" {
 		t.Errorf("a different calendar must not be filled: %+v", all[2].TrainTimetableObject[1])
+	}
+	if all[3].TrainTimetableObject[1].ArrivalTime != "" {
+		t.Errorf("a different station must not be filled: %+v", all[3].TrainTimetableObject[1])
 	}
 }

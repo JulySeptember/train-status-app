@@ -56,6 +56,7 @@ type key struct {
 type chain struct {
 	stops []Departure
 	key   key
+	first int // 最初の発車の駅の位置
 	last  int // 最後の発車の駅の位置
 }
 
@@ -119,6 +120,11 @@ func Infer(l Line) []Train {
 		return total
 	}
 
+	inLine := make(map[string]bool, len(l.Stations))
+	for _, s := range l.Stations {
+		inLine[s] = true
+	}
+
 	// 列車種別・行先ごとの、発車のある最後の駅の位置（途中で種別が変わる列車を見分ける）
 	lastIndex := make(map[key]int)
 	for i, station := range l.Stations {
@@ -176,7 +182,7 @@ func Infer(l Line) []Train {
 				}
 
 				if best < 0 {
-					c := &chain{stops: []Departure{d}, key: k, last: i}
+					c := &chain{stops: []Departure{d}, key: k, first: i, last: i}
 					candidates = append(candidates, c)
 					if !d.Origin {
 						started = append(started, c)
@@ -192,7 +198,7 @@ func Infer(l Line) []Train {
 			active[k] = candidates
 		}
 
-		changeTrainType(active, started, i, lastIndex, expected)
+		changeTrainType(active, started, i, lastIndex, inLine, expected)
 
 		// 行先の駅に着いた列車は終える（行先の駅では発車しない）
 		for k, cs := range active {
@@ -435,58 +441,94 @@ func ExtendToPartners(l Line, railway string, trains []Train, partners func(stat
 
 // changeTrainType は、駅 i で新しく始まった列車（started）のうち、途中で列車種別が変わった列車の続きを、前の列車につなぐ。
 //
-// 途中の駅で種別が変わる列車がある（西武新宿線の拝島行きの急行は、上石神井から先は各停として駅時刻表に載る）。
+// 途中の駅で種別が変わる列車がある（西武新宿線の拝島行きの急行は、途中から各停として駅時刻表に載る）。
 // 同じ種別・行先の発車しかつながないと、種別が変わる駅で2本に分かれ、行先や直通運転の境目まで届かない。
-// 前の列車と行先が同じで、前の列車の種別・行先の発車がこの駅より先に1つも無い（その種別はこの駅の手前で終わる）とき、
-// 所要時間の見込みの範囲なら、種別が変わったとみなしてつなぐ。前の種別がこの駅より先にも現れるなら、
-// 前の列車はまだ先へ走るので（途中を通過する急行）、つながない。見込みとの差の小さい組から決める。
-func changeTrainType(active map[key][]*chain, started []*chain, i int, lastIndex map[key]int, expected func(from, to int) int) {
+//
+// 次の条件をすべて満たす前の列車につなぐ:
+//   - 行先が同じで、種別が違う
+//   - 行先が路線の外（直通運転で他の路線へ行く）。行先が路線の駅なら、前の列車は行先まで通過して着き、
+//     終点の到着は見込みで足せる（西武池袋線の特急は所沢から池袋まで通過する。途中の練馬で始まる各停につながない）
+//   - 前の列車の種別・行先の発車が、この駅より先に1つも無い（その種別はこの駅の手前で終わる）
+//   - 所要時間が、前の列車が実際に走った速さ（走った時間 ÷ 各駅の所要時間の見込み）から見込んだ時間に近い
+//     （差が見込みの2割＋3分以内）。終点まで通過する急行・特急に、途中の駅から入ってくる別の列車
+//     （直通運転などで始発の印が無い）をつながないため。前の列車が1駅しか発車していなければ、速さが分からないのでつながない
+//
+// その駅で始まる列車を発車の時刻順に、まだつないでいない前の列車のうち見込みに最も近いものへ1本ずつつなぐ
+// （同じ点なら前の列車の最後の発車の早い方。map の順に結果が左右されないように、並びはすべて決まった順にする）。
+func changeTrainType(active map[key][]*chain, started []*chain, i int, lastIndex map[key]int, inLine map[string]bool, expected func(from, to int) int) {
 
-	type pair struct {
-		next, prev *chain
-		score      int
+	slices.SortStableFunc(started, func(a, b *chain) int {
+		return cmp.Or(cmp.Compare(a.stops[0].Minutes, b.stops[0].Minutes),
+			cmp.Compare(a.key.trainType, b.key.trainType), cmp.Compare(a.key.destination, b.key.destination))
+	})
+
+	keys := make([]key, 0, len(active))
+	for k := range active {
+		keys = append(keys, k)
 	}
-	var pairs []pair
-
-	for _, next := range started {
-		d := next.stops[0]
-		for k, cs := range active {
-			if k.destination != next.key.destination || k.trainType == next.key.trainType || lastIndex[k] >= i {
-				continue
-			}
-			for _, prev := range cs {
-				gap := d.Minutes - prev.stops[len(prev.stops)-1].Minutes
-				if prev.last >= i || gap <= 0 {
-					continue
-				}
-				want := expected(prev.last, i)
-				if gap > want*2+10 {
-					continue
-				}
-				pairs = append(pairs, pair{next, prev, abs(gap - want)})
-			}
-		}
-	}
-
-	slices.SortStableFunc(pairs, func(a, b pair) int {
-		return cmp.Or(cmp.Compare(a.score, b.score), cmp.Compare(a.next.stops[0].Minutes, b.next.stops[0].Minutes))
+	slices.SortFunc(keys, func(a, b key) int {
+		return cmp.Or(cmp.Compare(a.trainType, b.trainType), cmp.Compare(a.destination, b.destination))
 	})
 
 	joined := make(map[*chain]bool)
-	for _, p := range pairs {
-		if joined[p.next] || joined[p.prev] {
+
+	for _, next := range started {
+
+		d := next.stops[0]
+		if inLine[next.key.destination] {
 			continue
 		}
-		joined[p.next], joined[p.prev] = true, true
+
+		var best *chain
+		bestScore := 0
+
+		for _, k := range keys {
+			if k.destination != next.key.destination || k.trainType == next.key.trainType || lastIndex[k] >= i {
+				continue
+			}
+			for _, prev := range active[k] {
+				if joined[prev] || prev.last >= i || len(prev.stops) < 2 {
+					continue
+				}
+				last := prev.stops[len(prev.stops)-1]
+				gap := d.Minutes - last.Minutes
+				if gap <= 0 {
+					continue
+				}
+
+				// 前の列車が実際に走った速さで、この駅までの所要時間を見込む
+				first := prev.stops[0]
+				span := expected(prev.first, prev.last)
+				elapsed := last.Minutes - first.Minutes
+				if span <= 0 || elapsed <= 0 {
+					continue
+				}
+				want := (expected(prev.last, i)*elapsed + span/2) / span
+
+				score := abs(gap - want)
+				if score*5 > want+15 {
+					continue
+				}
+				if best == nil || score < bestScore ||
+					(score == bestScore && last.Minutes < best.stops[len(best.stops)-1].Minutes) {
+					best, bestScore = prev, score
+				}
+			}
+		}
+
+		if best == nil {
+			continue
+		}
+		joined[best] = true
 
 		// 前の列車を新しい種別の列車として続け、新しく始まった列車は消す
-		old := p.prev.key
-		p.prev.stops = append(p.prev.stops, p.next.stops...)
-		p.prev.last = i
-		p.prev.key = p.next.key
+		old := best.key
+		best.stops = append(best.stops, next.stops...)
+		best.last = i
+		best.key = next.key
 
-		active[old] = slices.DeleteFunc(active[old], func(c *chain) bool { return c == p.prev })
-		active[p.next.key] = slices.DeleteFunc(active[p.next.key], func(c *chain) bool { return c == p.next })
-		active[p.next.key] = append(active[p.next.key], p.prev)
+		active[old] = slices.DeleteFunc(active[old], func(c *chain) bool { return c == best })
+		active[next.key] = slices.DeleteFunc(active[next.key], func(c *chain) bool { return c == next })
+		active[next.key] = append(active[next.key], best)
 	}
 }

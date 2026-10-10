@@ -316,22 +316,41 @@ func TestExtendToPartnersAtLastStopWithGap(t *testing.T) {
 	}
 }
 
-// 途中で列車種別が変わる列車（西武新宿線の拝島行きの急行は、上石神井から先は各停）は、1本につなぐ
+// 途中で列車種別が変わる、直通先へ行く列車（西武新宿線の拝島行きの急行は、途中から各停）は、1本につなぐ
 func TestInferTrainTypeChange(t *testing.T) {
 
-	// A・B は急行、C・D は各停として載る。急行の発車は B より先に無い
+	// A・B は急行、C・D は各停として載る。急行の発車は B より先に無い。行先は路線の外
 	l := Line{
-		Stations: []string{"A", "B", "C", "D", "E"},
+		Stations: []string{"A", "B", "C", "D"},
 		Departures: map[string][]Departure{
-			"A": {dep("A", 100, "Express", "E")},
-			"B": {dep("B", 105, "Express", "E")},
-			"C": {dep("C", 108, "Local", "E")},
-			"D": {dep("D", 110, "Local", "E")},
+			"A": {dep("A", 100, "Express", "Other.Z")},
+			"B": {dep("B", 105, "Express", "Other.Z")},
+			"C": {dep("C", 108, "Local", "Other.Z")},
+			"D": {dep("D", 110, "Local", "Other.Z")},
 		},
 	}
 
 	got := trainsOf(Infer(l))
-	if len(got) != 1 || len(got[0]) != 5 || got[0][0] != "A@100" || got[0][3] != "D@110" {
+	if want := [][]string{{"A@100", "B@105", "C@108", "D@110"}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+// 行先が路線の駅なら、終点まで通過する特急に、途中の駅から始まる各停をつながない（西武池袋線の特急 所沢 → 池袋）
+func TestInferNoTrainTypeChangeToLineDestination(t *testing.T) {
+
+	l := Line{
+		Stations: []string{"A", "B", "C", "D"},
+		Departures: map[string][]Departure{
+			"A": {dep("A", 100, "LimitedExpress", "D")},
+			"B": {dep("B", 103, "LimitedExpress", "D")},
+			// 特急は C を通過する。C から各停が始まる（別の路線から入ってくる列車）
+			"C": {dep("C", 106, "Local", "D")},
+		},
+	}
+
+	got := trainsOf(Infer(l))
+	if len(got) != 2 {
 		t.Errorf("got %v", got)
 	}
 }

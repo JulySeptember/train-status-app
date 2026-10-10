@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"train-status-app/backend/assets/slim"
 	"train-status-app/backend/internal/model"
@@ -459,6 +460,11 @@ func checkDuplicates(stationTimetables []model.StationTimetable, trainTimetables
 	return nil
 }
 
+// lastSegment は ID の最後の部分（odpt.Station:JR-East.Ome.Tachikawa → Tachikawa）を返す。
+func lastSegment(id string) string {
+	return id[strings.LastIndex(id, ".")+1:]
+}
+
 // fillTerminalsFromNext は、終点に時刻が無く、次の列車（odpt:nextTrainTimetable）が分かっている列車の終点に、
 // 次の列車の始発の発車時刻を到着時刻として入れる。入れた列車の事業者を返す。
 //
@@ -493,7 +499,9 @@ func fillTerminalsFromNext(all []model.TrainTimetable) []string {
 			continue
 		}
 		first := next.TrainTimetableObject[0]
-		if first.DepartureTime == "" {
+		// 次の列車の始発が終点と同じ駅（路線ごとに ID が違うので、ID の駅名の部分で比べる）のときだけ入れる。
+		// 違う駅なら（湘南新宿ラインの大崎 → 横須賀線の品川）、その駅の発車は終点の到着にならない
+		if first.DepartureTime == "" || lastSegment(first.DepartureStation) != lastSegment(last.ArrivalStation) {
 			continue
 		}
 		last.ArrivalTime = first.DepartureTime
