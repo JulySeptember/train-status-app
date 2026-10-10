@@ -230,6 +230,7 @@ data "aws_iam_policy_document" "github_deny_ssm" {
   }
 
   # 上の階層（"/" など）を再帰的に読めば、下のパラメータも返ってくるので、パスでの取得はすべて拒否する
+  # （/aws/service/... の公開パラメータもパスでは取れなくなる。aws_ssm_parameters_by_path を使うときは見直す）
   statement {
     sid       = "DenyReadParametersByPath"
     effect    = "Deny"
