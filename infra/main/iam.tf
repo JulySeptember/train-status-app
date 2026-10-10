@@ -1,44 +1,38 @@
-data "aws_iam_policy_document" "lambda_assume_role" {
-  statement {
-    effect = "Allow"
+# Lambda の実行ロールと、付けるポリシーは infra/bootstrap（lambda_role.tf）で作る。
+# deploy 用ロールに IAM を変える権限を与えないため（SSM の API キーを読めるロールを引き受けられないように）
+data "aws_iam_role" "lambda" {
+  name = "${local.name_prefix}-lambda-role"
+}
 
-    principals {
-      type        = "Service"
-      identifiers = ["lambda.amazonaws.com"]
-    }
+# infra/bootstrap に移したので、state から外すだけにする（AWS のリソースは消さない）
+removed {
+  from = aws_iam_role.lambda
 
-    actions = ["sts:AssumeRole"]
+  lifecycle {
+    destroy = false
   }
 }
 
-resource "aws_iam_role" "lambda" {
-  name               = "${local.name_prefix}-lambda-role"
-  assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
+removed {
+  from = aws_iam_role_policy_attachment.lambda_basic_execution
 
-  tags = local.common_tags
+  lifecycle {
+    destroy = false
+  }
 }
 
-resource "aws_iam_role_policy_attachment" "lambda_basic_execution" {
-  role       = aws_iam_role.lambda.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+removed {
+  from = aws_iam_role_policy_attachment.lambda_ai
+
+  lifecycle {
+    destroy = false
+  }
 }
 
-# AI エージェントの権限（API キーの読み取り・利用上限の書き込み）。ポリシーは infra/bootstrap で作る
-data "aws_iam_policy" "lambda_ai" {
-  name = "${local.name_prefix}-lambda-ai"
-}
+removed {
+  from = aws_iam_role_policy_attachment.lambda_odpt
 
-resource "aws_iam_role_policy_attachment" "lambda_ai" {
-  role       = aws_iam_role.lambda.name
-  policy_arn = data.aws_iam_policy.lambda_ai.arn
-}
-
-# ODPT のキー（SSM）の読み取り。ポリシーは infra/bootstrap で作る
-data "aws_iam_policy" "lambda_odpt" {
-  name = "${local.name_prefix}-lambda-odpt"
-}
-
-resource "aws_iam_role_policy_attachment" "lambda_odpt" {
-  role       = aws_iam_role.lambda.name
-  policy_arn = data.aws_iam_policy.lambda_odpt.arn
+  lifecycle {
+    destroy = false
+  }
 }

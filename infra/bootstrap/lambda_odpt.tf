@@ -1,6 +1,6 @@
 # 都営以外の事業者のリアルタイムの情報を取るのに使う ODPT のキーを読む権限。
 # キーは SSM Parameter Store（SecureString）に手で登録する（docs/design/multi-operator.md 4.3）。
-# lambda_ai.tf と同じく、Lambda の実行ロールに付ける権限はここで決め、deploy 用ロールには付け外しだけを許す。
+# lambda_ai.tf と同じく、Lambda の実行ロールに付ける権限はここで決め、実行ロールへの付与は lambda_role.tf で行う。
 
 locals {
   # infra/main と同じ名前にする

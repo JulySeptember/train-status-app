@@ -1,6 +1,6 @@
 # AI エージェント（/api/chat）が使う権限。
-# Lambda の実行ロールに付ける権限はここ（手元から適用する bootstrap）で決め、
-# deploy 用ロールには、このポリシーを付け外しすることだけを許す（CD を経由して Lambda の権限を広げられないように）。
+# Lambda の実行ロールに付ける権限はここ（手元から適用する bootstrap）で決め、実行ロールへの付与も lambda_role.tf で行う
+# （deploy 用ロールに IAM を変える権限を与えず、CD を経由して Lambda の権限を広げられないように）。
 
 locals {
   # infra/main と同じ名前にする

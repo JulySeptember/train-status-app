@@ -19,7 +19,7 @@ resource "aws_cloudwatch_log_group" "lambda" {
 resource "aws_lambda_function" "this" {
   function_name = "${local.name_prefix}-api"
 
-  role = aws_iam_role.lambda.arn
+  role = data.aws_iam_role.lambda.arn
 
   runtime = "provided.al2023"
   handler = "bootstrap"
