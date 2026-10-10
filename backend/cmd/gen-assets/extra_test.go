@@ -203,3 +203,41 @@ func TestCheckDuplicates(t *testing.T) {
 		t.Fatal("expected duplicate error")
 	}
 }
+
+func TestFillTerminalsFromNext(t *testing.T) {
+
+	stop := func(dep, depTime, arr, arrTime string) model.TrainTimetableEntry {
+		return model.TrainTimetableEntry{DepartureStation: dep, DepartureTime: depTime, ArrivalStation: arr, ArrivalTime: arrTime}
+	}
+
+	all := []model.TrainTimetable{
+		// 終点（立川）に時刻が無く、次の列車（青梅線）が分かっている
+		{SameAs: "odpt.TrainTimetable:A", Operator: "odpt.Operator:JR-East", Calendar: "Weekday",
+			NextTrainTimetable: []string{"odpt.TrainTimetable:B"},
+			TrainTimetableObject: []model.TrainTimetableEntry{
+				stop("Kunitachi", "11:35", "", ""),
+				stop("", "", "Tachikawa", ""),
+			}},
+		{SameAs: "odpt.TrainTimetable:B", Operator: "odpt.Operator:JR-East", Calendar: "Weekday",
+			TrainTimetableObject: []model.TrainTimetableEntry{
+				stop("OmeTachikawa", "11:40", "", ""),
+				stop("", "", "Ome", "12:10"),
+			}},
+		// 次の列車のダイヤ種別が違えば入れない
+		{SameAs: "odpt.TrainTimetable:C", Operator: "odpt.Operator:JR-East", Calendar: "Holiday",
+			NextTrainTimetable: []string{"odpt.TrainTimetable:B"},
+			TrainTimetableObject: []model.TrainTimetableEntry{
+				stop("Kunitachi", "11:35", "", ""),
+				stop("", "", "Tachikawa", ""),
+			}},
+	}
+
+	filled := fillTerminalsFromNext(all)
+
+	if len(filled) != 1 || all[0].TrainTimetableObject[1].ArrivalTime != "11:40" {
+		t.Errorf("filled %v, terminal %+v", filled, all[0].TrainTimetableObject[1])
+	}
+	if all[2].TrainTimetableObject[1].ArrivalTime != "" {
+		t.Errorf("a different calendar must not be filled: %+v", all[2].TrainTimetableObject[1])
+	}
+}
