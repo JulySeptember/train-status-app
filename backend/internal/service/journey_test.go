@@ -24,6 +24,7 @@ const (
 	oedoRailway  = "odpt.Railway:Toei.Oedo"
 	mitaRailway  = "odpt.Railway:Toei.Mita"
 	mitaMita     = "odpt.Station:Toei.Mita.Mita"
+	nihombashi   = "odpt.Station:Toei.Asakusa.Nihombashi"
 )
 
 // 2026-10-08（木）10:00。平日ダイヤ
@@ -67,6 +68,11 @@ func assertTimetable(t *testing.T, s *Service, journeys []Journey) {
 		}
 	}
 
+	validTransfer := make(map[[2]string]bool)
+	for _, tr := range transfers(s.assets.Stations()) {
+		validTransfer[[2]string{tr.From, tr.To}] = true
+	}
+
 	for _, j := range journeys {
 
 		// 直通運転で乗り続ける区間は、乗り換えに数えない
@@ -102,20 +108,17 @@ func assertTimetable(t *testing.T, s *Service, journeys []Journey) {
 				t.Errorf("%s at %s: departure %s (delay %d), station timetable %q", l.Train, l.From, l.DepartureTime, l.DelayMinutes, got)
 			}
 
-			if l.ArrivalTime < l.DepartureTime {
+			if clock(t, l.ArrivalTime) < clock(t, l.DepartureTime) {
 				t.Errorf("%s: arrives %s before departure %s", l.Train, l.ArrivalTime, l.DepartureTime)
 			}
 
 			if i > 0 {
 				prev := j.Legs[i-1]
-				if l.DepartureTime < prev.ArrivalTime {
+				if clock(t, l.DepartureTime) < clock(t, prev.ArrivalTime) {
 					t.Errorf("%s departs %s before arriving %s", l.Train, l.DepartureTime, prev.ArrivalTime)
 				}
 				// 直通運転の境目の駅は、乗り換えの対応表でつながる駅（他社の駅データの odpt:connectingStation など）
-				if !l.Through && l.From != prev.To && !slices.Contains(s.stationGroups[prev.To], l.From) &&
-					!slices.ContainsFunc(differentNameTransfers, func(p [2]string) bool {
-						return p == [2]string{prev.To, l.From} || p == [2]string{l.From, prev.To}
-					}) {
+				if l.From != prev.To && !validTransfer[[2]string{prev.To, l.From}] {
 					t.Errorf("cannot transfer from %s to %s", prev.To, l.From)
 				}
 			}
@@ -300,6 +303,8 @@ func TestSearchJourneysAfterMidnight(t *testing.T) {
 		t.Fatal("no journeys")
 	}
 
+	assertTimetable(t, s, got.Journeys)
+
 	// 終電を過ぎると経路は無い
 	got, err = s.SearchJourneys(context.Background(), JourneyQuery{
 		From:         nishiMagome,
@@ -314,6 +319,71 @@ func TestSearchJourneysAfterMidnight(t *testing.T) {
 	if len(got.Journeys) != 0 {
 		t.Errorf("got %d journeys after the last train", len(got.Journeys))
 	}
+}
+
+// 24時をまたぐ区間（23:58発 00:06着など）や乗り換えを含む経路でも、
+// assertTimetable で時刻の前後が正しく判定されることを確かめる
+func TestSearchJourneysMidnightCrossing(t *testing.T) {
+
+	s := newJourneyService(t)
+
+	// 23:58発 00:06着の直通区間
+	got, err := s.SearchJourneys(context.Background(), JourneyQuery{
+		From:         nihombashi,
+		To:           asakusa,
+		DepartAt:     "23:58",
+		MaxTransfers: route.DefaultMaxTransfers,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Journeys) == 0 {
+		t.Fatal("no journeys")
+	}
+	if j := got.Journeys[0]; j.DepartureTime != "23:58" || clock(t, j.ArrivalTime) < 24*60 {
+		t.Errorf("expected midnight-crossing journey, got dep=%s arr=%s", j.DepartureTime, j.ArrivalTime)
+	}
+	assertTimetable(t, s, got.Journeys)
+
+	// 23時台から0時台へ乗り換える経路（西馬込 23:49発 → 泉岳寺 00:01着 / 00:02発 → 押上 00:27着）
+	got, err = s.SearchJourneys(context.Background(), JourneyQuery{
+		From:         nishiMagome,
+		To:           oshiage,
+		DepartAt:     "23:45",
+		MaxTransfers: route.DefaultMaxTransfers,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Journeys) == 0 {
+		t.Fatal("no journeys")
+	}
+	assertTimetable(t, s, got.Journeys)
+}
+
+// 23:58発 00:05着のように24時をまたぐ区間が assertTimetable を通過することを確かめる
+func TestAssertTimetableMidnightLeg(t *testing.T) {
+
+	s := newJourneyService(t)
+
+	// 日本橋 23:58発の列車で 00:05着とする経路
+	journeys := []Journey{
+		{
+			DepartureTime: "23:58",
+			ArrivalTime:   "00:05",
+			Legs: []JourneyLeg{
+				{
+					From:          nihombashi,
+					To:            asakusa,
+					DepartureTime: "23:58",
+					ArrivalTime:   "00:05",
+					Train:         "odpt.Train:Toei.Asakusa.2325N",
+				},
+			},
+		},
+	}
+
+	assertTimetable(t, s, journeys)
 }
 
 func TestSearchJourneysInvalid(t *testing.T) {
