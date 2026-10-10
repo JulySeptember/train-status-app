@@ -34,7 +34,8 @@ resource "aws_iam_role_policy_attachment" "lambda" {
   policy_arn = each.value
 }
 
-# infra/main で作ったものを取り込む
+# infra/main で作ったものを取り込む。
+# 実行ロールが無い新しい環境（destroy の後など）では import が失敗するので、この import ブロックを消してから適用する
 import {
   to = aws_iam_role.lambda
   id = "${local.name_prefix}-lambda-role"
