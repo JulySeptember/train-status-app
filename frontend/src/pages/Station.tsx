@@ -1,12 +1,9 @@
-import { useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronUp } from "lucide-react";
 
 import Loading from "@/components/Loading";
 import Error from "@/components/Error";
 import Timetable from "@/components/Timetable";
-import PassengerTable from "@/components/PassengerTable";
 import RailwayBadge from "@/components/RailwayBadge";
 import PageTitle from "@/components/PageTitle";
 
@@ -27,7 +24,6 @@ export default function Station() {
   const direction = params.get("direction") ?? "";
   const setDirection = (value: string) =>
     setParams({ direction: value }, { replace: true });
-  const [showPassengers, setShowPassengers] = useState(false);
 
   if (isPending) {
     return <Loading />;
@@ -108,29 +104,6 @@ export default function Station() {
           saturdayHoliday={saturdayHoliday}
           trainLocationAvailable={data.trainLocationAvailable}
         />
-      </section>
-
-      <section className="space-y-4">
-        <button
-          onClick={() => setShowPassengers((v) => !v)}
-          className="flex w-full items-center justify-between rounded-xl border border-border bg-card px-5 py-4 transition hover:bg-muted"
-        >
-          <span className="text-xl font-semibold text-foreground">
-            年間乗降人員
-          </span>
-
-          {showPassengers ? (
-            <ChevronUp size={20} className="text-muted-foreground" />
-          ) : (
-            <ChevronDown size={20} className="text-muted-foreground" />
-          )}
-        </button>
-
-        {showPassengers && (
-          <div className="overflow-hidden rounded-xl border border-border bg-background p-5">
-            <PassengerTable passengers={data.passengers ?? []} />
-          </div>
-        )}
       </section>
     </div>
   );

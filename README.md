@@ -13,7 +13,7 @@
 
 ---
 
-運行情報や列車位置などの動的データと、駅時刻表・列車時刻表・乗降者数などの静的データを組み合わせ、各路線・駅の情報の閲覧、遅れを反映した経路検索、AI との会話による照会ができます。
+運行情報や列車位置などの動的データと、駅時刻表・列車時刻表などの静的データを組み合わせ、各路線・駅の情報の閲覧、遅れを反映した経路検索、AI との会話による照会ができます。
 
 # 対応路線
 
@@ -36,7 +36,6 @@
 - 路線ごとの駅一覧
 - 駅詳細
   - 時刻表（方面・平日・土休日別、行先・列車種別つき）
-  - 乗降者数
 - 列車の現在位置（路線図上に表示。出発前・運行終了も案内）
 - 経路検索
   - RAPTOR による乗り換え探索
@@ -126,7 +125,7 @@ CloudFront
 | GET | `/api/status` | 運行情報一覧 |
 | GET | `/api/routes` | 路線一覧 |
 | GET | `/api/routes/{routeId}/stations` | 路線ごとの駅一覧 |
-| GET | `/api/stations/{stationId}` | 駅詳細（時刻表・乗降者数） |
+| GET | `/api/stations/{stationId}` | 駅詳細（時刻表） |
 | GET | `/api/trains/{trainId}/location` | 列車現在位置 |
 | GET | `/api/fares?from={fromStation}&to={toStation}` | 運賃検索 |
 | GET | `/api/journeys?from={fromStation}&to={toStation}` | 経路検索（遅れを反映） |
@@ -181,4 +180,3 @@ make up
 - 駅時刻表
 - 列車時刻表
 - 運賃情報（都営のみ）
-- 乗降者数情報（都営のみ）

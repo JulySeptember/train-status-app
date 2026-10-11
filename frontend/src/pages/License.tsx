@@ -137,7 +137,6 @@ export default function License() {
           <li>駅時刻表</li>
           <li>列車時刻表</li>
           <li>運賃情報（都営のみ）</li>
-          <li>乗降者数情報（都営のみ）</li>
         </ul>
       </Section>
 

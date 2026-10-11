@@ -558,8 +558,6 @@ type StationDetail struct {
 	TrainLocationAvailable bool `json:"trainLocationAvailable"`
 
 	Timetables []DirectionTimetable `json:"timetables"`
-
-	Passengers []Passenger `json:"passengers"`
 }
 
 type DirectionTimetable struct {
@@ -580,11 +578,6 @@ type Timetable struct {
 	// 列車種別（例: 普通、急行、エアポート快特）
 	TrainTypeID string `json:"trainTypeId"`
 	TrainType   string `json:"trainType"`
-}
-
-type Passenger struct {
-	Year  int `json:"year"`
-	Count int `json:"count"`
 }
 
 // =========================
@@ -651,7 +644,6 @@ func (s *Service) GetStationDetail(
 
 	stations := s.assets.Stations()
 	timetables := s.assets.StationTimetables()
-	surveys := s.assets.PassengerSurveys()
 
 	stationMap := associateBy(
 		stations,
@@ -676,28 +668,11 @@ func (s *Service) GetStationDetail(
 		}
 	}
 
-	passengers := make([]model.PassengerSurvey, 0)
-
-	for _, survey := range surveys {
-
-		for _, st := range survey.Station {
-
-			if st == stationID {
-				passengers = append(
-					passengers,
-					survey,
-				)
-				break
-			}
-		}
-	}
-
 	detail := &StationDetail{
 		ID:                     station.SameAs,
 		Name:                   station.StationTitle.Ja,
 		TrainLocationAvailable: locationAvailable(station.Railway),
 		Timetables:             make([]DirectionTimetable, 0),
-		Passengers:             make([]Passenger, 0),
 	}
 
 	todayCalendars := calendar.Calendars(s.now())
@@ -750,20 +725,6 @@ func (s *Service) GetStationDetail(
 		detail.Timetables,
 		s.railwayDirections(station.Railway),
 	)
-
-	for _, survey := range passengers {
-
-		for _, p := range survey.PassengerSurveyObject {
-
-			detail.Passengers = append(
-				detail.Passengers,
-				Passenger{
-					Year:  p.SurveyYear,
-					Count: p.PassengerJourneys,
-				},
-			)
-		}
-	}
 
 	return detail, nil
 

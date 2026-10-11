@@ -705,17 +705,6 @@
                 }
             }
         },
-        "service.Passenger": {
-            "type": "object",
-            "properties": {
-                "count": {
-                    "type": "integer"
-                },
-                "year": {
-                    "type": "integer"
-                }
-            }
-        },
         "service.RailDirection": {
             "type": "object",
             "properties": {
@@ -780,12 +769,6 @@
                 },
                 "name": {
                     "type": "string"
-                },
-                "passengers": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/service.Passenger"
-                    }
                 },
                 "timetables": {
                     "type": "array",

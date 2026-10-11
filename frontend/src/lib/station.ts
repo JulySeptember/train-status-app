@@ -11,7 +11,7 @@ export function stationPath(id: string, direction?: string) {
     : path;
 }
 
-// 駅の詳細（時刻表・乗降人員）。駅の画面と先読みで同じキャッシュを使う
+// 駅の詳細（時刻表）。駅の画面と先読みで同じキャッシュを使う
 export function stationQuery(id: string) {
   return queryOptions({
     queryKey: ["station", id],

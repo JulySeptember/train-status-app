@@ -148,13 +148,6 @@ definitions:
           $ref: '#/definitions/service.Railway'
         type: array
     type: object
-  service.Passenger:
-    properties:
-      count:
-        type: integer
-      year:
-        type: integer
-    type: object
   service.RailDirection:
     properties:
       id:
@@ -201,10 +194,6 @@ definitions:
         type: string
       name:
         type: string
-      passengers:
-        items:
-          $ref: '#/definitions/service.Passenger'
-        type: array
       timetables:
         items:
           $ref: '#/definitions/service.DirectionTimetable'
