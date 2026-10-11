@@ -19,7 +19,7 @@ import (
 //go:generate go run ../cmd/gen-assets -kind station -in station_timetable.json -out station_timetable.gob
 //go:generate go run ../cmd/gen-assets -kind train -in train_timetable.json -out train_timetable.gob
 
-//go:embed railway.json station.json railway_fare.json passenger_survey.json train_type.json station_timetable.gob train_timetable.gob extra
+//go:embed railway.json station.json railway_fare.json train_type.json station_timetable.gob train_timetable.gob extra
 var embedded embed.FS
 
 // 都営以外の事業者のデータは extra/ に置く（docs/design/multi-operator.md 4章）。
@@ -44,7 +44,6 @@ type Loader struct {
 	fares             []model.RailwayFare
 	stationTimetables []model.StationTimetable
 	trainTimetables   *slim.TrainTimetables
-	passengerSurveys  []model.PassengerSurvey
 	trainTypes        []model.TrainType
 
 	// 都外の行先駅（駅ID と駅名だけ）。extra/ を読み込んだときだけ
@@ -96,10 +95,6 @@ func newFromFS(fsys fs.FS, opts ...Option) (*Loader, error) {
 	}
 
 	if err := loadTrainTimetables(fsys, "train_timetable.gob", &l.trainTimetables); err != nil {
-		return nil, err
-	}
-
-	if err := load(fsys, "passenger_survey.json", &l.passengerSurveys); err != nil {
 		return nil, err
 	}
 
@@ -257,10 +252,6 @@ func (l *Loader) TrainTimetables() *slim.TrainTimetables {
 // Stations には含まれず、出発駅・到着駅にはできない。
 func (l *Loader) DestinationStations() []model.Station {
 	return l.destinationStations
-}
-
-func (l *Loader) PassengerSurveys() []model.PassengerSurvey {
-	return l.passengerSurveys
 }
 
 func (l *Loader) TrainTypes() []model.TrainType {

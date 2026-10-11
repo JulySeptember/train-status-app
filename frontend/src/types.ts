@@ -49,11 +49,6 @@ export interface Timetable {
   trainType: string;
 }
 
-export interface Passenger {
-  year: number;
-  count: number;
-}
-
 export interface DirectionTimetable {
   calendar: string;
   railDirection: string;
@@ -66,7 +61,6 @@ export interface StationDetail {
   name: string;
   trainLocationAvailable: boolean;
   timetables: DirectionTimetable[];
-  passengers: Passenger[];
 }
 
 export interface TrainLocation {

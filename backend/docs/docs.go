@@ -712,17 +712,6 @@ const docTemplate = `{
                 }
             }
         },
-        "service.Passenger": {
-            "type": "object",
-            "properties": {
-                "count": {
-                    "type": "integer"
-                },
-                "year": {
-                    "type": "integer"
-                }
-            }
-        },
         "service.RailDirection": {
             "type": "object",
             "properties": {
@@ -787,12 +776,6 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
-                },
-                "passengers": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/service.Passenger"
-                    }
                 },
                 "timetables": {
                     "type": "array",

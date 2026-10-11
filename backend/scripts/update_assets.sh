@@ -44,7 +44,6 @@ update_toei() {
     download "odpt:Railway"          "railway.json"
     download "odpt:Station"          "station.json"
     download "odpt:RailwayFare"      "railway_fare.json"
-    download "odpt:PassengerSurvey"  "passenger_survey.json"
     download "odpt:TrainType"        "train_type.json"
     download "odpt:StationTimetable" "station_timetable.json"
 

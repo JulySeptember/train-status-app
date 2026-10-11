@@ -90,8 +90,6 @@ type Station struct {
 	// 乗り換えられる駅。都営の駅データには無い（他社の駅データにだけある）
 	ConnectingStation []string `json:"odpt:connectingStation"`
 
-	PassengerSurvey []string `json:"odpt:passengerSurvey"`
-
 	StationTimetable []string `json:"odpt:stationTimetable"`
 }
 
@@ -240,35 +238,6 @@ type RailwayFare struct {
 	TicketFare      int `json:"odpt:ticketFare"`
 	ChildIcCardFare int `json:"odpt:childIcCardFare"`
 	ChildTicketFare int `json:"odpt:childTicketFare"`
-}
-
-// =========================
-// Passenger Survey
-// =========================
-
-type PassengerSurvey struct {
-	ID      string `json:"@id"`
-	Type    string `json:"@type"`
-	Context string `json:"@context"`
-
-	Date string `json:"dc:date"`
-
-	SameAs string `json:"owl:sameAs"`
-
-	Railway []string `json:"odpt:railway"`
-	Station []string `json:"odpt:station"`
-
-	Operator string `json:"odpt:operator"`
-
-	IncludeAlighting bool `json:"odpt:includeAlighting"`
-
-	PassengerSurveyObject []PassengerSurveyEntry `json:"odpt:passengerSurveyObject"`
-}
-
-type PassengerSurveyEntry struct {
-	SurveyYear int `json:"odpt:surveyYear"`
-
-	PassengerJourneys int `json:"odpt:passengerJourneys"`
 }
 
 type TrainView struct {

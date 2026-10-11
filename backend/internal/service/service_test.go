@@ -573,10 +573,6 @@ func TestGetStationDetail(t *testing.T) {
 	if result.Timetables == nil {
 		t.Fatal("timetables is nil")
 	}
-
-	if result.Passengers == nil {
-		t.Fatal("passengers is nil")
-	}
 }
 
 func TestGetStationDetailNotFound(t *testing.T) {
@@ -871,46 +867,6 @@ func TestGetStationDetailTrainLocationUnsupported(t *testing.T) {
 
 	if result.TrainLocationAvailable {
 		t.Fatal("expected train location unavailable")
-	}
-}
-
-func TestGetStationDetailPassengers(t *testing.T) {
-
-	loader, err := assets.New()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	svc := New(
-		&mockClient{},
-		loader,
-	)
-
-	var stationID string
-
-OUT:
-	for _, survey := range loader.PassengerSurveys() {
-		for _, st := range survey.Station {
-			stationID = st
-			break OUT
-		}
-	}
-
-	if stationID == "" {
-		t.Skip("no passenger survey")
-	}
-
-	result, err := svc.GetStationDetail(
-		context.Background(),
-		stationID,
-	)
-
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if len(result.Passengers) == 0 {
-		t.Fatal("expected passengers")
 	}
 }
 
