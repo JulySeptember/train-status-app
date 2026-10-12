@@ -164,7 +164,7 @@ func (n *network) search(
 				sh := shifts[seg]
 
 				if trip >= 0 && p.canAlight(i) {
-					a := sh.apply(p.alightAt(trip, i))
+					a := sh.at(p, trip, p.alightAt(trip, i))
 
 					// 到着駅にすでにもっと早く着けるなら、この先を調べる必要はない
 					if a < cur.arrival[s] && a < bound {
@@ -319,17 +319,17 @@ func (n *network) legs(e *Engine, p *pattern, shifts []shift, l tripLabel) []Leg
 		i := at(j)
 		sh := shifts[p.segAt(i)]
 		if n.reversed {
-			return -sh.apply(p.alightAt(trip, i)), -p.alightAt(trip, i)
+			return -sh.at(p, trip, p.alightAt(trip, i)), -p.alightAt(trip, i)
 		}
-		return sh.apply(p.boardAt(trip, i)), p.boardAt(trip, i)
+		return sh.at(p, trip, p.boardAt(trip, i)), p.boardAt(trip, i)
 	}
 	arrival := func(j int) int32 {
 		i := at(j)
 		sh := shifts[p.segAt(i)]
 		if n.reversed {
-			return -sh.apply(p.boardAt(trip, i))
+			return -sh.at(p, trip, p.boardAt(trip, i))
 		}
-		return sh.apply(p.alightAt(trip, i))
+		return sh.at(p, trip, p.alightAt(trip, i))
 	}
 
 	from, to := int(l.board), int(l.alight)
