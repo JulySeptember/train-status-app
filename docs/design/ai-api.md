@@ -134,7 +134,7 @@ user ──▶ AI ──(道具の呼び出し)──▶ アプリが実行 ─�
 |---|---|---|---|
 | `find_station` | `name` | 候補の駅（ID・駅名・路線名）。複数の場合もある | 3 |
 | `get_train_status` | （なし） | 路線ごとの状態（平常 / 遅延（◯分）/ 見合わせ）。アプリが分類したもの（route-search.md 7章） | 3 |
-| `search_route` | `from`, `to`, `departAt?`, `arriveBy?`, `maxTransfers?`, `avoidRailways?` | 経路の候補（乗り換え回数ごと）。遅延を反映した時刻と、反映したかどうか | 3 |
+| `search_route` | `from`, `to`, `departAt?`, `arriveBy?`, `maxTransfers?`, `avoidRailways?` | 経路の候補（乗り換え回数ごとと、次の列車）。遅延を反映した時刻と、反映したかどうか | 3 |
 | `get_next_departures` | `stationId`, `direction?`, `after?`, `limit?` | 直近の発車（時刻・行先・種別・列車ID） | 3 |
 | `get_timetable` | `stationId`, `direction?`, `calendar?`, `from?`, `to?` | 指定した時間帯の時刻表 | 3 |
 | `get_train_location` | `trainId` | 列車の現在位置・遅延 | 3 |

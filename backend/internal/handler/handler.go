@@ -400,7 +400,8 @@ func (h *Handler) Fare(
 // Journeys godoc
 //
 //	@Summary		Search journeys
-//	@Description	Search journeys between two stations. Returns the earliest journey for each number of transfers.
+//	@Description	Search journeys between two stations. Returns the earliest journey for each number of transfers, plus journeys on later trains (earlier trains with arriveBy), up to 4 in total.
+//	@Description	Journeys are sorted by arrival time (by departure time, latest first, with arriveBy).
 //	@Description	Stations with the same name on different lines (e.g. Shinjuku) are treated as one station.
 //	@Description	Times are on the current service day (before 03:00 belongs to the previous day).
 //	@Description	Current delays (per railway and direction, within the next hour) are added to the times, and suspended railways are avoided.

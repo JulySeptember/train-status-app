@@ -1026,6 +1026,9 @@ type JourneyQuery struct {
 // Journey
 // =========================
 
+// journeyCount は経路検索で返す経路の数の目安。指定した時刻の経路に、次の列車（到着時刻の指定では前の列車）の経路を足して、この数まで集める
+const journeyCount = 4
+
 func (s *Service) SearchJourneys(
 	ctx context.Context,
 	q JourneyQuery,
@@ -1074,6 +1077,7 @@ func (s *Service) SearchJourneys(
 		Calendars:    calendar.Calendars(now),
 		MaxTransfers: q.MaxTransfers,
 		Avoid:        slices.Clone(q.Avoid),
+		Count:        journeyCount,
 	}
 
 	switch {

@@ -148,6 +148,58 @@ func TestSearch(t *testing.T) {
 			},
 		},
 		{
+			// 1回目の探索の経路（乗り換え回数ごと）に、次の列車の経路を足し、早く着く順に並べる
+			name:  "次の列車の経路も探す",
+			query: Query{From: []string{"A1"}, To: []string{"A3"}, Time: hm("09:58"), MaxTransfers: DefaultMaxTransfers, Count: 4},
+			want: [][]string{
+				{"A.local1000@A1>A2", "A.express1012@A2>A3"},
+				{"A.local1000@A1>A3"},
+				{"A.local1005@A1>A3"},
+				{"A.local1100@A1>A3"},
+			},
+		},
+		{
+			// 1回目の探索で Count 本を超えても、乗り換え回数ごとの経路は削らない
+			name:  "1回目の探索の経路は削らない",
+			query: Query{From: []string{"A1"}, To: []string{"A3"}, Time: hm("09:58"), MaxTransfers: DefaultMaxTransfers, Count: 1},
+			want: [][]string{
+				{"A.local1000@A1>A2", "A.express1012@A2>A3"},
+				{"A.local1000@A1>A3"},
+			},
+		},
+		{
+			// 10:05 より後に出て B3 に着く経路は無い
+			name:  "次の列車の経路が無い",
+			query: Query{From: []string{"A1"}, To: []string{"B3"}, Time: hm("09:58"), MaxTransfers: DefaultMaxTransfers, Count: 3},
+			want:  [][]string{{"A.local1005@A1>A2", "B.1020@B2>B3"}},
+		},
+		{
+			// 前の列車の経路を足し、遅く出る順に並べる
+			name:  "到着時刻の指定で前の列車の経路も探す",
+			query: Query{From: []string{"A1"}, To: []string{"A3"}, Time: hm("10:35"), ArriveBy: true, MaxTransfers: DefaultMaxTransfers, Count: 2},
+			want: [][]string{
+				{"A.local1005@A1>A3"},
+				{"A.local1000@A1>A3"},
+			},
+		},
+		{
+			// 11:00 の列車の次は無い（探し直しても見つからずに終わる）
+			name:  "最後の列車",
+			query: Query{From: []string{"A1"}, To: []string{"A3"}, Time: hm("10:30"), MaxTransfers: DefaultMaxTransfers, Count: 4},
+			want:  [][]string{{"A.local1100@A1>A3"}},
+		},
+		{
+			name:  "最後の列車の後",
+			query: Query{From: []string{"A1"}, To: []string{"A3"}, Time: hm("11:01"), MaxTransfers: DefaultMaxTransfers, Count: 4},
+			want:  [][]string{},
+		},
+		{
+			// 10:18 より前に着く列車は無い
+			name:  "到着時刻の指定で最初の列車",
+			query: Query{From: []string{"A1"}, To: []string{"A3"}, Time: hm("10:20"), ArriveBy: true, MaxTransfers: DefaultMaxTransfers, Count: 3},
+			want:  [][]string{{"A.local1000@A1>A2", "A.express1012@A2>A3"}},
+		},
+		{
 			name:  "乗り換え回数の上限",
 			query: Query{From: []string{"A1"}, To: []string{"A3"}, Time: hm("09:58"), MaxTransfers: 0},
 			want:  [][]string{{"A.local1000@A1>A3"}},
@@ -484,5 +536,36 @@ func TestSearchDelayTimes(t *testing.T) {
 				t.Errorf("journey %d-%d does not match leg", got[0].Departure, got[0].Arrival)
 			}
 		})
+	}
+}
+
+func TestRemoveDominated(t *testing.T) {
+
+	journey := func(train string, departure, arrival string, legs int) Journey {
+		j := Journey{Departure: hm(departure), Arrival: hm(arrival)}
+		for i := range legs {
+			j.Legs = append(j.Legs, Leg{Train: fmt.Sprintf("%s.%d", train, i)})
+		}
+		return j
+	}
+
+	got := removeDominated([]Journey{
+		journey("a", "10:00", "10:30", 1),
+		// a と条件がまったく同じなので、先に見つけた a を残す
+		journey("b", "10:00", "10:30", 1),
+		// 出発が早く、到着が遅いので除く
+		journey("c", "09:55", "10:35", 1),
+		// 乗り換えが多いが早く着くので残す
+		journey("d", "10:00", "10:20", 2),
+		// 遅く出て遅く着くので残す
+		journey("e", "10:10", "10:40", 1),
+	})
+
+	var trains []string
+	for _, j := range got {
+		trains = append(trains, j.Legs[0].Train)
+	}
+	if want := []string{"a.0", "d.0", "e.0"}; !reflect.DeepEqual(trains, want) {
+		t.Errorf("got %v, want %v", trains, want)
 	}
 }

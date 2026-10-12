@@ -106,11 +106,11 @@ func (t *Tools) Definitions() []Tool {
 		{
 			Name: "search_route",
 			Description: "2つの駅の間の経路を探す。現在の遅れと運転見合わせは反映済み（見合わせ中の路線は使わない）。" +
-				"結果は乗り換え回数ごとの候補。時刻は HH:MM、durationMinutes は所要時間（分）。" +
+				"結果は、指定した時刻の乗り換え回数ごとの候補と、その次の列車（到着時刻の指定では前の列車）の候補。早く着く順（到着時刻の指定では遅く出る順）。時刻は HH:MM、durationMinutes は所要時間（分）。" +
 				"legs の estimated が true の区間は、駅時刻表から推定した列車で、到着時刻は目安。" +
 				"legs の through が true の区間は、前の区間の列車に乗ったまま直通運転で入る（乗り換えではない）。" +
 				"walkBeforeMinutes・walkAfterMinutes は、出発駅から乗る駅まで・降りる駅から到着駅まで歩く時間（分。時刻に含まれる）。" +
-				"10分以上遅れている路線が関わるときは、その路線を使う経路と避けた経路をアプリが比べ、comparison に返す（faster が到着の早い方）。",
+				"10分以上遅れている路線が関わるときは、その路線を使う経路と避けた経路をアプリが比べ、comparison に返す（faster は到着の早い方。到着時刻の指定では出発の遅い方）。",
 			Parameters: json.RawMessage(`{
 				"type": "object",
 				"properties": {
@@ -488,10 +488,11 @@ func (t *Tools) compareDelayed(ctx context.Context, q service.JourneyQuery, sear
 		cmp.Journeys = "avoids_delayed"
 		alt.Avoid = keep
 	} else {
-		// 遅れている路線を使う経路なら、避けた経路と比べる
+		// 遅れている路線を使う経路なら、避けた経路と比べる。
+		// 見るのは最も良い経路（先頭）だけにする。後ろの経路は次の列車（到着時刻の指定では前の列車）のもの
 		used := make(map[string]bool)
-		for _, j := range search.Journeys {
-			for _, l := range j.Legs {
+		if len(search.Journeys) > 0 {
+			for _, l := range search.Journeys[0].Legs {
 				if delayed[l.Railway] && !used[l.Railway] {
 					used[l.Railway] = true
 					cmp.DelayedRailways = append(cmp.DelayedRailways, l.Railway)
@@ -512,14 +513,20 @@ func (t *Tools) compareDelayed(ctx context.Context, q service.JourneyQuery, sear
 
 	cmp.Alternative = trimJourneys(altSearch.Journeys)
 
-	main, okMain := earliestArrival(search.Journeys)
-	other, okOther := earliestArrival(altSearch.Journeys)
+	// それぞれ最も良い経路（先頭。出発時刻の指定では最も早く着く経路、到着時刻の指定では最も遅く出る経路）で比べる。
+	// 到着時刻の指定では、遅く出られる方を良いとする（どちらも指定した時刻までに着く）
+	main, okMain := bestJourney(search.Journeys)
+	other, okOther := bestJourney(altSearch.Journeys)
 
 	switch {
 	case okMain && okOther:
-		cmp.AlternativeArrivesLaterMinutes = other - main
+		cmp.AlternativeArrivesLaterMinutes = other.arrival - main.arrival
 		cmp.Faster = "journeys"
-		if other < main {
+		if q.ArriveBy != "" {
+			if other.departure > main.departure {
+				cmp.Faster = "alternative"
+			}
+		} else if other.arrival < main.arrival {
 			cmp.Faster = "alternative"
 		}
 	case okOther:
@@ -580,15 +587,19 @@ func trimJourneys(journeys []service.Journey) []routeJourney {
 	return result
 }
 
-// earliestArrival は、経路のうち最も早い到着（運行日の0時からの分）
-func earliestArrival(journeys []service.Journey) (int, bool) {
-	best, ok := 0, false
-	for _, j := range journeys {
-		if m, valid := serviceMinutes(j.ArrivalTime); valid && (!ok || m < best) {
-			best, ok = m, true
-		}
+type journeyTimes struct {
+	departure, arrival int
+}
+
+// bestJourney は、最も良い経路（先頭）の出発・到着（運行日の0時からの分）を返す。
+// 経路は、出発時刻の指定では早く着く順、到着時刻の指定では遅く出る順に並んでいる
+func bestJourney(journeys []service.Journey) (journeyTimes, bool) {
+	if len(journeys) == 0 {
+		return journeyTimes{}, false
 	}
-	return best, ok
+	d, ok1 := serviceMinutes(journeys[0].DepartureTime)
+	a, ok2 := serviceMinutes(journeys[0].ArrivalTime)
+	return journeyTimes{departure: d, arrival: a}, ok1 && ok2
 }
 
 // clockDiff は "HH:MM" の2つの時刻の差（分）。日をまたぐ場合は翌日として数える

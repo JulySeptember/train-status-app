@@ -30,8 +30,18 @@ const (
 // 平常時の文章は「現在、１５分以上の遅延はありません。」で、状態を表す項目は無い
 var suspendedWords = []string{"見合わせ", "運転を中止", "運転中止"}
 
-// 「見合わせていましたが、運転を再開しました」のような文章は見合わせとみなさない
-var resumedWords = []string{"再開"}
+// suspendedWords のすぐ後に続いていたら、終わった見合わせ（「見合わせていましたが、運転を再開しました」）とみなす言い方。
+// 「再開」の有無では判定しない。「運転再開は15時頃を見込んでいます」「一部の区間は運転を再開し」のように、
+// 見合わせが続いている文章にも入るため
+var pastSuffixes = []string{
+	"ていまし", "ておりまし", "ていた", "まし", "た", // 見合わせていましたが・見合わせましたが・見合わせた
+	"していまし", "しておりまし", "していた", "しまし", "した", // 運転を中止していましたが・中止しましたが
+	"となっていまし", "となっておりまし", "となりまし", "を行っていまし", "を行っておりまし", "をしていまし", // 運転見合わせとなっていましたが
+}
+
+// suspendedWords のすぐ前にあったら見合わせとみなさない言葉。
+// 「JR線との直通運転を中止して、りんかい線内で折返し運転」は、路線の中では走っている
+var throughServicePrefixes = []string{"直通", "直通運転を", "直通運転の"}
 
 // railwayConditions は、経路検索に反映する路線ごとの運行状況。
 type railwayConditions struct {
@@ -141,10 +151,24 @@ func (s *Service) statusTexts(statuses []model.TrainStatus) map[string]string {
 	return result
 }
 
+// isSuspended は、文章のどこかで運転見合わせが続いているかを返す。
 func isSuspended(text string) bool {
-	contains := func(word string) bool { return strings.Contains(text, word) }
-	return slices.ContainsFunc(suspendedWords, contains) &&
-		!slices.ContainsFunc(resumedWords, contains)
+	for _, word := range suspendedWords {
+		rest := text
+		for {
+			i := strings.Index(rest, word)
+			if i < 0 {
+				break
+			}
+			before := rest[:i]
+			through := slices.ContainsFunc(throughServicePrefixes, func(p string) bool { return strings.HasSuffix(before, p) })
+			rest = rest[i+len(word):]
+			if !through && !slices.ContainsFunc(pastSuffixes, func(p string) bool { return strings.HasPrefix(rest, p) }) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // medianDelays は、路線・方向ごとに列車の遅れ（odpt:delay、秒）の中央値を分にして返す。
