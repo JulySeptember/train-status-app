@@ -73,9 +73,9 @@ type Query struct {
 	// Avoid に含まれる路線は使わない
 	Avoid []string
 
-	// Delays は路線・方向ごとの遅れ。DelayUntil（運行日の0時からの分）までの時刻に遅れを足す。
-	// それより後の時刻は、DelayUntil + 遅れ より前にならないように後ろへずらす
-	// （遅れは現時点の値なので、先の列車ほど元のダイヤに戻っていくとみなす）
+	// Delays は路線・方向ごとの遅れ。始発駅を DelayUntil（運行日の0時からの分）までに出る列車に遅れを足す。
+	// それより後に出る列車は、遅れを少しずつ減らして足す（遅れは現時点の値なので、先の列車ほど元のダイヤに戻っていくとみなす）。
+	// 1本の列車には全部の停車駅に同じ遅れを足す（区間の所要時間は変えない）
 	Delays     []Delay
 	DelayUntil int
 
@@ -487,29 +487,40 @@ func (c *conditions) avoided(p *pattern, s int) bool {
 }
 
 // shift は時刻表の時刻を、遅れを足した時刻にする。
-// 時刻の前後を入れ替えない（単調に増える）ので、列車の順番や追い越しの判定はそのまま使える。
+//
+// 遅れは列車ごとに、始発駅（パターンの最初の停車駅。元の向き）の発車時刻で決め、全部の停車駅に同じだけ足す。
+// 駅ごとの時刻で決めると、遅れの減り方によって区間の所要時間が縮む（0分になる）ため。
+// 始発駅の発車が until までの列車は minutes 分遅れ、それより後の列車は、until から2分ごとに1分ずつ遅れが減る。
+// 始発駅の発車時刻に遅れを足した時刻は列車の順に増えるので、パターンの列車の順番はほぼ変わらない
+// （後の列車が途中の駅で前の列車に追いつくほど速いと入れ替わりうるが、同じ停車駅の並びの列車ではまず無い）。
 type shift struct {
 	minutes  int32
 	until    int32
 	reversed bool
 }
 
-func (s shift) apply(t int32) int32 {
+// delayRecoveryMinutes は、until を過ぎてから遅れが1分減るのにかかる時間（分）。
+// 1より大きくし、始発駅の発車時刻に遅れを足した時刻が、列車の順に減らないようにする
+const delayRecoveryMinutes = 2
+
+// at は、パターンの trip 番目の列車の時刻 t（パターンの時刻。逆向きの路線網では -1 を掛けたもの）に遅れを足す。
+func (s shift) at(p *pattern, trip int, t int32) int32 {
 	if s.minutes == 0 {
 		return t
 	}
-	// 逆向きの路線網では時刻に -1 を掛けているので、元の向きに戻してから足す
+	// 逆向きの路線網では、元の向きの始発駅はパターンの最後の停車駅で、時刻に -1 を掛けている
 	if s.reversed {
-		return -s.forward(-t)
+		return t - s.delay(-p.alightAt(trip, len(p.stops)-1))
 	}
-	return s.forward(t)
+	return t + s.delay(p.boardAt(trip, 0))
 }
 
-func (s shift) forward(t int32) int32 {
-	if t <= s.until {
-		return t + s.minutes
+// delay は、始発駅を origin（運行日の0時からの分）に出る列車の遅れ（分）を返す。
+func (s shift) delay(origin int32) int32 {
+	if origin <= s.until {
+		return s.minutes
 	}
-	return max(t, s.until+s.minutes)
+	return max(0, s.minutes-(origin-s.until)/delayRecoveryMinutes)
 }
 
 func (e *Engine) stationGroup(ids []string) ([]int32, error) {

@@ -103,7 +103,7 @@ func (p *pattern) earliestTrip(i int, t int32, limit int, sh shift) int {
 	lo, hi := 0, limit
 	for lo < hi {
 		mid := (lo + hi) / 2
-		if sh.apply(p.boardAt(mid, i)) < t {
+		if sh.at(p, mid, p.boardAt(mid, i)) < t {
 			lo = mid + 1
 		} else {
 			hi = mid

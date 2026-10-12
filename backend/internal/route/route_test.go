@@ -270,10 +270,16 @@ func TestSearch(t *testing.T) {
 			want:  [][]string{{"B.1040@B2>B3"}},
 		},
 		{
-			// 10:20 発は 10:15（DelayUntil + 遅れ）より後なので、時刻表どおり
-			name:  "遅れは DelayUntil より後の列車に足さない",
+			// 10:20 発は DelayUntil の15分後なので、10 - 15/2 = 3分遅れの 10:23 発になり、10:25 に間に合わない
+			name:  "DelayUntil より後の列車は遅れを減らして足す",
 			query: Query{From: []string{"B2"}, To: []string{"B3"}, Time: hm("10:25"), Delays: []Delay{{Railway: "B", Minutes: 10}}, DelayUntil: hm("10:05"), MaxTransfers: DefaultMaxTransfers},
 			want:  [][]string{{"B.1040@B2>B3"}},
+		},
+		{
+			// 3分遅れの 10:23 発に乗れる
+			name:  "DelayUntil より後の列車に減らした遅れで乗る",
+			query: Query{From: []string{"B2"}, To: []string{"B3"}, Time: hm("10:23"), Delays: []Delay{{Railway: "B", Minutes: 10}}, DelayUntil: hm("10:05"), MaxTransfers: DefaultMaxTransfers},
+			want:  [][]string{{"B.1020@B2>B3"}},
 		},
 		{
 			name:  "同じ駅を2回通る列車で、2回目に降りる",
@@ -499,7 +505,7 @@ func TestSearchDelayTimes(t *testing.T) {
 
 	e := newTestEngine(t)
 
-	// A は 10:02 までの時刻が5分遅れる。それより後の時刻は 10:07 より前にならない
+	// A の列車のうち、始発駅を 10:02 までに出る列車は5分遅れる
 	base := Query{
 		From:         []string{"A1"},
 		To:           []string{"A2"},
@@ -513,7 +519,7 @@ func TestSearchDelayTimes(t *testing.T) {
 	departAt.Time = hm("09:58")
 
 	arriveBy := base
-	arriveBy.Time = hm("10:10")
+	arriveBy.Time = hm("10:15")
 	arriveBy.ArriveBy = true
 
 	for name, q := range map[string]Query{"出発時刻": departAt, "到着時刻": arriveBy} {
@@ -528,12 +534,68 @@ func TestSearchDelayTimes(t *testing.T) {
 				t.Fatalf("got %v", summary(got))
 			}
 
+			// 到着（A2 10:10）が DelayUntil より後でも、列車の遅れは同じ5分（所要時間は10分のまま）
 			l := got[0].Legs[0]
-			if l.Train != "A.local1000" || l.Departure != hm("10:05") || l.Arrival != hm("10:10") || l.Delay != 5 {
+			if l.Train != "A.local1000" || l.Departure != hm("10:05") || l.Arrival != hm("10:15") || l.Delay != 5 {
 				t.Errorf("got %s %d-%d delay %d", l.Train, l.Departure, l.Arrival, l.Delay)
 			}
 			if got[0].Departure != l.Departure || got[0].Arrival != l.Arrival {
 				t.Errorf("journey %d-%d does not match leg", got[0].Departure, got[0].Arrival)
+			}
+		})
+	}
+}
+
+// DelayUntil より後に始発駅を出る列車は、2分ごとに1分ずつ遅れが減る。
+// 遅れが大きくても、区間の所要時間は縮まず、列車の順番も変わらない
+func TestSearchDelayRecovers(t *testing.T) {
+
+	e := newTestEngine(t)
+
+	base := Query{
+		From:         []string{"A1"},
+		To:           []string{"A3"},
+		Calendars:    []string{weekday},
+		MaxTransfers: 0,
+		Delays:       []Delay{{Railway: "A", Minutes: 30}},
+		DelayUntil:   hm("09:50"),
+	}
+
+	tests := []struct {
+		name               string
+		time               string
+		arriveBy           bool
+		train              string
+		departure, arrival string
+		delay              int
+	}{
+		// 10:00 に出る列車は 30 - 10/2 = 25分遅れ
+		{"出発時刻", "10:20", false, "A.local1000", "10:25", "10:55", 25},
+		// 10:05 に出る列車は 30 - 15/2 = 23分遅れ（前の列車より後に出る）
+		{"次の列車", "10:26", false, "A.local1005", "10:28", "10:58", 23},
+		// 11:00 に出る列車は遅れが無くなっている
+		{"遅れが無くなった列車", "10:59", false, "A.local1100", "11:00", "11:30", 0},
+		{"到着時刻", "10:57", true, "A.local1000", "10:25", "10:55", 25},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+
+			q := base
+			q.Time = hm(tt.time)
+			q.ArriveBy = tt.arriveBy
+
+			got, err := e.Search(q)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(got) != 1 || len(got[0].Legs) != 1 {
+				t.Fatalf("got %v", summary(got))
+			}
+
+			l := got[0].Legs[0]
+			if l.Train != tt.train || l.Departure != hm(tt.departure) || l.Arrival != hm(tt.arrival) || l.Delay != tt.delay {
+				t.Errorf("got %s %d-%d delay %d", l.Train, l.Departure, l.Arrival, l.Delay)
 			}
 		})
 	}
