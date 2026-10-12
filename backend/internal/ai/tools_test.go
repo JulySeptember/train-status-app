@@ -250,16 +250,31 @@ func TestToolSearchRouteComparesDelayed(t *testing.T) {
 		t.Fatalf("unexpected comparison %v", cmp)
 	}
 
+	// 画面の先頭の経路（最も良い経路）が、早い方の経路
 	usesAsakusa := false
-	for _, j := range out.Journeys.Journeys {
-		for _, l := range j.Legs {
-			usesAsakusa = usesAsakusa || l.Railway == "odpt.Railway:Toei.Asakusa"
-		}
+	for _, l := range out.Journeys.Journeys[0].Legs {
+		usesAsakusa = usesAsakusa || l.Railway == "odpt.Railway:Toei.Asakusa"
 	}
 	if (cmp["faster"] == "alternative") != usesAsakusa {
 		t.Fatalf("the screen must show the faster journeys: faster=%v usesAsakusa=%v", cmp["faster"], usesAsakusa)
 	}
 	t.Logf("faster=%v later=%v", cmp["faster"], cmp["alternativeArrivesLaterMinutes"])
+
+	// 到着時刻の指定では、それぞれの先頭（最も遅く出る経路）の出発で比べる。
+	// 前の列車の経路まで含めた最も早い到着で比べると、さかのぼった方が早く着くことになるため
+	delete(args, "departAt")
+	delete(args, "avoidRailways")
+	args["arriveBy"] = "10:30"
+	_, content = call(t, tools, "search_route", args)
+	cmp, ok = content["comparison"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected comparison: %v", content)
+	}
+	mainDeparture := content["journeys"].([]any)[0].(map[string]any)["departureTime"].(string)
+	altDeparture := cmp["alternative"].([]any)[0].(map[string]any)["departureTime"].(string)
+	if want := altDeparture > mainDeparture; (cmp["faster"] == "alternative") != want {
+		t.Fatalf("faster=%v, departures: journeys %s, alternative %s", cmp["faster"], mainDeparture, altDeparture)
+	}
 }
 
 // 遅れている路線が関わらなければ比べない

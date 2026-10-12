@@ -265,13 +265,21 @@ func (e *Engine) Search(q Query) ([]Journey, error) {
 		return first, nil
 	}
 
-	result := first
+	better := func(a, b Journey) int {
+		if q.ArriveBy {
+			return cmp.Or(cmp.Compare(b.Departure, a.Departure), cmp.Compare(b.Arrival, a.Arrival), cmp.Compare(a.Transfers(), b.Transfers()))
+		}
+		return cmp.Or(cmp.Compare(a.Arrival, b.Arrival), cmp.Compare(b.Departure, a.Departure), cmp.Compare(a.Transfers(), b.Transfers()))
+	}
+
+	// 見つけた経路は全部集め、ほかの経路より良いところの無いものを除いてから数える
+	all := first
 	last := first
 	t := q.Time
 
 	// 同じ経路しか見つからないときに探し続けないよう、回数に上限を設ける
 	for range maxRepeats {
-		if len(result) >= q.Count {
+		if len(removeDominated(all)) >= q.Count {
 			break
 		}
 
@@ -283,20 +291,31 @@ func (e *Engine) Search(q Query) ([]Journey, error) {
 		}
 		last = found
 		for _, j := range found {
-			if len(result) < q.Count && !slices.ContainsFunc(result, func(r Journey) bool { return sameJourney(r, j) }) {
-				result = append(result, j)
+			if !slices.ContainsFunc(all, func(r Journey) bool { return sameJourney(r, j) }) {
+				all = append(all, j)
 			}
 		}
 	}
 
-	result = removeDominated(result)
+	candidates := removeDominated(all)
+	slices.SortStableFunc(candidates, better)
 
-	slices.SortStableFunc(result, func(a, b Journey) int {
-		if q.ArriveBy {
-			return cmp.Or(cmp.Compare(b.Departure, a.Departure), cmp.Compare(b.Arrival, a.Arrival), cmp.Compare(a.Transfers(), b.Transfers()))
+	// 最初の探索の経路は残し、ほかは良い順に Count 本まで足す
+	isFirst := func(j Journey) bool {
+		return slices.ContainsFunc(first, func(f Journey) bool { return sameJourney(f, j) })
+	}
+	extra := q.Count - len(slices.DeleteFunc(slices.Clone(candidates), func(j Journey) bool { return !isFirst(j) }))
+
+	result := make([]Journey, 0, len(candidates))
+	for _, j := range candidates {
+		switch {
+		case isFirst(j):
+			result = append(result, j)
+		case extra > 0:
+			result = append(result, j)
+			extra--
 		}
-		return cmp.Or(cmp.Compare(a.Arrival, b.Arrival), cmp.Compare(b.Departure, a.Departure), cmp.Compare(a.Transfers(), b.Transfers()))
-	})
+	}
 
 	return result, nil
 }
