@@ -9,6 +9,7 @@
 package route
 
 import (
+	"cmp"
 	"errors"
 	"slices"
 	"strings"
@@ -77,6 +78,10 @@ type Query struct {
 	// （遅れは現時点の値なので、先の列車ほど元のダイヤに戻っていくとみなす）
 	Delays     []Delay
 	DelayUntil int
+
+	// Count は返す経路の数の目安。0 なら指定した時刻で1回だけ探す。
+	// 1以上なら、見つけた経路の次の列車（到着時刻の指定では前の列車）でも探し直し、Count 本まで集める
+	Count int
 }
 
 // Delay は、路線・方向の列車がどれだけ遅れているか。
@@ -224,8 +229,12 @@ func (e *Engine) networkPair(calendars []string) *networkPair {
 	return p
 }
 
-// Search は条件に合う経路を、乗り換えの少ない順に返す。
+// Search は条件に合う経路を返す。
+//
+// 1回の探索では、乗り換え回数ごとに最も早く着く経路を、乗り換えの少ない順に返す。
 // 乗り換えが多い経路は、少ない経路より早く着く（到着時刻の指定では遅く出る）ものだけを返す。
+// Query.Count が1以上なら、次の列車（到着時刻の指定では前の列車）でも探し直して Count 本まで足し、
+// 早く着く順（到着時刻の指定では遅く出る順）に並べる。最初の探索の経路は Count を超えても残す。
 // 経路が無い場合は空を返す。
 func (e *Engine) Search(q Query) ([]Journey, error) {
 
@@ -251,9 +260,63 @@ func (e *Engine) Search(q Query) ([]Journey, error) {
 
 	c := e.conditions(q)
 
-	if q.ArriveBy {
+	first := e.searchAt(nets, from, to, q.Time, q.ArriveBy, maxTransfers, c)
+	if q.Count <= 0 || len(first) == 0 {
+		return first, nil
+	}
+
+	result := first
+	last := first
+	t := q.Time
+
+	// 同じ経路しか見つからないときに探し続けないよう、回数に上限を設ける
+	for range maxRepeats {
+		if len(result) >= q.Count {
+			break
+		}
+
+		t = nextTime(last, t, q.ArriveBy)
+
+		found := e.searchAt(nets, from, to, t, q.ArriveBy, maxTransfers, c)
+		if len(found) == 0 {
+			break
+		}
+		last = found
+		for _, j := range found {
+			if len(result) < q.Count && !slices.ContainsFunc(result, func(r Journey) bool { return sameJourney(r, j) }) {
+				result = append(result, j)
+			}
+		}
+	}
+
+	result = removeDominated(result)
+
+	slices.SortStableFunc(result, func(a, b Journey) int {
+		if q.ArriveBy {
+			return cmp.Or(cmp.Compare(b.Departure, a.Departure), cmp.Compare(b.Arrival, a.Arrival), cmp.Compare(a.Transfers(), b.Transfers()))
+		}
+		return cmp.Or(cmp.Compare(a.Arrival, b.Arrival), cmp.Compare(b.Departure, a.Departure), cmp.Compare(a.Transfers(), b.Transfers()))
+	})
+
+	return result, nil
+}
+
+// maxRepeats は、Query.Count の経路を集めるために探し直す回数の上限
+const maxRepeats = 6
+
+// searchAt は時刻 t で1回探す（Search の1回分）。
+func (e *Engine) searchAt(
+	nets *networkPair,
+	from, to []int32,
+	t int,
+	arriveBy bool,
+	maxTransfers int,
+	c *conditions,
+) []Journey {
+
+	if arriveBy {
 		// 最も遅く出る経路を逆向きに探し、出発時刻から最も早く着く経路に絞る
-		latest := nets.backward.search(e, to, from, -q.Time, maxTransfers, c)
+		latest := nets.backward.search(e, to, from, -t, maxTransfers, c)
 
 		result := make([]Journey, 0, len(latest))
 		for _, j := range latest {
@@ -261,10 +324,10 @@ func (e *Engine) Search(q Query) ([]Journey, error) {
 			result = append(result, pick(best, j))
 		}
 
-		return result, nil
+		return result
 	}
 
-	earliest := nets.forward.search(e, from, to, q.Time, maxTransfers, c)
+	earliest := nets.forward.search(e, from, to, t, maxTransfers, c)
 
 	// 同じ時刻に着く経路のうち、最も遅く出るものに絞る（乗り換え駅で長く待たないように）
 	result := make([]Journey, 0, len(earliest))
@@ -273,7 +336,65 @@ func (e *Engine) Search(q Query) ([]Journey, error) {
 		result = append(result, pick(latest, j))
 	}
 
-	return result, nil
+	return result
+}
+
+// nextTime は、次に探す時刻を返す。出発時刻の指定では、前回の探索で見つけた経路の最も早い出発の1分後
+// （その列車より後に出る経路を探す）。到着時刻の指定では、最も遅い到着の1分前。
+// 前に探した時刻 prev から必ず1分以上進める。journeys は空でないこと。
+func nextTime(journeys []Journey, prev int, arriveBy bool) int {
+
+	if arriveBy {
+		latest := journeys[0].Arrival
+		for _, j := range journeys[1:] {
+			latest = max(latest, j.Arrival)
+		}
+		return min(latest, prev) - 1
+	}
+
+	earliest := journeys[0].Departure
+	for _, j := range journeys[1:] {
+		earliest = min(earliest, j.Departure)
+	}
+	return max(earliest, prev) + 1
+}
+
+// sameJourney は、2つの経路が同じ列車に同じ区間で乗るかを返す。
+func sameJourney(a, b Journey) bool {
+	return slices.EqualFunc(a.Legs, b.Legs, func(x, y Leg) bool {
+		return x.Train == y.Train && x.From == y.From && x.To == y.To
+	})
+}
+
+// removeDominated は、ほかの経路より良いところの無い経路を除く。
+// 出発が遅くなく（到着時刻の指定では早くなく）、到着が早くなく、乗り換えも少なくない経路は、
+// ほかの経路の方が良いので除く。
+func removeDominated(journeys []Journey) []Journey {
+
+	dominates := func(a, b Journey) bool {
+		return a.Departure >= b.Departure && a.Arrival <= b.Arrival && a.Transfers() <= b.Transfers()
+	}
+
+	result := make([]Journey, 0, len(journeys))
+	for i, j := range journeys {
+		dominated := false
+		for k, other := range journeys {
+			if i == k || !dominates(other, j) {
+				continue
+			}
+			// 条件がまったく同じなら、先に見つけた方を残す
+			if other.Departure == j.Departure && other.Arrival == j.Arrival && other.Transfers() == j.Transfers() && k > i {
+				continue
+			}
+			dominated = true
+			break
+		}
+		if !dominated {
+			result = append(result, j)
+		}
+	}
+
+	return result
 }
 
 // conditions は、探索のあいだ変わらない条件（使わない路線と遅れ）。路線・方向は Strings の番号で持つ。

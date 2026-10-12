@@ -157,15 +157,23 @@ func TestSearchJourneys(t *testing.T) {
 
 			assertTimetable(t, s, got.Journeys)
 
+			// 次の列車の経路も足すので、複数の経路が返る
+			if len(got.Journeys) < 2 {
+				t.Errorf("got %d journeys, want 2 or more", len(got.Journeys))
+			}
+
 			for i, j := range got.Journeys {
 				if j.DepartureTime < "10:00" {
 					t.Errorf("departs %s before 10:00", j.DepartureTime)
 				}
-				if i > 0 {
-					prev := got.Journeys[i-1]
-					if j.Transfers <= prev.Transfers || j.ArrivalTime >= prev.ArrivalTime {
-						t.Errorf("journey %d (%d transfers, %s) is not better than %d (%d transfers, %s)",
-							i, j.Transfers, j.ArrivalTime, i-1, prev.Transfers, prev.ArrivalTime)
+				if i > 0 && j.ArrivalTime < got.Journeys[i-1].ArrivalTime {
+					t.Errorf("journey %d arrives %s before journey %d (%s)", i, j.ArrivalTime, i-1, got.Journeys[i-1].ArrivalTime)
+				}
+				// 出発が遅くなく、到着が早くなく、乗り換えも少なくない経路は返さない
+				for k, other := range got.Journeys {
+					if k != i && other.DepartureTime >= j.DepartureTime && other.ArrivalTime <= j.ArrivalTime && other.Transfers <= j.Transfers {
+						t.Errorf("journey %d (%s-%s, %d transfers) is no better than %d (%s-%s, %d transfers)",
+							i, j.DepartureTime, j.ArrivalTime, j.Transfers, k, other.DepartureTime, other.ArrivalTime, other.Transfers)
 					}
 				}
 			}
@@ -434,7 +442,7 @@ func TestSearchJourneysDelay(t *testing.T) {
 		t.Error("delayApplied = false")
 	}
 
-	if len(got.Journeys) != 1 || len(scheduled.Journeys) != 1 {
+	if len(got.Journeys) == 0 || len(scheduled.Journeys) == 0 {
 		t.Fatalf("journeys = %d, %d", len(got.Journeys), len(scheduled.Journeys))
 	}
 
@@ -554,6 +562,16 @@ func TestIsSuspended(t *testing.T) {
 		{"三田線は、人身事故の影響で、白金高輪駅～目黒駅間の運転を見合わせています。", true},
 		{"新宿線は、信号故障の影響で、運転を中止しています。", true},
 		{"三田線は、人身事故の影響で運転を見合わせていましたが、運転を再開しました。", false},
+		// 再開の見込みや、一部の区間の再開が書かれていても、見合わせが続いている
+		{"埼京線は、山手線内での人身事故の影響で、新宿〜大崎駅間の上下線で運転を見合わせています。運転再開は１５時００分頃を見込んでいます。新宿〜大宮駅間は運転を再開し、同区間の上下線の一部列車に遅れと運休がでています。", true},
+		{"山手線は、渋谷駅での人身事故の影響で、内回り電車で運転を見合わせています。運転再開見込は１５時００分頃に変更になりました。外回り電車に遅れがでています。", true},
+		{"新宿線は、信号故障の影響で運転を中止していましたが、運転を再開しました。", false},
+		{"三田線は、人身事故の影響で運転を見合わせておりましたが、運転を再開しました。", false},
+		{"運転を見合わせていた白金高輪駅～目黒駅間は、運転を再開しました。", false},
+		{"浅草線は運転を再開しましたが、三田線は白金高輪駅～目黒駅間の運転を見合わせています。", true},
+		// 直通運転の中止は、路線の中では走っている
+		{"JR線との直通運転を中止して、りんかい線内（大崎～新木場間）で折返し運転をおこない遅れがでています。これは、JR線内で発生した人身事故の影響です。", false},
+		{"直通運転を中止し、大崎～新木場間の運転を見合わせています。", true},
 	}
 
 	for _, tt := range tests {
@@ -611,11 +629,13 @@ func TestSearchJourneysTimetableOnly(t *testing.T) {
 	}
 
 	// 見合わせ中でも三田線で、遅れを足さずに探す
-	if len(got.Journeys) != 1 {
-		t.Fatalf("journeys = %d", len(got.Journeys))
+	if len(got.Journeys) == 0 {
+		t.Fatal("no journeys")
 	}
-	if l := got.Journeys[0].Legs[0]; l.Railway != mitaRailway || l.DelayMinutes != 0 {
-		t.Errorf("leg = %s delay %d", l.Railway, l.DelayMinutes)
+	for _, j := range got.Journeys {
+		if l := j.Legs[0]; l.Railway != mitaRailway || l.DelayMinutes != 0 {
+			t.Errorf("leg = %s delay %d", l.Railway, l.DelayMinutes)
+		}
 	}
 
 	assertTimetable(t, s, got.Journeys)

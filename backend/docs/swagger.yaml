@@ -393,7 +393,8 @@ paths:
   /api/journeys:
     get:
       description: |-
-        Search journeys between two stations. Returns the earliest journey for each number of transfers.
+        Search journeys between two stations. Returns the earliest journey for each number of transfers, plus journeys on later trains (earlier trains with arriveBy), up to 4 in total.
+        Journeys are sorted by arrival time (by departure time, latest first, with arriveBy).
         Stations with the same name on different lines (e.g. Shinjuku) are treated as one station.
         Times are on the current service day (before 03:00 belongs to the previous day).
         Current delays (per railway and direction, within the next hour) are added to the times, and suspended railways are avoided.

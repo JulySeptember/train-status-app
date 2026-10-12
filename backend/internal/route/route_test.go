@@ -148,6 +148,41 @@ func TestSearch(t *testing.T) {
 			},
 		},
 		{
+			// 1回目の探索の経路（乗り換え回数ごと）に、次の列車の経路を足し、早く着く順に並べる
+			name:  "次の列車の経路も探す",
+			query: Query{From: []string{"A1"}, To: []string{"A3"}, Time: hm("09:58"), MaxTransfers: DefaultMaxTransfers, Count: 4},
+			want: [][]string{
+				{"A.local1000@A1>A2", "A.express1012@A2>A3"},
+				{"A.local1000@A1>A3"},
+				{"A.local1005@A1>A3"},
+				{"A.local1100@A1>A3"},
+			},
+		},
+		{
+			// 1回目の探索で Count 本を超えても、乗り換え回数ごとの経路は削らない
+			name:  "1回目の探索の経路は削らない",
+			query: Query{From: []string{"A1"}, To: []string{"A3"}, Time: hm("09:58"), MaxTransfers: DefaultMaxTransfers, Count: 1},
+			want: [][]string{
+				{"A.local1000@A1>A2", "A.express1012@A2>A3"},
+				{"A.local1000@A1>A3"},
+			},
+		},
+		{
+			// 10:05 より後に出て B3 に着く経路は無い
+			name:  "次の列車の経路が無い",
+			query: Query{From: []string{"A1"}, To: []string{"B3"}, Time: hm("09:58"), MaxTransfers: DefaultMaxTransfers, Count: 3},
+			want:  [][]string{{"A.local1005@A1>A2", "B.1020@B2>B3"}},
+		},
+		{
+			// 前の列車の経路を足し、遅く出る順に並べる
+			name:  "到着時刻の指定で前の列車の経路も探す",
+			query: Query{From: []string{"A1"}, To: []string{"A3"}, Time: hm("10:35"), ArriveBy: true, MaxTransfers: DefaultMaxTransfers, Count: 2},
+			want: [][]string{
+				{"A.local1005@A1>A3"},
+				{"A.local1000@A1>A3"},
+			},
+		},
+		{
 			name:  "乗り換え回数の上限",
 			query: Query{From: []string{"A1"}, To: []string{"A3"}, Time: hm("09:58"), MaxTransfers: 0},
 			want:  [][]string{{"A.local1000@A1>A3"}},
