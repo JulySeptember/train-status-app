@@ -270,10 +270,16 @@ func TestSearch(t *testing.T) {
 			want:  [][]string{{"B.1040@B2>B3"}},
 		},
 		{
-			// 10:20 発は 10:15（DelayUntil + 遅れ）より後なので、時刻表どおり
-			name:  "遅れは DelayUntil より後の列車に足さない",
+			// 10:20 発は DelayUntil の15分後なので、10 - 15/2 = 3分遅れの 10:23 発になり、10:25 に間に合わない
+			name:  "DelayUntil より後の列車は遅れを減らして足す",
 			query: Query{From: []string{"B2"}, To: []string{"B3"}, Time: hm("10:25"), Delays: []Delay{{Railway: "B", Minutes: 10}}, DelayUntil: hm("10:05"), MaxTransfers: DefaultMaxTransfers},
 			want:  [][]string{{"B.1040@B2>B3"}},
+		},
+		{
+			// 3分遅れの 10:23 発に乗れる
+			name:  "DelayUntil より後の列車に減らした遅れで乗る",
+			query: Query{From: []string{"B2"}, To: []string{"B3"}, Time: hm("10:23"), Delays: []Delay{{Railway: "B", Minutes: 10}}, DelayUntil: hm("10:05"), MaxTransfers: DefaultMaxTransfers},
+			want:  [][]string{{"B.1020@B2>B3"}},
 		},
 		{
 			name:  "同じ駅を2回通る列車で、2回目に降りる",

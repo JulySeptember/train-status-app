@@ -335,7 +335,8 @@ func TestSearchThroughChainOfThree(t *testing.T) {
 	}
 }
 
-// 遅れは、それまでの区間の遅れの最大を足す
+// 遅れは、それまでの区間の遅れの最大を足す。DelayUntil より後に始発駅を出る列車は、
+// どの区間も始発駅（X1）の発車時刻で遅れを減らす。到着時刻の指定（逆向きの路線網）でも同じ時刻になる
 func TestSearchThroughDelay(t *testing.T) {
 
 	e := newThroughEngine(t, throughTrains, map[string]string{"X.100": "Y3"})
@@ -343,30 +344,43 @@ func TestSearchThroughDelay(t *testing.T) {
 	tests := []struct {
 		name         string
 		delays       []Delay
+		until        string
 		xDep, yDep   string
 		xDelay, yDel int
 	}{
-		{"前の区間の遅れを持ち越す", []Delay{{Railway: "X", Minutes: 5}}, "10:05", "10:15", 5, 5},
-		{"次の区間の方が遅れが大きい", []Delay{{Railway: "X", Minutes: 2}, {Railway: "Y", Minutes: 7}}, "10:02", "10:17", 2, 7},
-		{"次の区間だけ遅れている", []Delay{{Railway: "Y", Minutes: 3}}, "10:00", "10:13", 0, 3},
+		{"前の区間の遅れを持ち越す", []Delay{{Railway: "X", Minutes: 5}}, "11:00", "10:05", "10:15", 5, 5},
+		{"次の区間の方が遅れが大きい", []Delay{{Railway: "X", Minutes: 2}, {Railway: "Y", Minutes: 7}}, "11:00", "10:02", "10:17", 2, 7},
+		{"次の区間だけ遅れている", []Delay{{Railway: "Y", Minutes: 3}}, "11:00", "10:00", "10:13", 0, 3},
+		// X1 を 10:00 に出るので、DelayUntil（09:50）から 10/2 = 5分減る
+		{"遅れが減る列車で前の区間の遅れを持ち越す", []Delay{{Railway: "X", Minutes: 10}}, "09:50", "10:05", "10:15", 5, 5},
+		{"遅れが減る列車で次の区間の方が遅れが大きい", []Delay{{Railway: "X", Minutes: 2}, {Railway: "Y", Minutes: 12}}, "09:50", "10:00", "10:17", 0, 7},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			q := throughQuery("X1", "Y3")
-			q.Delays, q.DelayUntil = tt.delays, hm("11:00")
+		for _, arriveBy := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/arriveBy=%v", tt.name, arriveBy), func(t *testing.T) {
+				q := throughQuery("X1", "Y3")
+				q.Delays, q.DelayUntil = tt.delays, hm(tt.until)
+				if arriveBy {
+					// Y3 に 10:20 + 遅れ に着く
+					q.Time, q.ArriveBy = hm("10:20")+tt.yDel, true
+				}
 
-			got, err := e.Search(q)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if len(got) != 1 || len(got[0].Legs) != 2 {
-				t.Fatalf("got %+v", got)
-			}
-			x, y := got[0].Legs[0], got[0].Legs[1]
-			if x.Departure != hm(tt.xDep) || x.Delay != tt.xDelay || !y.Through || y.Departure != hm(tt.yDep) || y.Delay != tt.yDel {
-				t.Errorf("x %+v, y %+v", x, y)
-			}
-		})
+				got, err := e.Search(q)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(got) != 1 || len(got[0].Legs) != 2 {
+					t.Fatalf("got %+v", got)
+				}
+				x, y := got[0].Legs[0], got[0].Legs[1]
+				if x.Departure != hm(tt.xDep) || x.Delay != tt.xDelay || !y.Through || y.Departure != hm(tt.yDep) || y.Delay != tt.yDel {
+					t.Errorf("x %+v, y %+v", x, y)
+				}
+				if x.Arrival > y.Departure || y.Arrival != hm("10:20")+tt.yDel {
+					t.Errorf("times go backward: x %d-%d, y %d-%d", x.Departure, x.Arrival, y.Departure, y.Arrival)
+				}
+			})
+		}
 	}
 }
