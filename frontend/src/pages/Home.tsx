@@ -349,6 +349,8 @@ function StatusSection() {
     groups.filter((g) => g.items.some(isDelayed)).map((g) => g.operator);
 
   const reordered = railwayOrder.order || operatorOrder.order;
+  // 事業者が1つ以下になったら（再取得で他社が消えたときなど）並び替えのモードを抜ける
+  const sorting = sortingOperators && groups.length > 1;
 
   return (
     <section className="space-y-4">
@@ -366,20 +368,21 @@ function StatusSection() {
           >
             {delayed.length > 0
               ? `${delayed.map((i) => i.railway.name).join("・")}で遅れが出ています。`
-              : "すべての路線で、15分以上の遅れはありません。"}
+              : items.length > 0 &&
+                "すべての路線で、15分以上の遅れはありません。"}
           </p>
         </div>
 
         <div className="flex flex-wrap gap-2">
           {groups.length > 1 && (
             <Button
-              variant={sortingOperators ? "default" : "outline"}
+              variant={sorting ? "default" : "outline"}
               size="sm"
-              aria-pressed={sortingOperators}
-              onClick={() => setSortingOperators(!sortingOperators)}
+              aria-pressed={sorting}
+              onClick={() => setSortingOperators(!sorting)}
             >
-              {sortingOperators ? <Check /> : <ArrowUpDown />}
-              {sortingOperators ? "並び替えを終える" : "事業者を並び替える"}
+              {sorting ? <Check /> : <ArrowUpDown />}
+              {sorting ? "並び替えを終える" : "事業者を並び替える"}
             </Button>
           )}
 
@@ -406,7 +409,7 @@ function StatusSection() {
         </p>
       ) : groups.length <= 1 ? (
         list(sorted)
-      ) : sortingOperators ? (
+      ) : sorting ? (
         <SortableList
           items={groups}
           getId={(g) => g.operator}
@@ -451,7 +454,7 @@ function StatusSection() {
       )}
 
       <p className="text-xs text-muted-foreground">
-        {sortingOperators && groups.length > 1
+        {sorting
           ? "左のつまみをドラッグすると、事業者を並び替えられます。"
           : "左のつまみをドラッグすると、路線を並び替えられます。路線を選ぶと駅の一覧を開きます。"}
         運行情報を配信していない路線は、「駅・時刻表」から開けます。
