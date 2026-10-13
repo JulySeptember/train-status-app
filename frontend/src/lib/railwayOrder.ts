@@ -1,12 +1,13 @@
 import { useState } from "react";
 
-// ホームの運行情報・路線一覧で共通に使う、路線IDの並び順
-const STORAGE_KEY = "railwayOrder";
+// ホームの運行情報の並び順を保存するキー。路線IDの順と、事業者のまとまりの順（事業者ID）を別に持つ
+const RAILWAY_ORDER_KEY = "railwayOrder";
+const OPERATOR_ORDER_KEY = "operatorOrder";
 
 // localStorage が使えないとき（プライベートブラウズなど）や値が壊れているときは null
-function load(): string[] | null {
+function load(key: string): string[] | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(key);
     if (raw === null) {
       return null;
     }
@@ -22,12 +23,12 @@ function load(): string[] | null {
   return null;
 }
 
-function save(order: string[] | null) {
+function save(key: string, order: string[] | null) {
   try {
     if (order === null) {
-      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(key);
     } else {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(order));
+      localStorage.setItem(key, JSON.stringify(order));
     }
   } catch {
     // 保存できなくても、このページを開いている間は並び替えた順で表示する
@@ -59,19 +60,27 @@ export function sortByOrder<T>(
   return [...items].sort((a, b) => at(a) - at(b));
 }
 
-export function useRailwayOrder() {
-  const [order, setOrder] = useState<string[] | null>(load);
+function useStoredOrder(key: string) {
+  const [order, setOrder] = useState<string[] | null>(() => load(key));
 
   return {
     // 並び替えたことがなければ null
     order,
     setOrder(next: string[]) {
       setOrder(next);
-      save(next);
+      save(key, next);
     },
     reset() {
       setOrder(null);
-      save(null);
+      save(key, null);
     },
   };
+}
+
+export function useRailwayOrder() {
+  return useStoredOrder(RAILWAY_ORDER_KEY);
+}
+
+export function useOperatorOrder() {
+  return useStoredOrder(OPERATOR_ORDER_KEY);
 }
