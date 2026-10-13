@@ -3,6 +3,8 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { arrayMove } from "@dnd-kit/sortable";
 import {
+  ArrowUpDown,
+  Check,
   ChevronRight,
   CircleCheck,
   Info,
@@ -34,7 +36,12 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 
-import { applyOrder, sortByOrder, useRailwayOrder } from "@/lib/railwayOrder";
+import {
+  applyOrder,
+  sortByOrder,
+  useOperatorOrder,
+  useRailwayOrder,
+} from "@/lib/railwayOrder";
 import { groupByOperator, useRailways } from "@/lib/railways";
 import { EXAMPLES, MAX_INPUT_CHARS, type ChatLocationState } from "@/lib/chat";
 import { cn } from "@/lib/utils";
@@ -174,9 +181,9 @@ function StatusCard({
   status,
 }: {
   railway: Railway;
-  status?: TrainStatus;
+  status: TrainStatus;
 }) {
-  const normal = !status || status.unavailable || isNormal(status.status);
+  const normal = status.unavailable || isNormal(status.status);
 
   return (
     <Link
@@ -191,9 +198,7 @@ function StatusCard({
       <div className="min-w-0 flex-1">
         <p className="font-semibold">{railway.name}</p>
 
-        {!status ? (
-          <p className="text-sm text-muted-foreground">運行情報なし</p>
-        ) : status.unavailable ? (
+        {status.unavailable ? (
           <p className="text-sm text-muted-foreground">{status.status}</p>
         ) : normal ? (
           <p className="flex items-center gap-1 text-sm text-brand">
@@ -216,16 +221,13 @@ function StatusCard({
 // 事業者ごとの見出し。閉じていても遅れの有無が分かるようにする
 function OperatorSummary({
   name,
-  railways,
-  statusOf,
+  statuses,
 }: {
   name: string;
-  railways: Railway[];
-  statusOf: (id: string) => TrainStatus | undefined;
+  statuses: TrainStatus[];
 }) {
-  const statuses = railways.map((r) => statusOf(r.id));
   const delayed = statuses.filter(
-    (s) => s && !s.unavailable && !isNormal(s.status),
+    (s) => !s.unavailable && !isNormal(s.status),
   ).length;
 
   let summary;
@@ -236,13 +238,10 @@ function OperatorSummary({
         {delayed}路線で遅れ
       </span>
     );
-  } else if (statuses.some((s) => s?.unavailable)) {
+  } else if (statuses.some((s) => s.unavailable)) {
     summary = (
       <span className="text-muted-foreground">取得できませんでした</span>
     );
-  } else if (statuses.every((s) => !s)) {
-    // 小田急など、運行情報を配信していない事業者
-    summary = <span className="text-muted-foreground">運行情報なし</span>;
   } else {
     summary = (
       <span className="flex items-center gap-1 text-brand">
@@ -257,7 +256,7 @@ function OperatorSummary({
       <span className="text-lg font-semibold">{name}</span>
       <span className="text-sm font-normal">{summary}</span>
       <span className="text-xs font-normal text-muted-foreground">
-        {railways.length}路線
+        {statuses.length}路線
       </span>
     </span>
   );
@@ -270,9 +269,13 @@ function StatusSection() {
   });
   const railways = useRailways();
   const railwayOrder = useRailwayOrder();
+  const operatorOrder = useOperatorOrder();
 
   // 開いている事業者。開け閉めするまでは、遅れのある事業者だけを開く
   const [opened, setOpened] = useState<string[] | null>(null);
+  // 事業者の並び替えは、アコーディオンの代わりに事業者の名前だけを並べて行う。
+  // アコーディオンのまま動かすと、開いた事業者の高さで矢印キーやドラッグの位置がずれ、路線のつまみとも入れ子になる
+  const [sortingOperators, setSortingOperators] = useState(false);
 
   if (status.isPending || railways.isPending) {
     return <Loading />;
@@ -282,43 +285,72 @@ function StatusSection() {
     return <Error />;
   }
 
+  // 小田急など運行情報を配信していない路線は出さない。取得に失敗した路線（unavailable）は配信元から返るので残る
+  const statuses = new Map(status.data.map((s) => [s.railwayId, s]));
+  const items = railways.data.flatMap((railway) => {
+    const s = statuses.get(railway.id);
+    return s ? [{ railway, status: s }] : [];
+  });
+
+  // 並び順は表示しない路線も含めた全路線で持つ。のちに配信が始まった路線も、並べた位置に出る
   const order = applyOrder(
     railways.data.map((r) => r.id),
     railwayOrder.order,
   );
-  const items = sortByOrder(railways.data, (r) => r.id, order);
-  const statusOf = (id: string) => status.data.find((s) => s.railwayId === id);
+  const sorted = sortByOrder(items, (i) => i.railway.id, order);
 
-  const isDelayed = (r: Railway) => {
-    const s = statusOf(r.id);
-    return !!s && !s.unavailable && !isNormal(s.status);
-  };
-  const delayed = items.filter(isDelayed);
+  type Item = (typeof items)[number];
+  const isDelayed = (i: Item) =>
+    !i.status.unavailable && !isNormal(i.status.status);
+  const delayed = sorted.filter(isDelayed);
 
-  // 並び替えは事業者の中で行う（事業者は路線一覧の順のまま）
-  const groups = groupByOperator(items, (r) => r);
+  // 路線は事業者の中で並び替え、事業者のまとまりはまとまりごと並び替える
+  // 事業者の順も、路線と同じく表示しない事業者を含めて持つ
+  const groupOrder = applyOrder(
+    railways.data.map((r) => r.operator ?? ""),
+    operatorOrder.order,
+  );
+  const groups = sortByOrder(
+    groupByOperator(sorted, (i) => i.railway),
+    (g) => g.operator,
+    groupOrder,
+  );
 
-  const move = (activeId: string, overId: string) => {
+  const moveRailway = (activeId: string, overId: string) => {
     railwayOrder.setOrder(
       arrayMove(order, order.indexOf(activeId), order.indexOf(overId)),
     );
   };
 
-  const list = (railways: Railway[]) => (
+  const moveOperator = (activeId: string, overId: string) => {
+    operatorOrder.setOrder(
+      arrayMove(
+        groupOrder,
+        groupOrder.indexOf(activeId),
+        groupOrder.indexOf(overId),
+      ),
+    );
+  };
+
+  const list = (items: Item[]) => (
     <SortableList
-      items={railways}
-      getId={(r) => r.id}
-      getLabel={(r) => r.name}
-      onMove={move}
+      items={items}
+      getId={(i) => i.railway.id}
+      getLabel={(i) => i.railway.name}
+      onMove={moveRailway}
       layout="grid"
       className="grid gap-3 md:grid-cols-2"
-      renderItem={(r) => <StatusCard railway={r} status={statusOf(r.id)} />}
+      renderItem={(i) => <StatusCard railway={i.railway} status={i.status} />}
     />
   );
 
   const open =
     opened ??
     groups.filter((g) => g.items.some(isDelayed)).map((g) => g.operator);
+
+  const reordered = railwayOrder.order || operatorOrder.order;
+  // 事業者が1つ以下になったら（再取得で他社が消えたときなど）並び替えのモードを抜ける
+  const sorting = sortingOperators && groups.length > 1;
 
   return (
     <section className="space-y-4">
@@ -335,22 +367,64 @@ function StatusSection() {
             )}
           >
             {delayed.length > 0
-              ? `${delayed.map((r) => r.name).join("・")}で遅れが出ています。`
-              : "すべての路線で、15分以上の遅れはありません。"}
+              ? `${delayed.map((i) => i.railway.name).join("・")}で遅れが出ています。`
+              : items.length > 0 &&
+                "すべての路線で、15分以上の遅れはありません。"}
           </p>
         </div>
 
-        {railwayOrder.order && (
-          <Button variant="outline" size="sm" onClick={railwayOrder.reset}>
-            <RotateCcw />
-            並び順を戻す
-          </Button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {groups.length > 1 && (
+            <Button
+              variant={sorting ? "default" : "outline"}
+              size="sm"
+              aria-pressed={sorting}
+              onClick={() => setSortingOperators(!sorting)}
+            >
+              {sorting ? <Check /> : <ArrowUpDown />}
+              {sorting ? "並び替えを終える" : "事業者を並び替える"}
+            </Button>
+          )}
+
+          {reordered && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                railwayOrder.reset();
+                operatorOrder.reset();
+              }}
+            >
+              <RotateCcw />
+              並び順を戻す
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* 事業者が1つ（都営だけ）なら、まとめずに並べる */}
-      {groups.length <= 1 ? (
-        list(items)
+      {items.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          運行情報を配信している路線がありません。
+        </p>
+      ) : groups.length <= 1 ? (
+        list(sorted)
+      ) : sorting ? (
+        <SortableList
+          items={groups}
+          getId={(g) => g.operator}
+          getLabel={(g) => g.name}
+          onMove={moveOperator}
+          className="flex flex-col gap-3"
+          renderItem={(g) => (
+            <div className="rounded-xl border bg-card px-4 py-3">
+              <OperatorSummary
+                name={g.name}
+                statuses={g.items.map((i) => i.status)}
+              />
+            </div>
+          )}
+        />
       ) : (
         <Accordion
           multiple
@@ -367,8 +441,7 @@ function StatusSection() {
               <AccordionTrigger className="items-center py-3 hover:no-underline">
                 <OperatorSummary
                   name={g.name}
-                  railways={g.items}
-                  statusOf={statusOf}
+                  statuses={g.items.map((i) => i.status)}
                 />
               </AccordionTrigger>
 
@@ -381,7 +454,10 @@ function StatusSection() {
       )}
 
       <p className="text-xs text-muted-foreground">
-        左のつまみをドラッグすると、路線を並び替えられます。路線を選ぶと駅の一覧を開きます。
+        {sorting
+          ? "左のつまみをドラッグすると、事業者を並び替えられます。"
+          : "左のつまみをドラッグすると、路線を並び替えられます。路線を選ぶと駅の一覧を開きます。"}
+        運行情報を配信していない路線は、「駅・時刻表」から開けます。
       </p>
     </section>
   );
