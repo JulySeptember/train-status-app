@@ -131,25 +131,53 @@ func Infer(l Line) []Train {
 		groups[i] = groupByKey(l.Departures[station])
 	}
 
-	// continues は、駅 i の手前で止まっている列車 c が、駅 i から先で同じ種別・行先のまま発車するか。
-	// 駅 i から先で、c の種別・行先の発車のある最初の駅に、c の続きになる時刻の発車（Infer のつなぎと同じ範囲）が
-	// あれば続くとみる（途中を通過する急行は、種別が変わった列車ではない）
+	var done []*chain
+	active := make(map[key][]*chain)
+
+	// continues は、駅 i の手前で止まっている列車 c が、駅 i から先で同じ種別・行先のまま発車するか
+	// （途中を通過する急行は、種別が変わった列車ではない）。
+	// c の種別・行先の発車のある最初の駅 j で決める:
+	//   - j が駅 i なら、駅 i の発車はもうつないだ。c がその種別のまま駅 i を発車していないので、続かない
+	//   - j が駅 i より先なら、駅 j でのつなぎ（下のループと同じ。発車ごとに、見込みに最も近い列車へつなぐ）を
+	//     先に試し、c につながる発車があれば続く（後ろを走る同じ種別の列車の発車を、c の続きと取り違えない）
 	continues := func(c *chain, i int) bool {
-		last := c.stops[len(c.stops)-1].Minutes
 		for j := i; j < len(l.Stations); j++ {
 			ds := groups[j][c.key]
 			if len(ds) == 0 {
 				continue
 			}
-			limit := last + expected(c.last, j)*2 + 10
-			k := sort.Search(len(ds), func(k int) bool { return ds[k].Minutes > last })
-			return k < len(ds) && ds[k].Minutes <= limit
+			if j == i {
+				return false
+			}
+
+			taken := make(map[*chain]bool)
+			for _, d := range ds {
+				if d.Origin {
+					continue
+				}
+				var best *chain
+				bestScore := 0
+				for _, x := range active[c.key] {
+					gap := d.Minutes - x.stops[len(x.stops)-1].Minutes
+					want := expected(x.last, j)
+					if taken[x] || gap <= 0 || gap > want*2+10 {
+						continue
+					}
+					if score := abs(gap - want); best == nil || score < bestScore {
+						best, bestScore = x, score
+					}
+				}
+				if best == c {
+					return true
+				}
+				if best != nil {
+					taken[best] = true
+				}
+			}
+			return false
 		}
 		return false
 	}
-
-	var done []*chain
-	active := make(map[key][]*chain)
 
 	for i, station := range l.Stations {
 
