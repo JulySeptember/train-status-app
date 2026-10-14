@@ -375,3 +375,140 @@ func TestInferNoTrainTypeChangeWhenContinuing(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
+
+// 同じ種別・行先の別の列車が先まで走っていても、種別が変わる列車はつなぐ（その日の最後の駅で決めない）
+func TestInferTrainTypeChangeWithLaterContinuing(t *testing.T) {
+
+	// 100 の急行は C から各停になる。200・300 の急行は D まで急行のまま
+	l := Line{
+		Stations: []string{"A", "B", "C", "D"},
+		Departures: map[string][]Departure{
+			"A": {dep("A", 100, "Express", "Other.Z"), dep("A", 200, "Express", "Other.Z"), dep("A", 300, "Express", "Other.Z")},
+			"B": {dep("B", 105, "Express", "Other.Z"), dep("B", 205, "Express", "Other.Z"), dep("B", 305, "Express", "Other.Z")},
+			"C": {dep("C", 108, "Local", "Other.Z"), dep("C", 208, "Express", "Other.Z"), dep("C", 308, "Express", "Other.Z")},
+			"D": {dep("D", 110, "Local", "Other.Z"), dep("D", 210, "Express", "Other.Z"), dep("D", 310, "Express", "Other.Z")},
+		},
+	}
+
+	got := trainsOf(Infer(l))
+	want := [][]string{
+		{"A@100", "B@105", "C@108", "D@110"},
+		{"A@200", "B@205", "C@208", "D@210"},
+		{"A@300", "B@305", "C@308", "D@310"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+// 前の列車が同じ種別・行先のまま先の駅で発車するなら、行先が路線の外でも、途中から始まる列車をつながない
+func TestInferNoTrainTypeChangeWhenContinuingThrough(t *testing.T) {
+
+	l := Line{
+		Stations: []string{"A", "B", "C"},
+		Departures: map[string][]Departure{
+			"A": {dep("A", 100, "Express", "Other.Z")},
+			// 急行は B を通過して C に停まる。B から各停が始まる
+			"B": {dep("B", 103, "Local", "Other.Z")},
+			"C": {dep("C", 106, "Express", "Other.Z"), dep("C", 107, "Local", "Other.Z")},
+		},
+	}
+
+	got := trainsOf(Infer(l))
+	want := [][]string{{"A@100", "C@106"}, {"B@103", "C@107"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+// 同じ駅で種別が変わる列車が2本あれば、時刻の順にそれぞれの続きへつなぐ。
+// 見込みから大きく外れる発車（別の路線から入ってくる列車）は、どれにもつながない
+func TestInferTrainTypeChangeTwoTrains(t *testing.T) {
+
+	l := Line{
+		Stations: []string{"A", "B", "C", "D"},
+		Departures: map[string][]Departure{
+			"A": {dep("A", 100, "Express", "Other.Z"), dep("A", 120, "Express", "Other.Z")},
+			"B": {dep("B", 105, "Express", "Other.Z"), dep("B", 125, "Express", "Other.Z")},
+			"C": {dep("C", 108, "Local", "Other.Z"), dep("C", 128, "Local", "Other.Z"), dep("C", 160, "Local", "Other.Z")},
+			"D": {dep("D", 110, "Local", "Other.Z"), dep("D", 130, "Local", "Other.Z"), dep("D", 162, "Local", "Other.Z")},
+		},
+	}
+
+	got := trainsOf(Infer(l))
+	want := [][]string{
+		{"A@100", "B@105", "C@108", "D@110"},
+		{"A@120", "B@125", "C@128", "D@130"},
+		{"C@160", "D@162"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+// 種別が変わる駅で、前の列車の見込みから大きく外れる発車しかなければつながない
+func TestInferNoTrainTypeChangeFarFromExpected(t *testing.T) {
+
+	l := Line{
+		Stations: []string{"A", "B", "C", "D"},
+		Departures: map[string][]Departure{
+			"A": {dep("A", 100, "Express", "Other.Z")},
+			"B": {dep("B", 105, "Express", "Other.Z")},
+			"C": {dep("C", 140, "Local", "Other.Z")},
+			"D": {dep("D", 142, "Local", "Other.Z")},
+		},
+	}
+
+	if got := trainsOf(Infer(l)); len(got) != 2 {
+		t.Errorf("got %v", got)
+	}
+}
+
+// 同じ種別・行先の列車が短い間隔で走っていても、後ろの列車の発車を前の列車の続きと取り違えない
+func TestInferTrainTypeChangeShortHeadway(t *testing.T) {
+
+	// 10分おきの急行のうち、100 の急行だけが C から各停になる
+	l := Line{
+		Stations: []string{"A", "B", "C", "D"},
+		Departures: map[string][]Departure{
+			"A": {dep("A", 90, "Express", "Other.Z"), dep("A", 100, "Express", "Other.Z"), dep("A", 110, "Express", "Other.Z")},
+			"B": {dep("B", 95, "Express", "Other.Z"), dep("B", 105, "Express", "Other.Z"), dep("B", 115, "Express", "Other.Z")},
+			"C": {dep("C", 98, "Express", "Other.Z"), dep("C", 108, "Local", "Other.Z"), dep("C", 118, "Express", "Other.Z")},
+			"D": {dep("D", 100, "Express", "Other.Z"), dep("D", 110, "Local", "Other.Z"), dep("D", 120, "Express", "Other.Z")},
+		},
+	}
+
+	got := trainsOf(Infer(l))
+	want := [][]string{
+		{"A@090", "B@095", "C@098", "D@100"},
+		{"A@100", "B@105", "C@108", "D@110"},
+		{"A@110", "B@115", "C@118", "D@120"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+// 急行が種別の変わる駅を通過する場合も、後ろの急行の先の駅の発車を、前の列車の続きと取り違えない
+func TestInferTrainTypeChangePassingStation(t *testing.T) {
+
+	// 急行は C を通過して D に停まる。100 の急行だけが C から各停になる（110 の急行は D まで急行）
+	l := Line{
+		Stations: []string{"A", "B", "C", "D"},
+		Departures: map[string][]Departure{
+			"A": {dep("A", 100, "Express", "Other.Z"), dep("A", 110, "Express", "Other.Z")},
+			"B": {dep("B", 105, "Express", "Other.Z"), dep("B", 115, "Express", "Other.Z")},
+			"C": {dep("C", 108, "Local", "Other.Z")},
+			"D": {dep("D", 110, "Local", "Other.Z"), dep("D", 119, "Express", "Other.Z")},
+		},
+	}
+
+	got := trainsOf(Infer(l))
+	want := [][]string{
+		{"A@100", "B@105", "C@108", "D@110"},
+		{"A@110", "B@115", "D@119"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}

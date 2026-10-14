@@ -101,11 +101,19 @@ func estimateTrains(
 				tt.DestinationStation = strings.Split(first.Destination, ",")
 			}
 
+			// 途中の駅で種別が変わる列車（infer の changeTrainType でつないだ列車）は、停車駅ごとに種別を入れる
+			// （経路では乗る駅の種別を出す）
+			changes := slices.ContainsFunc(tr.Stops, func(s infer.Departure) bool { return s.TrainType != first.TrainType })
+
 			for _, s := range tr.Stops {
-				tt.TrainTimetableObject = append(tt.TrainTimetableObject, model.TrainTimetableEntry{
+				entry := model.TrainTimetableEntry{
 					DepartureStation: s.Station,
 					DepartureTime:    clock(s.Minutes),
-				})
+				}
+				if changes {
+					entry.TrainType = s.TrainType
+				}
+				tt.TrainTimetableObject = append(tt.TrainTimetableObject, entry)
 			}
 			switch last := &tt.TrainTimetableObject[len(tt.TrainTimetableObject)-1]; {
 			case tr.Terminal == "" || tr.TerminalMinutes >= 27*60:

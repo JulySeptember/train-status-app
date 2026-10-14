@@ -125,26 +125,67 @@ func Infer(l Line) []Train {
 		inLine[s] = true
 	}
 
-	// 列車種別・行先ごとの、発車のある最後の駅の位置（途中で種別が変わる列車を見分ける）
-	lastIndex := make(map[key]int)
+	// 駅の位置 → 列車種別・行先ごとの発車（時刻順）
+	groups := make([]map[key][]Departure, len(l.Stations))
 	for i, station := range l.Stations {
-		for _, d := range l.Departures[station] {
-			lastIndex[key{d.TrainType, d.Destination}] = i
-		}
+		groups[i] = groupByKey(l.Departures[station])
 	}
 
 	var done []*chain
 	active := make(map[key][]*chain)
+
+	// continues は、駅 i の手前で止まっている列車 c が、駅 i から先で同じ種別・行先のまま発車するか
+	// （途中を通過する急行は、種別が変わった列車ではない）。
+	// c の種別・行先の発車のある最初の駅 j で決める:
+	//   - j が駅 i なら、駅 i の発車はもうつないだ。c がその種別のまま駅 i を発車していないので、続かない
+	//   - j が駅 i より先なら、駅 j でのつなぎ（下のループと同じ。発車ごとに、見込みに最も近い列車へつなぐ）を
+	//     先に試し、c につながる発車があれば続く（後ろを走る同じ種別の列車の発車を、c の続きと取り違えない）
+	continues := func(c *chain, i int) bool {
+		for j := i; j < len(l.Stations); j++ {
+			ds := groups[j][c.key]
+			if len(ds) == 0 {
+				continue
+			}
+			if j == i {
+				return false
+			}
+
+			taken := make(map[*chain]bool)
+			for _, d := range ds {
+				if d.Origin {
+					continue
+				}
+				var best *chain
+				bestScore := 0
+				for _, x := range active[c.key] {
+					gap := d.Minutes - x.stops[len(x.stops)-1].Minutes
+					want := expected(x.last, j)
+					if taken[x] || gap <= 0 || gap > want*2+10 {
+						continue
+					}
+					if score := abs(gap - want); best == nil || score < bestScore {
+						best, bestScore = x, score
+					}
+				}
+				if best == c {
+					return true
+				}
+				if best != nil {
+					taken[best] = true
+				}
+			}
+			return false
+		}
+		return false
+	}
 
 	for i, station := range l.Stations {
 
 		// この駅で新しく始まった列車（種別が変わった列車の続きかを、あとで調べる）
 		var started []*chain
 
-		groups := groupByKey(l.Departures[station])
-
-		keys := make([]key, 0, len(groups))
-		for k := range groups {
+		keys := make([]key, 0, len(groups[i]))
+		for k := range groups[i] {
 			keys = append(keys, k)
 		}
 		slices.SortFunc(keys, func(a, b key) int {
@@ -155,7 +196,7 @@ func Infer(l Line) []Train {
 
 			candidates := active[k]
 
-			for _, d := range groups[k] {
+			for _, d := range groups[i][k] {
 
 				best := -1
 				if !d.Origin {
@@ -198,7 +239,7 @@ func Infer(l Line) []Train {
 			active[k] = candidates
 		}
 
-		changeTrainType(active, started, i, lastIndex, inLine, expected)
+		changeTrainType(active, started, i, continues, inLine, expected)
 
 		// 行先の駅に着いた列車は終える（行先の駅では発車しない）
 		for k, cs := range active {
@@ -448,14 +489,14 @@ func ExtendToPartners(l Line, railway string, trains []Train, partners func(stat
 //   - 行先が同じで、種別が違う
 //   - 行先が路線の外（直通運転で他の路線へ行く）。行先が路線の駅なら、前の列車は行先まで通過して着き、
 //     終点の到着は見込みで足せる（西武池袋線の特急は所沢から池袋まで通過する。途中の練馬で始まる各停につながない）
-//   - 前の列車の種別・行先の発車が、この駅より先に1つも無い（その種別はこの駅の手前で終わる）
+//   - 前の列車が、この駅より先で同じ種別・行先のまま発車しない（continues。その列車の種別はこの駅の手前で終わる）
 //   - 所要時間が、前の列車が実際に走った速さ（走った時間 ÷ 各駅の所要時間の見込み）から見込んだ時間に近い
 //     （差が見込みの2割＋3分以内）。終点まで通過する急行・特急に、途中の駅から入ってくる別の列車
 //     （直通運転などで始発の印が無い）をつながないため。前の列車が1駅しか発車していなければ、速さが分からないのでつながない
 //
 // その駅で始まる列車を発車の時刻順に、まだつないでいない前の列車のうち見込みに最も近いものへ1本ずつつなぐ
 // （同じ点なら前の列車の最後の発車の早い方。map の順に結果が左右されないように、並びはすべて決まった順にする）。
-func changeTrainType(active map[key][]*chain, started []*chain, i int, lastIndex map[key]int, inLine map[string]bool, expected func(from, to int) int) {
+func changeTrainType(active map[key][]*chain, started []*chain, i int, continues func(c *chain, i int) bool, inLine map[string]bool, expected func(from, to int) int) {
 
 	slices.SortStableFunc(started, func(a, b *chain) int {
 		return cmp.Or(cmp.Compare(a.stops[0].Minutes, b.stops[0].Minutes),
@@ -483,11 +524,11 @@ func changeTrainType(active map[key][]*chain, started []*chain, i int, lastIndex
 		bestScore := 0
 
 		for _, k := range keys {
-			if k.destination != next.key.destination || k.trainType == next.key.trainType || lastIndex[k] >= i {
+			if k.destination != next.key.destination || k.trainType == next.key.trainType {
 				continue
 			}
 			for _, prev := range active[k] {
-				if joined[prev] || prev.last >= i || len(prev.stops) < 2 {
+				if joined[prev] || prev.last >= i || len(prev.stops) < 2 || continues(prev, i) {
 					continue
 				}
 				last := prev.stops[len(prev.stops)-1]

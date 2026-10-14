@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+
+	"train-status-app/backend/assets/slim"
 )
 
 // 路線 X: X1 - X2、路線 Y: Y2 - Y3 - Y4、路線 Z: Z3 - Z5
@@ -381,6 +383,57 @@ func TestSearchThroughDelay(t *testing.T) {
 					t.Errorf("times go backward: x %d-%d, y %d-%d", x.Departure, x.Arrival, y.Departure, y.Arrival)
 				}
 			})
+		}
+	}
+}
+
+// 途中の駅で種別が変わる列車（推定した列車）は、乗る駅の種別を区間に出す。
+// 直通運転でつないだ列車でも、区間の列車の停車駅の順で決める
+func TestSearchTrainTypeChange(t *testing.T) {
+
+	tt := buildTimetables(t, []testTrain{
+		{"X.100", "X", weekday, []string{"X1 - 10:00", "X2 10:10 -"}},
+		{"Y.200", "Y", weekday, []string{"Y2 - 10:10", "Y3 10:20 10:20", "Y4 10:30 -"}},
+	})
+	str := func(s string) int32 {
+		tt.Strings = append(tt.Strings, s)
+		return int32(len(tt.Strings) - 1)
+	}
+	tt.Trains[0].Destination = tt.Trains[1].Stops[2].Station
+	// Y.200 は Y2 では急行、Y3 から各停
+	tt.Trains[1].TrainType = str("Express")
+	tt.Trains[1].TypeChanges = []slim.TypeChange{{Stop: 1, TrainType: str("Local")}}
+
+	e := New(tt, throughTransfers, DefaultConfig())
+
+	for _, c := range []struct {
+		from, to string
+		arriveBy bool
+		want     []string
+	}{
+		{"X1", "Y4", false, []string{"Local", "Express"}},
+		{"Y2", "Y4", false, []string{"Express"}},
+		{"Y3", "Y4", false, []string{"Local"}},
+		{"Y3", "Y4", true, []string{"Local"}},
+		{"X1", "Y4", true, []string{"Local", "Express"}},
+	} {
+		q := throughQuery(c.from, c.to)
+		if c.arriveBy {
+			q.ArriveBy, q.Time = true, hm("10:40")
+		}
+		got, err := e.Search(q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) == 0 {
+			t.Fatalf("%s > %s: no journey", c.from, c.to)
+		}
+		var types []string
+		for _, l := range got[0].Legs {
+			types = append(types, l.TrainType)
+		}
+		if !reflect.DeepEqual(types, c.want) {
+			t.Errorf("%s > %s (arriveBy %v): got %v, want %v", c.from, c.to, c.arriveBy, types, c.want)
 		}
 	}
 }

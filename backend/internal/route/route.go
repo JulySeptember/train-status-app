@@ -116,8 +116,9 @@ type Leg struct {
 	RailDirection string
 	Train         string
 	TrainNumber   string
-	TrainType     string
-	Destination   string
+	// 乗る駅での列車種別（推定した列車には、途中の駅で種別が変わるものがある）
+	TrainType   string
+	Destination string
 
 	From      string
 	To        string

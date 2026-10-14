@@ -213,6 +213,10 @@ type TrainTimetableEntry struct {
 	IsLast   bool `json:"odpt:isLast,omitempty"`
 
 	Note string `json:"odpt:note,omitempty"`
+
+	// この駅での列車種別。推定した列車（cmd/gen-assets）で、途中の駅で種別が変わる列車だけに入れる。
+	// ODPT のデータには無い（JSON には出さない）
+	TrainType string `json:"-"`
 }
 
 // =========================

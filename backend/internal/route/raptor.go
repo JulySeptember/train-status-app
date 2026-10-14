@@ -349,7 +349,13 @@ func (n *network) legs(e *Engine, p *pattern, shifts []shift, l tripLabel) []Leg
 			end++
 		}
 
-		train := e.tt.Trains[p.train(trip, seg)]
+		// 乗る駅が、この区間の列車の何番目の停車駅か（列車種別が途中で変わる列車のため）
+		start := j
+		for start > 0 && p.segAt(at(start-1)) == seg {
+			start--
+		}
+
+		train := &e.tt.Trains[p.train(trip, seg)]
 		dep, scheduled := departure(j)
 
 		result = append(result, Leg{
@@ -357,7 +363,7 @@ func (n *network) legs(e *Engine, p *pattern, shifts []shift, l tripLabel) []Leg
 			RailDirection: e.tt.String(train.RailDirection),
 			Train:         e.tt.String(train.Train),
 			TrainNumber:   e.tt.String(train.TrainNumber),
-			TrainType:     e.tt.String(train.TrainType),
+			TrainType:     e.tt.String(train.TrainTypeAt(j - start)),
 			Destination:   e.tt.String(train.Destination),
 			From:          e.stationIDs[p.stops[at(j)]],
 			To:            e.stationIDs[p.stops[at(end)]],
