@@ -237,9 +237,13 @@ func TestAccuracy(t *testing.T) {
 			SameAs     string   `json:"owl:sameAs"`
 			Connecting []string `json:"odpt:connectingStation"`
 		}](t, filepath.Join(cacheDir, "operators", op, "Station.json"))
+		// データの生成（cmd/gen-assets の estimateFromRaw）と同じく、逆向きも足す
 		connect := make(map[string][]string)
 		for _, s := range stations {
-			connect[s.SameAs] = append(connect[s.SameAs], s.Connecting...)
+			for _, c := range s.Connecting {
+				connect[s.SameAs] = append(connect[s.SameAs], c)
+				connect[c] = append(connect[c], s.SameAs)
+			}
 		}
 		tts, trains := cachedDumps(t, cacheDir)
 		// 環状の山手線は、大江戸線の環状部と同じく推定の対象外（推定する5社に環状の路線は無い）
