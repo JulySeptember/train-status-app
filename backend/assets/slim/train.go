@@ -34,6 +34,16 @@ type Train struct {
 	Destination   int32
 
 	Stops []Stop
+
+	// TypeChanges は、途中の駅で列車種別が変わる列車（推定した列車）の、変わる停車駅と変わったあとの種別。
+	// 停車駅の順に並ぶ。ほかの列車は空（gob は空の項目を書かないので、ほとんど場所を取らない）
+	TypeChanges []TypeChange
+}
+
+// TypeChange は、Stops[Stop] から列車種別が TrainType（Strings の番号）に変わることを表す。
+type TypeChange struct {
+	Stop      int32
+	TrainType int32
 }
 
 // Stop は停車駅1つ。Station は Strings の番号。
@@ -43,6 +53,18 @@ type Stop struct {
 	Station   int32
 	Arrival   int16
 	Departure int16
+}
+
+// TrainTypeAt は、列車 train の i 番目の停車駅での列車種別（Strings の番号）を返す。
+func (train *Train) TrainTypeAt(i int) int32 {
+	result := train.TrainType
+	for _, c := range train.TypeChanges {
+		if int(c.Stop) > i {
+			break
+		}
+		result = c.TrainType
+	}
+	return result
 }
 
 // String は番号 i の文字列を返す。
@@ -84,8 +106,20 @@ func EncodeTrainTimetables(w io.Writer, timetables []model.TrainTimetable) error
 		}
 
 		last := NoTime
+		trainType := tt.TrainType
 
-		for _, obj := range tt.TrainTimetableObject {
+		for i, obj := range tt.TrainTimetableObject {
+
+			// 停車駅の種別（推定した列車で、途中で種別が変わる列車だけに入る）が変わったら、変わる停車駅を残す。
+			// 最初の停車駅で違えば（都内に切って、前の種別の停車駅が無くなった）、列車の種別にする
+			if obj.TrainType != "" && obj.TrainType != trainType {
+				trainType = obj.TrainType
+				if i == 0 {
+					train.TrainType = b.id(trainType)
+				} else {
+					train.TypeChanges = append(train.TypeChanges, TypeChange{Stop: int32(i), TrainType: b.id(trainType)})
+				}
+			}
 
 			stop, err := encodeStop(b, obj)
 			if err != nil {
@@ -222,6 +256,17 @@ func DecodeTrainTimetables(r io.Reader) (*TrainTimetables, error) {
 				return nil, fmt.Errorf("train %d: string index %d out of range", i, stop.Station)
 			}
 		}
+
+		prev := int32(0)
+		for _, c := range train.TypeChanges {
+			if !valid(c.TrainType) {
+				return nil, fmt.Errorf("train %d: string index %d out of range", i, c.TrainType)
+			}
+			if c.Stop <= prev || int(c.Stop) >= len(train.Stops) {
+				return nil, fmt.Errorf("train %d: invalid train type change at stop %d", i, c.Stop)
+			}
+			prev = c.Stop
+		}
 	}
 
 	return &t, nil
@@ -260,6 +305,11 @@ func MergeTrainTimetables(ts ...*TrainTimetables) *TrainTimetables {
 				}
 			}
 
+			var changes []TypeChange
+			for _, c := range train.TypeChanges {
+				changes = append(changes, TypeChange{Stop: c.Stop, TrainType: ids[c.TrainType]})
+			}
+
 			out.Trains = append(out.Trains, Train{
 				Train:         ids[train.Train],
 				TrainNumber:   ids[train.TrainNumber],
@@ -269,6 +319,7 @@ func MergeTrainTimetables(ts ...*TrainTimetables) *TrainTimetables {
 				TrainType:     ids[train.TrainType],
 				Destination:   ids[train.Destination],
 				Stops:         stops,
+				TypeChanges:   changes,
 			})
 		}
 	}

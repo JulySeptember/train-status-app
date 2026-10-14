@@ -251,3 +251,42 @@ func TestFillTerminalsFromNext(t *testing.T) {
 		t.Errorf("a different station must not be filled: %+v", all[3].TrainTimetableObject[1])
 	}
 }
+
+// 終点の到着は、次の列車の発車と、1つ手前の駅の発車に普段の所要時間を足した時刻の早い方にする
+func TestFillTerminalsFromNextRunTime(t *testing.T) {
+
+	stop := func(dep, depTime, arr, arrTime string) model.TrainTimetableEntry {
+		return model.TrainTimetableEntry{DepartureStation: dep, DepartureTime: depTime, ArrivalStation: arr, ArrivalTime: arrTime}
+	}
+	next := func(sameAs, dep string) model.TrainTimetable {
+		return model.TrainTimetable{SameAs: sameAs, Operator: "odpt.Operator:JR-East", Calendar: "Weekday",
+			TrainTimetableObject: []model.TrainTimetableEntry{stop("Ome.Tachikawa", dep, "", ""), stop("", "", "Ome", "12:30")}}
+	}
+
+	all := []model.TrainTimetable{
+		// 立川で長く止まり、次の列車は8分後に出る
+		{SameAs: "A", Operator: "odpt.Operator:JR-East", Calendar: "Weekday", NextTrainTimetable: []string{"B"},
+			TrainTimetableObject: []model.TrainTimetableEntry{stop("ChuoRapid.Kunitachi", "11:35", "", ""), stop("", "", "ChuoRapid.Tachikawa", "")}},
+		next("B", "11:46"),
+		// 次の列車が普段の所要時間より早く出るなら、次の列車の発車にする
+		{SameAs: "C", Operator: "odpt.Operator:JR-East", Calendar: "Weekday", NextTrainTimetable: []string{"D"},
+			TrainTimetableObject: []model.TrainTimetableEntry{stop("ChuoRapid.Kunitachi", "11:50", "", ""), stop("", "", "ChuoRapid.Tachikawa", "")}},
+		next("D", "11:52"),
+		// 国立 → 立川の所要時間（3分。到着が無ければ発車で測る）
+		{SameAs: "E", Calendar: "Weekday", TrainTimetableObject: []model.TrainTimetableEntry{
+			stop("ChuoRapid.Kunitachi", "10:00", "", ""), stop("ChuoRapid.Tachikawa", "10:04", "ChuoRapid.Tachikawa", "10:03")}},
+		{SameAs: "F", Calendar: "Weekday", TrainTimetableObject: []model.TrainTimetableEntry{
+			stop("ChuoRapid.Kunitachi", "10:10", "", ""), stop("ChuoRapid.Tachikawa", "10:13", "", "")}},
+		{SameAs: "G", Calendar: "Weekday", TrainTimetableObject: []model.TrainTimetableEntry{
+			stop("ChuoRapid.Kunitachi", "10:20", "", ""), stop("ChuoRapid.Tachikawa", "10:24", "", "")}},
+	}
+
+	fillTerminalsFromNext(all)
+
+	if got := all[0].TrainTimetableObject[1].ArrivalTime; got != "11:38" {
+		t.Errorf("A: arrival %q, want 11:38", got)
+	}
+	if got := all[2].TrainTimetableObject[1].ArrivalTime; got != "11:52" {
+		t.Errorf("C: arrival %q, want 11:52", got)
+	}
+}

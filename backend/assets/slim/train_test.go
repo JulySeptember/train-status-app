@@ -333,3 +333,76 @@ func TestMergeTrainTimetables(t *testing.T) {
 		t.Fatal("input was modified")
 	}
 }
+
+// 途中の駅で種別が変わる列車（推定した列車）は、変わる停車駅と種別を持ち、まとめても変わらない。
+// 最初の停車駅の種別が列車の種別と違えば（都内に切った列車）、列車の種別にする
+func TestTrainTypeChanges(t *testing.T) {
+
+	entry := func(station, time, trainType string) model.TrainTimetableEntry {
+		return model.TrainTimetableEntry{DepartureStation: station, DepartureTime: time, TrainType: trainType}
+	}
+
+	var buf bytes.Buffer
+	err := EncodeTrainTimetables(&buf, []model.TrainTimetable{
+		{
+			Train:     "odpt.Train:Seibu.Shinjuku.Estimated.1",
+			TrainType: "odpt.TrainType:Seibu.Express",
+			TrainTimetableObject: []model.TrainTimetableEntry{
+				entry("A", "10:00", "odpt.TrainType:Seibu.Express"),
+				entry("B", "10:05", "odpt.TrainType:Seibu.Express"),
+				entry("C", "10:08", "odpt.TrainType:Seibu.Local"),
+				entry("D", "10:10", "odpt.TrainType:Seibu.Local"),
+				{ArrivalStation: "E", ArrivalTime: "10:12"},
+			},
+		},
+		{
+			Train:     "odpt.Train:Seibu.Shinjuku.Estimated.2",
+			TrainType: "odpt.TrainType:Seibu.Express",
+			TrainTimetableObject: []model.TrainTimetableEntry{
+				entry("C", "11:08", "odpt.TrainType:Seibu.Local"),
+				entry("D", "11:10", "odpt.TrainType:Seibu.Local"),
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := DecodeTrainTimetables(&buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tt := range []*TrainTimetables{decoded, MergeTrainTimetables(&TrainTimetables{Strings: []string{"", "x"}}, decoded)} {
+
+		types := func(train Train) []string {
+			var result []string
+			for i := range train.Stops {
+				result = append(result, strings.TrimPrefix(tt.String(train.TrainTypeAt(i)), "odpt.TrainType:Seibu."))
+			}
+			return result
+		}
+
+		if got, want := types(tt.Trains[0]), []string{"Express", "Express", "Local", "Local", "Local"}; !reflect.DeepEqual(got, want) {
+			t.Errorf("train 1: got %v, want %v", got, want)
+		}
+		if got := tt.String(tt.Trains[1].TrainType); got != "odpt.TrainType:Seibu.Local" || len(tt.Trains[1].TypeChanges) != 0 {
+			t.Errorf("train 2: type %q, changes %v", got, tt.Trains[1].TypeChanges)
+		}
+	}
+
+	// 変わる停車駅が範囲外・並びが逆なら読み込まない
+	for i, changes := range [][]TypeChange{
+		{{Stop: 2, TrainType: 0}},
+		{{Stop: 0, TrainType: 0}},
+		{{Stop: 1, TrainType: 5}},
+	} {
+		var buf bytes.Buffer
+		in := TrainTimetables{Strings: []string{""}, Trains: []Train{{Stops: []Stop{{}, {}}, TypeChanges: changes}}}
+		if err := gob.NewEncoder(&buf).Encode(in); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := DecodeTrainTimetables(&buf); err == nil {
+			t.Errorf("case %d: expected error", i)
+		}
+	}
+}

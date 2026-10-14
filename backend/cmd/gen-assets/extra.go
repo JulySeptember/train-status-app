@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"train-status-app/backend/assets/slim"
+	"train-status-app/backend/internal/infer"
 	"train-status-app/backend/internal/model"
 )
 
@@ -466,18 +467,21 @@ func lastSegment(id string) string {
 }
 
 // fillTerminalsFromNext は、終点に時刻が無く、次の列車（odpt:nextTrainTimetable）が分かっている列車の終点に、
-// 次の列車の始発の発車時刻を到着時刻として入れる。入れた列車の事業者を返す。
+// 到着時刻を入れる。入れた列車の事業者を返す。
 //
 // JR の中央線快速 → 青梅線のように、同じ事業者の中で路線が変わって走り続ける列車は、前の列車の終点（立川）に
 // 到着時刻が無いことがある。時刻の無い停車は捨てるので、前の列車が1つ手前の駅（国立）で終わり、
 // 直通のつなぎ（internal/route/through.go。前の列車の終点の到着時刻を使う）にならない。
-// 到着を次の列車の発車の時刻とみなす（停車の分だけ遅めになる）。
+// 到着は、次の列車の始発の発車と、1つ手前の駅の発車にその区間の普段の所要時間（runTimes）を足した時刻の
+// 早い方にする（終点で長く止まる列車は、次の列車の発車だけでは到着が遅く出る）。
 func fillTerminalsFromNext(all []model.TrainTimetable) []string {
 
 	bySameAs := make(map[string]int, len(all))
 	for i, tt := range all {
 		bySameAs[tt.SameAs] = i
 	}
+
+	run := runTimes(all)
 
 	var filled []string
 
@@ -505,8 +509,52 @@ func fillTerminalsFromNext(all []model.TrainTimetable) []string {
 			continue
 		}
 		last.ArrivalTime = first.DepartureTime
+
+		if len(tt.TrainTimetableObject) >= 2 {
+			prev := tt.TrainTimetableObject[len(tt.TrainTimetableObject)-2]
+			from, ok1 := infer.Minutes(prev.DepartureTime)
+			to, ok2 := infer.Minutes(first.DepartureTime)
+			if r, ok := run[[2]string{prev.DepartureStation, last.ArrivalStation}]; ok && ok1 && ok2 && from+r < to {
+				last.ArrivalTime = clock(from + r)
+			}
+		}
+
 		filled = append(filled, tt.Operator)
 	}
 
 	return filled
+}
+
+// runTimes は、隣どうしの停車駅（発車の駅 → 次の停車駅）の所要時間（分）の中央値を返す。
+// 前の駅の発車から、次の駅の到着（無ければ発車）までの時間。
+func runTimes(all []model.TrainTimetable) map[[2]string]int {
+
+	samples := make(map[[2]string][]int)
+
+	for _, tt := range all {
+		for i := 1; i < len(tt.TrainTimetableObject); i++ {
+			a, b := tt.TrainTimetableObject[i-1], tt.TrainTimetableObject[i]
+			from, ok := infer.Minutes(a.DepartureTime)
+			if !ok || a.DepartureStation == "" {
+				continue
+			}
+			station, at := b.ArrivalStation, b.ArrivalTime
+			if at == "" {
+				station, at = b.DepartureStation, b.DepartureTime
+			}
+			to, ok := infer.Minutes(at)
+			if !ok || station == "" || to < from {
+				continue
+			}
+			k := [2]string{a.DepartureStation, station}
+			samples[k] = append(samples[k], to-from)
+		}
+	}
+
+	result := make(map[[2]string]int, len(samples))
+	for k, v := range samples {
+		slices.Sort(v)
+		result[k] = v[len(v)/2]
+	}
+	return result
 }
