@@ -3,6 +3,7 @@ package main
 import (
 	"cmp"
 	"fmt"
+	"log"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -46,9 +47,18 @@ func estimateTrains(
 		inferred[k] = infer.Infer(lines[k])
 	}
 
+	// ほかの路線から途中の駅に入ってくる列車（京急空港線 → 本線の京急蒲田など）の最初の発車に始発の印を付けて、
+	// 推定し直す（印が無いと、直前に通った別の列車の続きとしてつなぐことがある）
+	lines, marked := infer.MarkEntering(lines, inferred, connect)
+	log.Printf("marked %d departures as trains entering from other railways", marked)
+	for _, k := range keys {
+		inferred[k] = infer.Infer(lines[k])
+	}
+
 	// 推定した列車の始発も、直通先として探す（西武池袋線 → 西武有楽町線のように、どちらも推定する路線がある）
 	all := make(map[string]map[string][]infer.Partner)
 	add := func(calendar string, p infer.Partner) {
+		p.Calendar = calendar
 		if all[calendar] == nil {
 			all[calendar] = make(map[string][]infer.Partner)
 		}
@@ -70,7 +80,8 @@ func estimateTrains(
 
 	var result []model.TrainTimetable
 
-	// 1つの直通先には1本だけをつなぐ（路線・方向をまたいで共有する。京急本線の上りと下りが同じ京急蒲田の始発を取らないように）
+	// 1つの直通先には1本だけをつなぐ（路線・方向をまたいで共有する。京急本線の上りと下りが同じ京急蒲田の始発を取らないように）。
+	// 直通先はダイヤ種別を持つので、別のダイヤ種別の同じ時刻・行先の列車とは分かれる
 	used := make(map[infer.Partner]bool)
 
 	for _, k := range keys {

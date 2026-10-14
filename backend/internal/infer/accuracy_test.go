@@ -31,19 +31,30 @@ func readJSONFile[T any](t *testing.T, path string) (T, bool) {
 	return v, true
 }
 
-// buildLines は、事業者の駅時刻表を Line にする。
-func buildLines(railways []RawRailway, timetables []RawStationTimetable, operator string) map[string]Line {
+// buildLines は、事業者の駅時刻表を Line にする（keep が true の路線だけ）。
+// 途中から入ってくる列車に印を付けたもの（MarkEntering。connect は駅 → 乗り換えでつながる駅）も返す。
+func buildLines(railways []RawRailway, timetables []RawStationTimetable, operator string, keep func(railway string) bool, connect map[string][]string) (map[string]Line, map[string]Line) {
 	ops := make(map[string]bool)
 	for _, r := range railways {
-		if r.Operator == operator {
+		if r.Operator == operator && keep(r.SameAs) {
 			ops[r.SameAs] = true
 		}
 	}
-	result := make(map[string]Line)
-	for k, l := range Lines(railways, timetables, func(r string) bool { return ops[r] }) {
-		result[k.Railway+" "+k.RailDirection+" "+k.Calendar] = l
+	lines := Lines(railways, timetables, func(r string) bool { return ops[r] })
+	inferred := make(map[LineKey][]Train, len(lines))
+	for k, l := range lines {
+		inferred[k] = Infer(l)
 	}
-	return result
+	marked, _ := MarkEntering(lines, inferred, connect)
+
+	str := func(m map[LineKey]Line) map[string]Line {
+		result := make(map[string]Line, len(m))
+		for k, l := range m {
+			result[k.Railway+" "+k.RailDirection+" "+k.Calendar] = l
+		}
+		return result
+	}
+	return str(lines), str(marked)
 }
 
 type accuracy struct {
@@ -55,24 +66,42 @@ type accuracy struct {
 
 	// 終点の到着時刻の見込みと本物の差（分）。本物の列車時刻表がある列車だけ
 	terminals []int
+
+	// 途中の駅から入ってくる列車（路線の中の最初の発車に始発の印が無く、行先の駅でもない）の数と、
+	// そのうち推定でもその発車から新しい列車として始まった数（前の列車の続きにされなかった数）
+	entering, enteringStarted int
+
+	// 各停（列車種別が .Local で終わる）以外の列車の数と、そのうち丸ごと正しく推定できた数
+	nonLocal, nonLocalExact int
 }
 
 // measure は、推定した列車のつなぎ（隣どうしの発車）のうち同じ本物の列車どうしの割合と、
 // 本物の列車のうち推定で丸ごと同じ1本になった割合を数える。
-func measure(lines map[string]Line, arrivals map[[3]string]int) accuracy {
+// marked は、lines の途中から入ってくる列車に印を付けたもの（MarkEntering）で、推定はこちらで行う。
+// 途中から入ってくる列車は、元の始発の印（lines）で決める。
+func measure(lines, marked map[string]Line, arrivals map[[3]string]int) accuracy {
 
 	var a accuracy
 
 	for id, l := range lines {
 		calendar := strings.Fields(id)[2]
 
-		truth := make(map[string]int) // 本物の列車 → 発車の数
+		index := make(map[string]int, len(l.Stations))
+		for i, s := range l.Stations {
+			index[s] = i
+		}
+
+		truth := make(map[string]int)       // 本物の列車 → 発車の数
+		first := make(map[string]Departure) // 本物の列車 → 路線の中の最初の発車
 		for _, ds := range l.Departures {
 			for _, d := range ds {
 				if d.Truth == "" {
 					panic("a departure without odpt:train cannot be measured")
 				}
 				truth[d.Truth]++
+				if f, ok := first[d.Truth]; !ok || index[d.Station] < index[f.Station] {
+					first[d.Truth] = d
+				}
 			}
 		}
 		a.trains += len(truth)
@@ -81,8 +110,21 @@ func measure(lines map[string]Line, arrivals map[[3]string]int) accuracy {
 				a.longTrains++
 			}
 		}
+		entering := make(map[string]bool)
+		for id, d := range first {
+			if !d.Origin && index[d.Station] > 0 {
+				entering[id] = true
+			}
+			if !strings.HasSuffix(d.TrainType, ".Local") {
+				a.nonLocal++
+			}
+		}
+		a.entering += len(entering)
 
-		for _, tr := range Infer(l) {
+		for _, tr := range Infer(marked[id]) {
+			if s := tr.Stops[0]; entering[s.Truth] && first[s.Truth].Station == s.Station && first[s.Truth].Minutes == s.Minutes {
+				a.enteringStarted++
+			}
 			same := true
 			for i := 1; i < len(tr.Stops); i++ {
 				a.links++
@@ -96,6 +138,9 @@ func measure(lines map[string]Line, arrivals map[[3]string]int) accuracy {
 				a.exact++
 				if len(tr.Stops) >= 2 {
 					a.longExact++
+				}
+				if !strings.HasSuffix(tr.Stops[0].TrainType, ".Local") {
+					a.nonLocalExact++
 				}
 				if real, ok := arrivals[[3]string{tr.Stops[0].Truth, calendar, tr.Terminal}]; ok && tr.Terminal != "" {
 					a.terminals = append(a.terminals, tr.TerminalMinutes-real)
@@ -112,6 +157,9 @@ func (a accuracy) String() string {
 		a.correctLinks, a.links, 100*float64(a.correctLinks)/float64(max(a.links, 1)),
 		a.exact, a.trains, 100*float64(a.exact)/float64(max(a.trains, 1)),
 		100*float64(a.longExact)/float64(max(a.longTrains, 1)))
+	s += fmt.Sprintf(", non-local %d/%d (%.1f%%), entering mid-line started %d/%d (%.1f%%)",
+		a.nonLocalExact, a.nonLocal, 100*float64(a.nonLocalExact)/float64(max(a.nonLocal, 1)),
+		a.enteringStarted, a.entering, 100*float64(a.enteringStarted)/float64(max(a.entering, 1)))
 	if len(a.terminals) > 0 {
 		d := slices.Clone(a.terminals)
 		slices.Sort(d)
@@ -161,14 +209,10 @@ func TestAccuracy(t *testing.T) {
 		t.Fatal("Toei assets are missing")
 	}
 
-	// 大江戸線は環状部に行先が無いので除く
-	toei := buildLines(railways, timetables, "odpt.Operator:Toei")
-	for id := range toei {
-		if strings.HasPrefix(id, "odpt.Railway:Toei.Oedo ") {
-			delete(toei, id)
-		}
-	}
-	t.Logf("Toei: %v", measure(toei, arrivalsOf(trainTimetables)))
+	// 大江戸線は環状部に行先が無いので除く。都営の駅データには乗り換えの駅が無い
+	toei, toeiMarked := buildLines(railways, timetables, "odpt.Operator:Toei",
+		func(r string) bool { return r != "odpt.Railway:Toei.Oedo" }, nil)
+	t.Logf("Toei: %v", measure(toei, toeiMarked, arrivalsOf(trainTimetables)))
 
 	// 都営の地下鉄（荒川線を除く）では、ほぼすべての列車を正しく推定できる。
 	// 荒川線（路面電車）は、王子駅前の手前で長く停まる電車が途切れる（推定する5社は普通の鉄道なので対象外）
@@ -178,7 +222,7 @@ func TestAccuracy(t *testing.T) {
 			subway[id] = l
 		}
 	}
-	a := measure(subway, arrivalsOf(trainTimetables))
+	a := measure(subway, toeiMarked, arrivalsOf(trainTimetables))
 	t.Logf("Toei subway: %v", a)
 	if a.trains < 3000 || a.correctLinks*100 < a.links*99 || a.longExact*100 < a.longTrains*98 {
 		t.Errorf("Toei subway accuracy is too low: %v", a)
@@ -189,15 +233,19 @@ func TestAccuracy(t *testing.T) {
 		if !ok {
 			continue
 		}
-		tts, trains := cachedDumps(t, cacheDir)
-		lines := buildLines(rs, tts, "odpt.Operator:"+op)
-		// 環状の山手線は、大江戸線の環状部と同じく推定の対象外（推定する5社に環状の路線は無い）
-		for id := range lines {
-			if strings.HasPrefix(id, "odpt.Railway:JR-East.Yamanote ") {
-				delete(lines, id)
-			}
+		stations, _ := readJSONFile[[]struct {
+			SameAs     string   `json:"owl:sameAs"`
+			Connecting []string `json:"odpt:connectingStation"`
+		}](t, filepath.Join(cacheDir, "operators", op, "Station.json"))
+		connect := make(map[string][]string)
+		for _, s := range stations {
+			connect[s.SameAs] = append(connect[s.SameAs], s.Connecting...)
 		}
-		t.Logf("%s: %v", op, measure(lines, trains))
+		tts, trains := cachedDumps(t, cacheDir)
+		// 環状の山手線は、大江戸線の環状部と同じく推定の対象外（推定する5社に環状の路線は無い）
+		lines, marked := buildLines(rs, tts, "odpt.Operator:"+op,
+			func(r string) bool { return r != "odpt.Railway:JR-East.Yamanote" }, connect)
+		t.Logf("%s: %v", op, measure(lines, marked, trains))
 	}
 }
 
