@@ -364,6 +364,9 @@ type Partner struct {
 
 	// 推定した列車なら、その路線（同じ路線の推定列車は直通先にしない。途中で切れた列車の始発のため）
 	Railway string
+
+	// ダイヤ種別。使った直通先を覚えるときに、別のダイヤ種別の同じ時刻・行先の列車と分ける
+	Calendar string
 }
 
 // MaxExtendStations は、直通先を探す、最後の発車より先の駅の数の上限。
@@ -373,6 +376,16 @@ const MaxExtendStations = 8
 // MaxExtendMinutes は、最後の発車から境目の駅までの所要時間の上限（分）。
 // 停車の少ない区間では各駅の所要時間の見込みが膨らむので、見込みだけでは上限にならない
 const MaxExtendMinutes = 20
+
+// inRange は、最後の発車から gap 分後に、境目の駅（見込み want 分先）で出る列車を、直通先にできるか。
+// last は、最後の発車の駅そのものが境目のとき
+func inRange(gap, want int, last bool) bool {
+	if last {
+		// 最後の発車の駅が境目: その駅の発車と同じか少し後に出る直通先
+		return gap >= 0 && gap <= 5
+	}
+	return gap*2 >= want && gap*2 <= want*3+6 && gap <= MaxExtendMinutes
+}
 
 // ExtendToPartners は、行先が路線の外の列車（直通運転で他の路線へ行く）を、直通先の列車へ渡す境目の駅まで延ばす。
 //
@@ -396,14 +409,6 @@ func ExtendToPartners(l Line, railway string, trains []Train, partners func(stat
 	index := make(map[string]int, len(l.Stations))
 	for i, s := range l.Stations {
 		index[s] = i
-	}
-
-	inRange := func(gap, want int, last bool) bool {
-		if last {
-			// 最後の発車の駅が境目: その駅の発車と同じか少し後に出る直通先
-			return gap >= 0 && gap <= 5
-		}
-		return gap*2 >= want && gap*2 <= want*3+6 && gap <= MaxExtendMinutes
 	}
 
 	// 列車ごとに境目の駅（同じ行先の直通先が範囲内に出ている最初の駅）と、そこに着く見込みを決める
@@ -572,4 +577,223 @@ func changeTrainType(active map[key][]*chain, started []*chain, i int, continues
 		active[next.key] = slices.DeleteFunc(active[next.key], func(c *chain) bool { return c == next })
 		active[next.key] = append(active[next.key], best)
 	}
+}
+
+// MarkEntering は、ほかの路線から途中の駅に入ってくる列車の最初の発車に、始発の印（Origin）を付けた Line を返す。
+// 印を付けた発車の数も返す。lines と inferred（lines を Infer したもの）は同じダイヤ種別のものをすべて渡す。
+//
+// 途中の駅から入ってくる列車（京急空港線 → 本線の京急蒲田、西武有楽町線 → 池袋線の練馬など）には、駅時刻表に
+// 始発の印が無い。Infer は、その発車を直前に通った同じ種別・行先の列車の続きとしてつなぐことがあり、本当の続きの
+// 発車が別の列車になる。入ってくる側の路線で推定した列車のうち、行先が路線の外のものは、境目の駅で同じ行先の
+// 発車につながるはずなので、ExtendToPartners と同じ範囲・順で、ほかの路線の発車（始発に限らない）を割り当て、
+// 割り当てた発車を途中から入ってくる列車の始発とみなす。
+// connect は駅 → 乗り換えでつながる駅（同じ事業者の路線どうしの境目の駅も、ここでつながる）。
+func MarkEntering(lines map[LineKey]Line, inferred map[LineKey][]Train, connect map[string][]string) (map[LineKey]Line, int) {
+
+	// 駅 → その駅の発車（ダイヤ種別ごと。路線をまたいで探す）
+	type at struct {
+		line  LineKey
+		index int // Departures[station] の中の位置
+	}
+	departures := make(map[string]map[string][]at) // ダイヤ種別 → 駅 → 発車
+	keys := make([]LineKey, 0, len(lines))
+	for k := range lines {
+		keys = append(keys, k)
+	}
+	slices.SortFunc(keys, func(a, b LineKey) int {
+		return cmp.Or(cmp.Compare(a.Railway, b.Railway), cmp.Compare(a.RailDirection, b.RailDirection), cmp.Compare(a.Calendar, b.Calendar))
+	})
+	for _, k := range keys {
+		if departures[k.Calendar] == nil {
+			departures[k.Calendar] = make(map[string][]at)
+		}
+		stations := make([]string, 0, len(lines[k].Departures))
+		for station := range lines[k].Departures {
+			stations = append(stations, station)
+		}
+		slices.Sort(stations)
+		for _, station := range stations {
+			for i := range lines[k].Departures[station] {
+				departures[k.Calendar][station] = append(departures[k.Calendar][station], at{k, i})
+			}
+		}
+	}
+
+	departure := func(a at, station string) Departure {
+		return lines[a.line].Departures[station][a.index]
+	}
+
+	// 推定で前の発車につないだ発車の、そのつなぎの見込みとの差（分）。列車の始めの発車には無い。
+	// 見込みは、その列車がそこまで実際に走った速さで縮める（途中を通過する急行は、各駅の所要時間の和より速い）
+	type stopKey struct {
+		line LineKey
+		dep  Departure
+	}
+	linkScore := make(map[stopKey]int)
+	for _, k := range keys {
+		l := lines[k]
+		expected := expectedFunc(l)
+		index := stationIndex(l)
+		for _, tr := range inferred[k] {
+			for i := 1; i < len(tr.Stops); i++ {
+				prev, cur := tr.Stops[i-1], tr.Stops[i]
+				want := scaled(tr.Stops[:i], expected(index[prev.Station], index[cur.Station]), index, expected)
+				linkScore[stopKey{k, cur}] = abs(cur.Minutes - prev.Minutes - want)
+			}
+		}
+	}
+
+	// fitsBetter は、境目の駅の発車 d を、入ってくる列車（見込みとの差 score）の始めとみなす方が、
+	// 推定でつないだ前の発車の続きとみなすよりよく合うか
+	fitsBetter := func(a at, station string, score int) bool {
+		prev, ok := linkScore[stopKey{a.line, departure(a, station)}]
+		return !ok || score < prev
+	}
+
+	type target struct {
+		line    LineKey
+		train   int
+		station string // 入ってくる側の路線の境目の駅
+		first   bool   // 最後の発車の駅そのものが境目
+		want    int
+		arrival int
+	}
+
+	marked := make(map[LineKey]map[string][]int)
+	count := 0
+
+	for _, k := range keys {
+
+		l := lines[k]
+		run := runTimes(l)
+		index := make(map[string]int, len(l.Stations))
+		for i, s := range l.Stations {
+			index[s] = i
+		}
+
+		candidates := func(station string) []string {
+			return append([]string{station}, connect[station]...)
+		}
+
+		expected := expectedFunc(l)
+
+		var targets []target
+		for n, tr := range inferred[k] {
+			last := tr.Stops[len(tr.Stops)-1]
+			if tr.Terminal != "" {
+				continue
+			}
+			if _, ok := index[last.Destination]; ok {
+				continue
+			}
+			from := index[last.Station]
+			want := 0
+		search:
+			for j := from; j < len(l.Stations) && j <= from+MaxExtendStations; j++ {
+				if j > from {
+					want += run[j]
+				}
+				for _, s := range candidates(l.Stations[j]) {
+					for _, a := range departures[k.Calendar][s] {
+						d := departure(a, s)
+						if a.line.Railway != k.Railway && d.Destination == last.Destination && d.TrainType == last.TrainType &&
+							inRange(d.Minutes-last.Minutes, want, j == from) {
+							targets = append(targets, target{k, n, l.Stations[j], j == from, want, last.Minutes + want})
+							break search
+						}
+					}
+				}
+			}
+		}
+
+		slices.SortStableFunc(targets, func(a, b target) int {
+			return cmp.Or(cmp.Compare(index[a.station], index[b.station]), cmp.Compare(a.arrival, b.arrival), cmp.Compare(a.train, b.train))
+		})
+
+		for _, t := range targets {
+			stops := inferred[k][t.train].Stops
+			last := stops[len(stops)-1]
+			// 入ってくる列車の境目までの見込みも、その列車の速さで縮める
+			fit := scaled(stops, t.want, index, expected)
+			var best *at
+			var bestStation string
+			for _, s := range candidates(t.station) {
+				for _, a := range departures[k.Calendar][s] {
+					d := departure(a, s)
+					if a.line.Railway == k.Railway || d.Destination != last.Destination || d.TrainType != last.TrainType ||
+						!inRange(d.Minutes-last.Minutes, t.want, t.first) || slices.Contains(marked[a.line][s], a.index) ||
+						!fitsBetter(a, s, abs(d.Minutes-last.Minutes-fit)) {
+						continue
+					}
+					if best == nil || d.Minutes < departure(*best, bestStation).Minutes {
+						best, bestStation = &a, s
+					}
+				}
+			}
+			if best == nil {
+				continue
+			}
+			if marked[best.line] == nil {
+				marked[best.line] = make(map[string][]int)
+			}
+			marked[best.line][bestStation] = append(marked[best.line][bestStation], best.index)
+		}
+	}
+
+	result := make(map[LineKey]Line, len(lines))
+	for k, l := range lines {
+		if marked[k] == nil {
+			result[k] = l
+			continue
+		}
+		ds := make(map[string][]Departure, len(l.Departures))
+		for station, v := range l.Departures {
+			ds[station] = v
+		}
+		for station, is := range marked[k] {
+			v := slices.Clone(ds[station])
+			for _, i := range is {
+				if !v[i].Origin {
+					v[i].Origin = true
+					count++
+				}
+			}
+			ds[station] = v
+		}
+		result[k] = Line{Stations: l.Stations, Departures: ds}
+	}
+
+	return result, count
+}
+
+func stationIndex(l Line) map[string]int {
+	index := make(map[string]int, len(l.Stations))
+	for i, s := range l.Stations {
+		index[s] = i
+	}
+	return index
+}
+
+// expectedFunc は、駅 from から駅 to までの所要時間の見込み（各駅の所要時間の和）を返す関数を作る。
+func expectedFunc(l Line) func(from, to int) int {
+	run := runTimes(l)
+	return func(from, to int) int {
+		total := 0
+		for i := from + 1; i <= to; i++ {
+			total += run[i]
+		}
+		return total
+	}
+}
+
+// scaled は、各駅の所要時間の和の見込み want を、列車が stops の区間を実際に走った速さ
+// （実際の時間 ÷ 各駅の所要時間の和）で縮める。発車が1つなら、速さが分からないのでそのまま返す。
+func scaled(stops []Departure, want int, index map[string]int, expected func(from, to int) int) int {
+	first, last := stops[0], stops[len(stops)-1]
+	span := expected(index[first.Station], index[last.Station])
+	elapsed := last.Minutes - first.Minutes
+	if len(stops) < 2 || span <= 0 || elapsed <= 0 {
+		return want
+	}
+	return (want*elapsed + span/2) / span
 }

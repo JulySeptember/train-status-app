@@ -149,3 +149,56 @@ func TestEstimateTrainsTypeChange(t *testing.T) {
 		t.Errorf("train 2: stops %v", types(got[1]))
 	}
 }
+
+// 別のダイヤ種別に同じ時刻・行先の直通先があっても、それぞれのダイヤ種別の列車をつなぐ
+// （使った直通先を、ダイヤ種別をまたいで取り違えない）
+func TestEstimateTrainsPartnersPerCalendar(t *testing.T) {
+
+	railways := []infer.RawRailway{{
+		SameAs:    "odpt.Railway:Test.Line",
+		Operator:  "odpt.Operator:Test",
+		Ascending: "odpt.RailDirection:Outbound",
+		StationOrder: []infer.StationOrder{
+			{Index: 1, Station: "odpt.Station:Test.Line.A"},
+			{Index: 2, Station: "odpt.Station:Test.Line.B"},
+			{Index: 3, Station: "odpt.Station:Test.Line.C"},
+		},
+	}}
+
+	st := func(station, time, calendar string) infer.RawStationTimetable {
+		tt := infer.RawStationTimetable{
+			Operator: "odpt.Operator:Test", Railway: "odpt.Railway:Test.Line", Station: "odpt.Station:Test.Line." + station,
+			Calendar: calendar, RailDirection: "odpt.RailDirection:Outbound",
+		}
+		tt.Objects = append(tt.Objects, struct {
+			DepartureTime string   `json:"odpt:departureTime"`
+			Train         string   `json:"odpt:train"`
+			TrainType     string   `json:"odpt:trainType"`
+			Destination   []string `json:"odpt:destinationStation"`
+			IsOrigin      bool     `json:"odpt:isOrigin"`
+		}{DepartureTime: time, TrainType: "odpt.TrainType:Test.Local", Destination: []string{"odpt.Station:Other.Line.Z"}})
+		return tt
+	}
+
+	var timetables []infer.RawStationTimetable
+	starts := map[string]map[string][]infer.Partner{}
+	for _, calendar := range []string{"odpt.Calendar:Weekday", "odpt.Calendar:SaturdayHoliday"} {
+		timetables = append(timetables, st("A", "10:00", calendar), st("B", "10:02", calendar))
+		starts[calendar] = map[string][]infer.Partner{
+			"odpt.Station:Other.Line.C": {{Station: "odpt.Station:Other.Line.C", Minutes: 10*60 + 5, Destination: "odpt.Station:Other.Line.Z"}},
+		}
+	}
+	connect := map[string][]string{"odpt.Station:Test.Line.C": {"odpt.Station:Other.Line.C"}}
+
+	got := estimateTrains(railways, timetables, func(string) bool { return true }, starts, connect)
+
+	if len(got) != 2 {
+		t.Fatalf("got %d trains", len(got))
+	}
+	for _, tt := range got {
+		last := tt.TrainTimetableObject[len(tt.TrainTimetableObject)-1]
+		if last.ArrivalStation != "odpt.Station:Test.Line.C" || last.ArrivalTime != "10:05" {
+			t.Errorf("%s: terminal %+v", tt.Calendar, last)
+		}
+	}
+}

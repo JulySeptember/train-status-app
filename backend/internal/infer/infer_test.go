@@ -512,3 +512,98 @@ func TestInferTrainTypeChangePassingStation(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
+
+// ほかの路線から途中の駅に入ってくる列車の最初の発車に始発の印を付け、前の列車の続きとしてつながないようにする
+func TestMarkEntering(t *testing.T) {
+
+	// 本線 A - B - J - C。本線の列車は J に2〜4分で着く（B → J の見込みは4分）。
+	// 支線 F1 - F2 - J の列車は J から本線に入る（J 発 104）。印が無いと、100 の本線の列車が J 発 104 の
+	// 入ってくる列車を続きとして取り、本当の続きの J 発 106 が別の列車になる
+	main := LineKey{"Main", "Inbound", "Weekday"}
+	branch := LineKey{"Branch", "Inbound", "Weekday"}
+	lines := map[LineKey]Line{
+		main: {
+			Stations: []string{"Main.A", "Main.B", "Main.J", "Main.C"},
+			Departures: map[string][]Departure{
+				"Main.A": {dep("Main.A", 100, "Local", "Other.Z"), dep("Main.A", 120, "Local", "Other.Z")},
+				"Main.B": {dep("Main.B", 102, "Local", "Other.Z"), dep("Main.B", 122, "Local", "Other.Z")},
+				"Main.J": {dep("Main.J", 104, "Local", "Other.Z"), dep("Main.J", 106, "Local", "Other.Z"), dep("Main.J", 126, "Local", "Other.Z")},
+				"Main.C": {dep("Main.C", 106, "Local", "Other.Z"), dep("Main.C", 108, "Local", "Other.Z"), dep("Main.C", 128, "Local", "Other.Z")},
+			},
+		},
+		branch: {
+			Stations: []string{"Branch.F1", "Branch.F2", "Branch.J"},
+			Departures: map[string][]Departure{
+				"Branch.F1": {dep("Branch.F1", 98, "Local", "Other.Z")},
+				"Branch.F2": {dep("Branch.F2", 102, "Local", "Other.Z")},
+			},
+		},
+	}
+	connect := map[string][]string{"Branch.J": {"Main.J"}, "Main.J": {"Branch.J"}}
+
+	inferred := map[LineKey][]Train{main: Infer(lines[main]), branch: Infer(lines[branch])}
+
+	if got := trainsOf(inferred[main]); !reflect.DeepEqual(got[0], []string{"Main.A@100", "Main.B@102", "Main.J@104", "Main.C@106"}) {
+		t.Fatalf("expected the wrong link without marks, got %v", got)
+	}
+
+	marked, n := MarkEntering(lines, inferred, connect)
+	if n != 1 {
+		t.Errorf("marked %d, want 1", n)
+	}
+
+	got := trainsOf(Infer(marked[main]))
+	want := [][]string{
+		{"Main.A@100", "Main.B@102", "Main.J@106", "Main.C@108"},
+		{"Main.J@104", "Main.C@106"},
+		{"Main.A@120", "Main.B@122", "Main.J@126", "Main.C@128"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	// 入ってくる列車と種別が違う発車には付けない（同じ時刻・行先で別の種別の列車が出る駅がある。京王の調布）
+	l := lines[branch]
+	l.Departures = map[string][]Departure{
+		"Branch.F1": {dep("Branch.F1", 98, "Express", "Other.Z")},
+		"Branch.F2": {dep("Branch.F2", 102, "Express", "Other.Z")},
+	}
+	lines[branch] = l
+	inferred[branch] = Infer(l)
+	if _, n := MarkEntering(lines, inferred, connect); n != 0 {
+		t.Errorf("marked %d departures of a different train type", n)
+	}
+}
+
+// 入ってくる列車より、推定でつないだ前の列車の方がよく合う発車には印を付けない
+func TestMarkEnteringKeepsBetterLink(t *testing.T) {
+
+	main := LineKey{"Main", "Inbound", "Weekday"}
+	branch := LineKey{"Branch", "Inbound", "Weekday"}
+	lines := map[LineKey]Line{
+		// 本線の列車は B → J を2分で走り、J 発 104 は本線の列車の続き
+		main: {
+			Stations: []string{"Main.A", "Main.B", "Main.J", "Main.C"},
+			Departures: map[string][]Departure{
+				"Main.A": {dep("Main.A", 100, "Local", "Other.Z")},
+				"Main.B": {dep("Main.B", 102, "Local", "Other.Z")},
+				"Main.J": {dep("Main.J", 104, "Local", "Other.Z")},
+				"Main.C": {dep("Main.C", 106, "Local", "Other.Z")},
+			},
+		},
+		// 支線の列車は F2 発 98 で、J には 100 ごろ着く（J 発 104 は見込みから4分ずれる）
+		branch: {
+			Stations: []string{"Branch.F1", "Branch.F2", "Branch.J"},
+			Departures: map[string][]Departure{
+				"Branch.F1": {dep("Branch.F1", 96, "Local", "Other.Z")},
+				"Branch.F2": {dep("Branch.F2", 98, "Local", "Other.Z")},
+			},
+		},
+	}
+	connect := map[string][]string{"Branch.J": {"Main.J"}}
+	inferred := map[LineKey][]Train{main: Infer(lines[main]), branch: Infer(lines[branch])}
+
+	if _, n := MarkEntering(lines, inferred, connect); n != 0 {
+		t.Errorf("marked %d, want 0", n)
+	}
+}
