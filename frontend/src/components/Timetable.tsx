@@ -16,10 +16,11 @@ type Props = {
   saturday?: DirectionTimetable;
   holiday?: DirectionTimetable;
   saturdayHoliday?: DirectionTimetable;
+  raceDay?: DirectionTimetable;
   trainLocationAvailable: boolean;
 };
 
-type Tab = "weekday" | "saturday" | "holiday" | "saturdayHoliday";
+type Tab = "weekday" | "saturday" | "holiday" | "saturdayHoliday" | "raceDay";
 
 // Tailwind の lg と同じ幅。PC 表示ではダイヤを並べ、スマホ表示ではタブで1つずつ出す
 const desktopQuery = window.matchMedia("(min-width: 64rem)");
@@ -208,29 +209,51 @@ export default function Timetable({
   saturday,
   holiday,
   saturdayHoliday,
+  raceDay,
   trainLocationAvailable,
 }: Props) {
-  // 「土休日」にまとめた路線と、「土曜・休日」が別ダイヤの路線がある
-  const cards: { tab: Tab; title: string; timetable?: DirectionTimetable }[] =
-    saturdayHoliday
-      ? [
-          { tab: "weekday", title: "平日", timetable: weekday },
-          {
-            tab: "saturdayHoliday",
-            title: "土休日",
-            timetable: saturdayHoliday,
-          },
-        ]
-      : [
-          { tab: "weekday", title: "平日", timetable: weekday },
-          { tab: "saturday", title: "土曜", timetable: saturday },
-          { tab: "holiday", title: "休日", timetable: holiday },
-        ];
+  // 「土休日」にまとめた路線と、「土曜・休日」が別ダイヤの路線がある。
+  // 京王は土休日のほかに競馬開催日の土休日ダイヤがある。
+  // label はスマホ表示のタブの名前（幅が狭いので短くする）
+  const cards: {
+    tab: Tab;
+    title: string;
+    label?: string;
+    timetable?: DirectionTimetable;
+  }[] = saturdayHoliday
+    ? [
+        { tab: "weekday", title: "平日", timetable: weekday },
+        {
+          tab: "saturdayHoliday",
+          title: "土休日",
+          timetable: saturdayHoliday,
+        },
+        ...(raceDay
+          ? [
+              {
+                tab: "raceDay" as const,
+                title: "土休日（競馬開催日）",
+                label: "競馬開催日",
+                timetable: raceDay,
+              },
+            ]
+          : []),
+      ]
+    : [
+        { tab: "weekday", title: "平日", timetable: weekday },
+        { tab: "saturday", title: "土曜", timetable: saturday },
+        { tab: "holiday", title: "休日", timetable: holiday },
+      ];
 
   // スマホ表示では、本日のダイヤのタブを最初に開く
-  const [tab, setTab] = useState<Tab>(
-    () => cards.find((c) => c.timetable?.isToday)?.tab ?? "weekday",
-  );
+  const defaultTab = cards.find((c) => c.timetable?.isToday)?.tab ?? "weekday";
+  const [selectedTab, setTab] = useState<Tab>(defaultTab);
+
+  // 駅や方向を切り替えて選んでいたタブが無くなったら（競馬開催日のダイヤは京王にしか無い）、
+  // 最初に開くタブに戻す
+  const tab = cards.some((c) => c.tab === selectedTab)
+    ? selectedTab
+    : defaultTab;
 
   const isDesktop = useIsDesktop();
 
@@ -260,7 +283,7 @@ export default function Timetable({
         <TabsList className="mb-3 h-10! w-full">
           {cards.map((c) => (
             <TabsTrigger key={c.tab} value={c.tab}>
-              {c.title}
+              {c.label ?? c.title}
             </TabsTrigger>
           ))}
         </TabsList>

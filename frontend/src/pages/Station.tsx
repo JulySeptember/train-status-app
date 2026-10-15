@@ -63,6 +63,13 @@ export default function Station() {
       t.railDirection === selectedDirection,
   );
 
+  // 京王の競馬開催日の土休日ダイヤ。開催日はデータに無いので「本日」にはならない
+  const raceDay = data.timetables.find(
+    (t) =>
+      t.calendar === "odpt.Calendar:Specific.Keio.SaturdayHolidayOnRaceDay" &&
+      t.railDirection === selectedDirection,
+  );
+
   return (
     <div className="space-y-8">
       <PageTitle title={`${data.name}駅の時刻表`} />
@@ -102,6 +109,7 @@ export default function Station() {
           saturday={saturday}
           holiday={holiday}
           saturdayHoliday={saturdayHoliday}
+          raceDay={raceDay}
           trainLocationAvailable={data.trainLocationAvailable}
         />
       </section>
