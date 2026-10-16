@@ -72,62 +72,6 @@
                 }
             }
         },
-        "/api/fares": {
-            "get": {
-                "description": "Get IC card and ticket fare between two stations",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Fare"
-                ],
-                "summary": "Get fare",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "example": "odpt.Station:Toei.Oedo.Daimon",
-                        "description": "From station ID",
-                        "name": "from",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "example": "odpt.Station:Toei.Asakusa.Magome",
-                        "description": "To station ID",
-                        "name": "to",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/service.Fare"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
         "/api/journeys": {
             "get": {
                 "description": "Search journeys between two stations. Returns the earliest journey for each number of transfers, plus journeys on later trains (earlier trains with arriveBy), up to 4 in total.\nJourneys are sorted by arrival time (by departure time, latest first, with arriveBy).\nStations with the same name on different lines (e.g. Shinjuku) are treated as one station.\nTimes are on the current service day (before 03:00 belongs to the previous day).\nCurrent delays (per railway and direction, within the next hour) are added to the times, and suspended railways are avoided.\nIf the realtime status cannot be fetched, the timetable is used as is and delayApplied is false.\nWith realtime=false, delays and suspensions are ignored and the timetable is used as is.",
@@ -574,23 +518,6 @@
                     "items": {
                         "$ref": "#/definitions/service.Timetable"
                     }
-                }
-            }
-        },
-        "service.Fare": {
-            "type": "object",
-            "properties": {
-                "from": {
-                    "type": "string"
-                },
-                "icFare": {
-                    "type": "integer"
-                },
-                "ticketFare": {
-                    "type": "integer"
-                },
-                "to": {
-                    "type": "string"
                 }
             }
         },

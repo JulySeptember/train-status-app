@@ -23,7 +23,6 @@ import (
 var (
 	ErrExternalAPI     = errors.New("external api error")
 	ErrStationNotFound = errors.New("station not found")
-	ErrFareNotFound    = errors.New("fare not found")
 	ErrTrainNotFound   = errors.New("train not found")
 
 	// ErrInvalidJourneyQuery は経路検索の条件が不正なこと。メッセージに理由を含めて wrap する
@@ -897,45 +896,6 @@ func (s *Service) GetTrainLocation(
 	}
 
 	return item, nil
-}
-
-// =========================
-// Fare DTO
-// =========================
-
-type Fare struct {
-	From string `json:"from"`
-	To   string `json:"to"`
-
-	IC     int `json:"icFare"`
-	Ticket int `json:"ticketFare"`
-}
-
-// =========================
-// Fare
-// =========================
-
-func (s *Service) GetFare(
-	ctx context.Context,
-	from string,
-	to string,
-) (*Fare, error) {
-
-	for _, fare := range s.assets.RailwayFares() {
-
-		if fare.FromStation == from &&
-			fare.ToStation == to {
-
-			return &Fare{
-				From:   fare.FromStation,
-				To:     fare.ToStation,
-				IC:     fare.IcCardFare,
-				Ticket: fare.TicketFare,
-			}, nil
-		}
-	}
-
-	return nil, ErrFareNotFound
 }
 
 // =========================

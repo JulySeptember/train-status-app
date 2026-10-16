@@ -7,7 +7,6 @@ import Route from "@/pages/Route";
 import Station from "@/pages/Station";
 import Stations from "@/pages/Stations";
 import Train from "@/pages/Train";
-import Fare from "@/pages/Fare";
 import Journey from "@/pages/Journey";
 import Chat from "@/pages/Chat";
 import NotFound from "@/pages/NotFound";
@@ -44,10 +43,6 @@ export const router = createBrowserRouter([
       {
         path: "/chat",
         element: <Chat />,
-      },
-      {
-        path: "/fares",
-        element: <Fare />,
       },
       {
         path: "/license",

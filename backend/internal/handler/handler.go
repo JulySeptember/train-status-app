@@ -338,65 +338,6 @@ func (h *Handler) TrainLocation(
 	)
 }
 
-// Fare godoc
-//
-//	@Summary	Get fare
-//	@Description	Get IC card and ticket fare between two stations
-//	@Tags		Fare
-//	@Produce	json
-//	@Param		from	query	string	true	"From station ID"	example(odpt.Station:Toei.Oedo.Daimon)
-//	@Param		to	query	string	true	"To station ID"	example(odpt.Station:Toei.Asakusa.Magome)
-//	@Success	200	{object}	service.Fare
-//	@Failure	400	{object}	map[string]string
-//	@Failure	404	{object}	map[string]string
-//	@Router		/api/fares [get]
-func (h *Handler) Fare(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	from := r.URL.Query().Get("from")
-	to := r.URL.Query().Get("to")
-
-	if from == "" || to == "" {
-		writeJSON(
-			w,
-			http.StatusBadRequest,
-			map[string]string{
-				"error": "from and to are required",
-			},
-		)
-		return
-	}
-
-	data, err := h.service.GetFare(
-		r.Context(),
-		from,
-		to,
-	)
-	if err != nil {
-
-		if errors.Is(err, service.ErrFareNotFound) {
-			writeJSON(
-				w,
-				http.StatusNotFound,
-				map[string]string{
-					"error": err.Error(),
-				},
-			)
-			return
-		}
-
-		writeError(w, err)
-		return
-	}
-
-	writeJSON(
-		w,
-		http.StatusOK,
-		data,
-	)
-}
-
 // Journeys godoc
 //
 //	@Summary		Search journeys

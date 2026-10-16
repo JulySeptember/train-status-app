@@ -2,7 +2,6 @@ import type {
   ChatErrorBody,
   ChatMessage,
   ChatResponse,
-  Fare,
   JourneyQuery,
   JourneySearch,
   Railway,
@@ -81,12 +80,6 @@ export const api = {
   getTrain(trainId: string) {
     return request<TrainLocation>(
       `/trains/${encodeURIComponent(trainId)}/location`,
-    );
-  },
-
-  getFare(from: string, to: string) {
-    return request<Fare>(
-      `/fares?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
     );
   },
 

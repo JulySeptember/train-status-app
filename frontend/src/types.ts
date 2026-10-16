@@ -89,13 +89,6 @@ export interface TrainLocation {
   scheduledTime?: string;
 }
 
-export interface Fare {
-  from: string;
-  to: string;
-  icFare: number;
-  ticketFare: number;
-}
-
 export interface JourneyLeg {
   railway: string;
   railwayName: string;

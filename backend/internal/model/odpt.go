@@ -219,31 +219,6 @@ type TrainTimetableEntry struct {
 	TrainType string `json:"-"`
 }
 
-// =========================
-// Railway Fare
-// =========================
-
-type RailwayFare struct {
-	ID      string `json:"@id"`
-	Type    string `json:"@type"`
-	Context string `json:"@context"`
-
-	Date   string `json:"dc:date"`
-	Issued string `json:"dct:issued"`
-
-	SameAs string `json:"owl:sameAs"`
-
-	Operator string `json:"odpt:operator"`
-
-	FromStation string `json:"odpt:fromStation"`
-	ToStation   string `json:"odpt:toStation"`
-
-	IcCardFare      int `json:"odpt:icCardFare"`
-	TicketFare      int `json:"odpt:ticketFare"`
-	ChildIcCardFare int `json:"odpt:childIcCardFare"`
-	ChildTicketFare int `json:"odpt:childTicketFare"`
-}
-
 type TrainView struct {
 	TrainNumber string `json:"trainNumber"`
 

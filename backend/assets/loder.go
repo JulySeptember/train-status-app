@@ -19,7 +19,7 @@ import (
 //go:generate go run ../cmd/gen-assets -kind station -in station_timetable.json -out station_timetable.gob
 //go:generate go run ../cmd/gen-assets -kind train -in train_timetable.json -out train_timetable.gob
 
-//go:embed railway.json station.json railway_fare.json train_type.json station_timetable.gob train_timetable.gob extra
+//go:embed railway.json station.json train_type.json station_timetable.gob train_timetable.gob extra
 var embedded embed.FS
 
 // 都営以外の事業者のデータは extra/ に置く（docs/design/multi-operator.md 4章）。
@@ -41,7 +41,6 @@ var extraFiles = []string{
 type Loader struct {
 	railways          []model.Railway
 	stations          []model.Station
-	fares             []model.RailwayFare
 	stationTimetables []model.StationTimetable
 	trainTimetables   *slim.TrainTimetables
 	trainTypes        []model.TrainType
@@ -83,10 +82,6 @@ func newFromFS(fsys fs.FS, opts ...Option) (*Loader, error) {
 	}
 
 	if err := load(fsys, "station.json", &l.stations); err != nil {
-		return nil, err
-	}
-
-	if err := load(fsys, "railway_fare.json", &l.fares); err != nil {
 		return nil, err
 	}
 
@@ -233,10 +228,6 @@ func (l *Loader) Railways() []model.Railway {
 
 func (l *Loader) Stations() []model.Station {
 	return l.stations
-}
-
-func (l *Loader) RailwayFares() []model.RailwayFare {
-	return l.fares
 }
 
 func (l *Loader) StationTimetables() []model.StationTimetable {
