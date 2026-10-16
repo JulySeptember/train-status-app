@@ -56,17 +56,6 @@ definitions:
           $ref: '#/definitions/service.Timetable'
         type: array
     type: object
-  service.Fare:
-    properties:
-      from:
-        type: string
-      icFare:
-        type: integer
-      ticketFare:
-        type: integer
-      to:
-        type: string
-    type: object
   service.Journey:
     properties:
       arrivalTime:
@@ -352,44 +341,6 @@ paths:
       summary: Ask the AI agent
       tags:
       - Chat
-  /api/fares:
-    get:
-      description: Get IC card and ticket fare between two stations
-      parameters:
-      - description: From station ID
-        example: odpt.Station:Toei.Oedo.Daimon
-        in: query
-        name: from
-        required: true
-        type: string
-      - description: To station ID
-        example: odpt.Station:Toei.Asakusa.Magome
-        in: query
-        name: to
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/service.Fare'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Get fare
-      tags:
-      - Fare
   /api/journeys:
     get:
       description: |-

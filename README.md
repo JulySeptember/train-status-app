@@ -43,7 +43,6 @@
 - AI チャット（Gemini）
   - 「次の電車は？」「遅れてる？」のような自然な文章で、運行情報・列車位置・時刻表・経路を聞ける
   - AI が道具（照会 API）を呼び、アプリが結果を返す、を繰り返して答える
-- 運賃検索
 - SwaggerによるAPIドキュメント
 
 ---
@@ -127,7 +126,6 @@ CloudFront
 | GET | `/api/routes/{routeId}/stations` | 路線ごとの駅一覧 |
 | GET | `/api/stations/{stationId}` | 駅詳細（時刻表） |
 | GET | `/api/trains/{trainId}/location` | 列車現在位置 |
-| GET | `/api/fares?from={fromStation}&to={toStation}` | 運賃検索 |
 | GET | `/api/journeys?from={fromStation}&to={toStation}` | 経路検索（遅れを反映） |
 | POST | `/api/chat` | AI チャット |
 
@@ -179,4 +177,3 @@ make up
 - 列車ロケーション情報
 - 駅時刻表
 - 列車時刻表
-- 運賃情報（都営のみ）

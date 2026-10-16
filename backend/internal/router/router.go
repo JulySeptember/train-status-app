@@ -37,9 +37,6 @@ func New(h *handler.Handler) http.Handler {
 	// Train Location
 	mux.HandleFunc("GET /api/trains/{trainId}/location", h.TrainLocation)
 
-	// Fare
-	mux.HandleFunc("GET /api/fares", h.Fare)
-
 	// Journey
 	mux.HandleFunc("GET /api/journeys", h.Journeys)
 
