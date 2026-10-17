@@ -30,7 +30,7 @@ cd backend && go test ./internal/service -run TestGetTrainLocation -v
 テスト・vet・lint・build は、サブエージェントの `test-runner`（`.claude/agents/test-runner.md`、Haiku で動く。実行と結果の報告だけを行い、コードは直さない）に実行させる。失敗の調査と修正はメインの会話で行う。数秒で終わる単一テストは直接実行してよい。
 
 フロントエンドにテストはない。
-画面は手元で起動して Playwright MCP で確かめる。スクリーンショットはリポジトリの `.playwright-mcp/`（gitignore 済み）にしか保存できない。
+画面は `verify-ui` スキル（`.claude/skills/verify-ui/SKILL.md`）の手順で、手元で起動して Playwright MCP で確かめる。スクリーンショットはリポジトリの `.playwright-mcp/`（gitignore 済み）にしか保存できない。
 
 AI エージェントの評価セット（`backend/internal/ai/testdata/eval.yaml`）は実際の Gemini を呼ぶので、手で実行する（CI では動かない。無料枠を数十回使い、約7分かかる）。キーは SSM から直接渡し、画面や会話に出さない:
 
