@@ -2,6 +2,7 @@ package infer
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -196,7 +197,7 @@ func TestExtendToPartners(t *testing.T) {
 		return nil
 	}
 
-	got := trainsOf(ExtendToPartners(l, "Self", Infer(l), partners, map[Partner]bool{}))
+	got := trainsOf(ExtendToPartners(l, "Self", Infer(l), partners, nil, map[Partner]bool{}))
 	want := [][]string{
 		{"A@100", "B@102", "C=104"},
 		{"A@110", "B@112", "C=114"},
@@ -226,7 +227,7 @@ func TestExtendToPartnersOnePerPartner(t *testing.T) {
 	}
 
 	extended := 0
-	for _, tr := range ExtendToPartners(l, "Self", Infer(l), partners, map[Partner]bool{}) {
+	for _, tr := range ExtendToPartners(l, "Self", Infer(l), partners, nil, map[Partner]bool{}) {
 		if tr.Terminal != "" {
 			extended++
 		}
@@ -253,7 +254,7 @@ func TestExtendToPartnersAtLastStop(t *testing.T) {
 		return nil
 	}
 
-	got := trainsOf(ExtendToPartners(l, "Self", Infer(l), partners, map[Partner]bool{}))
+	got := trainsOf(ExtendToPartners(l, "Self", Infer(l), partners, nil, map[Partner]bool{}))
 	if want := [][]string{{"A@100", "B@102", "B=102"}}; !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
@@ -283,7 +284,7 @@ func TestExtendToPartnersKeepsOrder(t *testing.T) {
 		return nil
 	}
 
-	got := trainsOf(ExtendToPartners(l, "Self", Infer(l), partners, map[Partner]bool{}))
+	got := trainsOf(ExtendToPartners(l, "Self", Infer(l), partners, nil, map[Partner]bool{}))
 	want := [][]string{
 		{"A@554", "C=559"},
 		{"A@556", "B@558", "C=562"},
@@ -310,9 +311,213 @@ func TestExtendToPartnersAtLastStopWithGap(t *testing.T) {
 		return nil
 	}
 
-	got := trainsOf(ExtendToPartners(l, "Self", Infer(l), partners, map[Partner]bool{}))
+	got := trainsOf(ExtendToPartners(l, "Self", Infer(l), partners, nil, map[Partner]bool{}))
 	if want := [][]string{{"A@100", "B@102", "B=102"}}; !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+// branchLines は、本線 S - K - Y と、K から分かれる空港線 K' - H3 - H（両方向）。
+// 空港行きのエアポート快特は、本線の S を出ると K を通過して空港線に入り、H3 で初めて空港線の駅時刻表に載る。
+// stopsAtK なら、エアポート快特が K に停まる時間帯もある
+func branchLines(stopsAtK bool) map[LineKey]Line {
+	mainK := []Departure{dep("Main.K", 92, "Local", "Main.Y")}
+	if stopsAtK {
+		mainK = append(mainK, dep("Main.K", 60, "AirportRapid", "Air.H"))
+	}
+	return map[LineKey]Line{
+		{Railway: "Main", RailDirection: "Out"}: {
+			Stations: []string{"Main.S", "Main.K", "Main.Y"},
+			Departures: map[string][]Departure{
+				"Main.S": {dep("Main.S", 90, "Local", "Main.Y"), dep("Main.S", 100, "AirportRapid", "Air.H")},
+				"Main.K": mainK,
+			},
+		},
+		{Railway: "Air", RailDirection: "Out"}: {
+			Stations: []string{"Air.K", "Air.H3", "Air.H"},
+			Departures: map[string][]Departure{
+				"Air.K":  {dep("Air.K", 80, "Local", "Air.H")},
+				"Air.H3": {dep("Air.H3", 84, "Local", "Air.H"), dep("Air.H3", 108, "AirportRapid", "Air.H")},
+			},
+		},
+		// 逆向き（空港発）には H 行きが無いので、K から分かれる駅の並びにしない
+		{Railway: "Air", RailDirection: "In"}: {
+			Stations: []string{"Air.H", "Air.H3", "Air.K"},
+			Departures: map[string][]Departure{
+				"Air.H":  {dep("Air.H", 70, "Local", "Main.Y")},
+				"Air.H3": {dep("Air.H3", 72, "Local", "Main.Y")},
+			},
+		},
+	}
+}
+
+// 直通先が乗り換えでつながる別の路線の先の駅から出ていれば（京急蒲田を通過して空港線に入るエアポート快特）、その駅まで延ばす
+func TestExtendToPartnersThroughBranch(t *testing.T) {
+
+	lines := branchLines(false)
+	connect := map[string][]string{"Main.K": {"Air.K"}, "Air.K": {"Main.K"}}
+	main := LineKey{Railway: "Main", RailDirection: "Out"}
+
+	if got := len(Branches(lines, connect)(main, "Main.K", "Air.H")); got != 1 {
+		t.Fatalf("got %d branches, want 1 (toward Air.H only)", got)
+	}
+
+	partners := func(station string) []Partner {
+		switch station {
+		case "Main.K":
+			// K から出る空港線の各停（別の列車）
+			return []Partner{{Station: "Air.K", Minutes: 80, Destination: "Air.H", Railway: "Air", TrainType: "Local"}}
+		case "Air.H3":
+			return []Partner{
+				{Station: "Air.H3", Minutes: 84, Destination: "Air.H", Railway: "Air", TrainType: "Local"},
+				{Station: "Air.H3", Minutes: 108, Destination: "Air.H", Railway: "Air", TrainType: "AirportRapid"},
+			}
+		}
+		return nil
+	}
+
+	branches := func(station, destination string) []Branch {
+		return Branches(lines, connect)(main, station, destination)
+	}
+	got := trainsOf(ExtendToPartners(lines[main], "Main", Infer(lines[main]), partners, branches, map[Partner]bool{}))
+	want := [][]string{
+		{"Main.S@090", "Main.K@092", "Main.Y=094"},
+		{"Main.S@100", "Air.H3=108"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+// その列車種別・行先の列車が乗り換えの駅に停まることがあれば、別の路線の先の駅は探さない
+// （停まる種別なら、その駅の発車が直通先のはず。先の駅から出る別の列車を取らないように）
+func TestExtendToPartnersNoBranchWhenStopping(t *testing.T) {
+
+	lines := branchLines(true)
+	connect := map[string][]string{"Main.K": {"Air.K"}, "Air.K": {"Main.K"}}
+	main := LineKey{Railway: "Main", RailDirection: "Out"}
+
+	partners := func(station string) []Partner {
+		if station == "Air.H3" {
+			return []Partner{{Station: "Air.H3", Minutes: 108, Destination: "Air.H", Railway: "Air", TrainType: "AirportRapid"}}
+		}
+		return nil
+	}
+	branches := func(station, destination string) []Branch {
+		return Branches(lines, connect)(main, station, destination)
+	}
+
+	for _, tr := range ExtendToPartners(lines[main], "Main", Infer(lines[main]), partners, branches, map[Partner]bool{}) {
+		if tr.Stops[0].TrainType == "AirportRapid" && tr.Terminal != "" {
+			t.Errorf("extended to %s", tr.Terminal)
+		}
+	}
+}
+
+// 8駅より先（MaxFarExtendStations まで）の駅から出る直通先は、列車種別も同じ推定した列車の始発だけを使う
+// （京急の快特は品川から京急蒲田まで10駅通過する）
+func TestExtendToPartnersFar(t *testing.T) {
+
+	// P00 - P01 - … - P18。各停は全駅に1分おきに停まる。快特は P00 だけに停まり、行先は路線の外
+	stations := make([]string, 19)
+	ds := make(map[string][]Departure)
+	for i := range stations {
+		stations[i] = "P" + itoa(i)[1:]
+		if i < len(stations)-1 {
+			ds[stations[i]] = []Departure{dep(stations[i], 100+i, "Local", "P18")}
+		}
+	}
+	line := func(rapidType string) Line {
+		v := make(map[string][]Departure, len(ds))
+		for s, d := range ds {
+			v[s] = d
+		}
+		v["P00"] = append(slices.Clone(v["P00"]), dep("P00", 110, rapidType, "Other.Z"))
+		return Line{Stations: stations, Departures: v}
+	}
+
+	for _, c := range []struct {
+		name      string
+		rapidType string
+		partners  []Partner
+		want      string
+	}{
+		{
+			// 10駅先: 種別の違う始発（先に出る）は使わない
+			name:      "10 stations",
+			rapidType: "Rapid",
+			partners: []Partner{
+				{Station: "P10", Minutes: 120, Destination: "Other.Z", Railway: "Br", TrainType: "Local"},
+				{Station: "P10", Minutes: 122, Destination: "Other.Z", Railway: "Br", TrainType: "Rapid"},
+			},
+			want: "P10=122",
+		},
+		// 列車時刻表のある列車の始発（Railway・TrainType が空）は、遠くでは使わない（駅時刻表に種別が無く、種別が空の列車でも）
+		{name: "timetabled", partners: []Partner{{Station: "P10", Minutes: 122, Destination: "Other.Z"}}},
+		// 16駅先までは探す
+		{name: "16 stations", rapidType: "Rapid", partners: []Partner{{Station: "P16", Minutes: 120, Destination: "Other.Z", Railway: "Br", TrainType: "Rapid"}}, want: "P16=120"},
+		// 17駅先は探さない
+		{name: "17 stations", rapidType: "Rapid", partners: []Partner{{Station: "P17", Minutes: 121, Destination: "Other.Z", Railway: "Br", TrainType: "Rapid"}}},
+	} {
+		partners := func(station string) []Partner {
+			var result []Partner
+			for _, p := range c.partners {
+				if p.Station == station {
+					result = append(result, p)
+				}
+			}
+			return result
+		}
+		got := ""
+		l := line(c.rapidType)
+		for _, tr := range ExtendToPartners(l, "Self", Infer(l), partners, nil, map[Partner]bool{}) {
+			if tr.Stops[0].TrainType == c.rapidType && tr.Terminal != "" {
+				got = tr.Terminal + "=" + itoa(tr.TerminalMinutes)
+			}
+		}
+		if got != c.want {
+			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
+// 別の路線の乗り換えの駅に、その列車種別・行先の発車があれば、その路線の先の駅は探さない
+func TestExtendToPartnersNoBranchWhenStoppingOnBranch(t *testing.T) {
+
+	lines := branchLines(false)
+	air := LineKey{Railway: "Air", RailDirection: "Out"}
+	l := lines[air]
+	// 別の時間帯のエアポート快特（H3 の発車より後なので、所要時間の見込みは変わらない）
+	l.Departures["Air.K"] = append(l.Departures["Air.K"], dep("Air.K", 120, "AirportRapid", "Air.H"))
+	connect := map[string][]string{"Main.K": {"Air.K"}, "Air.K": {"Main.K"}}
+	main := LineKey{Railway: "Main", RailDirection: "Out"}
+
+	partners := func(station string) []Partner {
+		if station == "Air.H3" {
+			return []Partner{{Station: "Air.H3", Minutes: 108, Destination: "Air.H", Railway: "Air", TrainType: "AirportRapid"}}
+		}
+		return nil
+	}
+	branches := func(station, destination string) []Branch {
+		return Branches(lines, connect)(main, station, destination)
+	}
+
+	for _, tr := range ExtendToPartners(lines[main], "Main", Infer(lines[main]), partners, branches, map[Partner]bool{}) {
+		if tr.Stops[0].TrainType == "AirportRapid" && tr.Terminal != "" {
+			t.Errorf("extended to %s", tr.Terminal)
+		}
+	}
+}
+
+// MaxExtendStations より先の直通先は、区間ごとの最短の所要時間の和の半分より速いものを使わない
+func TestInFarRange(t *testing.T) {
+	// 京急の快特: 品川 → 京急蒲田 7分（見込み 24分、最短の和 11分）
+	if !inFarRange(7, 24, 11) {
+		t.Error("rejected the rapid limited express")
+	}
+	// 西武秩父線の特急: 横瀬 → 飯能が約30分なのに、10分後に出る別の特急（見込み 40分、最短の和 36分）
+	if inFarRange(10, 40, 36) {
+		t.Error("accepted another limited express")
 	}
 }
 
