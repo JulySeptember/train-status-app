@@ -539,7 +539,7 @@ func ExtendToPartners(l Line, railway string, trains []Train, partners func(stat
 
 	fits := func(p Partner, last Departure, t target) bool {
 		return p.Destination == last.Destination && (p.Railway == "" || p.Railway != railway) &&
-			(!t.far || p.TrainType == last.TrainType) && inPartnerRange(p.Minutes-last.Minutes, t)
+			(!t.far || p.Railway != "" && p.TrainType == last.TrainType) && inPartnerRange(p.Minutes-last.Minutes, t)
 	}
 
 	for n, tr := range trains {
