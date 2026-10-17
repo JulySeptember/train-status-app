@@ -74,7 +74,7 @@ func estimateTrains(
 	for k, trains := range inferred {
 		for _, tr := range trains {
 			first := tr.Stops[0]
-			add(k.Calendar, infer.Partner{Station: first.Station, Minutes: first.Minutes, Destination: first.Destination, Railway: k.Railway})
+			add(k.Calendar, infer.Partner{Station: first.Station, Minutes: first.Minutes, Destination: first.Destination, Railway: k.Railway, TrainType: first.TrainType})
 		}
 	}
 
@@ -83,6 +83,9 @@ func estimateTrains(
 	// 1つの直通先には1本だけをつなぐ（路線・方向をまたいで共有する。京急本線の上りと下りが同じ京急蒲田の始発を取らないように）。
 	// 直通先はダイヤ種別を持つので、別のダイヤ種別の同じ時刻・行先の列車とは分かれる
 	used := make(map[infer.Partner]bool)
+
+	// 直通先は、乗り換えでつながるほかの推定する路線の駅からも探す（京急蒲田を通過して空港線に入るエアポート快特など）
+	branches := infer.Branches(lines, connect)
 
 	for _, k := range keys {
 
@@ -94,7 +97,11 @@ func estimateTrains(
 			return ps
 		}
 
-		for n, tr := range infer.ExtendToPartners(lines[k], k.Railway, inferred[k], partners, used) {
+		branchesOf := func(station, destination string) []infer.Branch {
+			return branches(k, station, destination)
+		}
+
+		for n, tr := range infer.ExtendToPartners(lines[k], k.Railway, inferred[k], partners, branchesOf, used) {
 
 			first := tr.Stops[0]
 			id := infer.TrainID(k, n+1)
