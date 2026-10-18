@@ -471,11 +471,11 @@ func TestNotifyStore(t *testing.T) {
 		}
 	}
 
-	if err := store.SaveStates(ctx, map[string]notify.Level{mita: notify.Delayed}, now); err != nil {
+	if err := store.SaveStates(ctx, map[string]notify.State{mita: {Level: notify.Delayed, CheckedAt: now}}); err != nil {
 		t.Fatal(err)
 	}
-	if states, at, err := store.LoadStates(ctx); err != nil || states[mita] != notify.Delayed || !at.Equal(now) {
-		t.Fatalf("unexpected states %v %v %v", states, at, err)
+	if states, err := store.LoadStates(ctx); err != nil || states[mita].Level != notify.Delayed || !states[mita].CheckedAt.Equal(now) {
+		t.Fatalf("unexpected states %v %v", states, err)
 	}
 
 	// 同じ端末を登録している利用者を引ける

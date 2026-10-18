@@ -473,3 +473,105 @@ func TestSubscribeMovesSharedDevice(t *testing.T) {
 		t.Fatal("u2 should be subscribed")
 	}
 }
+
+type flakyKeys struct {
+	fail *bool
+	keys staticKeys
+}
+
+func (f flakyKeys) Keys(ctx context.Context) (*webpush.Keys, error) {
+	if *f.fail {
+		return nil, errors.New("ssm unavailable")
+	}
+	return f.keys.Keys(ctx)
+}
+
+// 鍵を読めなかった回は状態を保存せず、次の回に送る（通知を失わない）
+func TestNotifierRetriesWhenKeysFail(t *testing.T) {
+
+	ctx := context.Background()
+	jst := time.FixedZone("JST", 9*60*60)
+	now := time.Date(2026, 10, 19, 8, 0, 0, 0, jst)
+
+	store := newStore(t, "u1")
+	sender := &fakeSender{}
+	conds := &conditions{}
+	fail := false
+	n := notify.NewNotifier(store, conds, catalog{}, flakyKeys{&fail, newKeys(t)}, "")
+	notify.SetNotifierSender(n, sender)
+	notify.SetNotifierClock(n, func() time.Time { return now })
+
+	s := notify.NewService(store, catalog{}, newKeys(t), "")
+	if err := s.SetAlert(ctx, "u1", notify.Alert{RailwayID: mita, Days: []notify.Day{notify.Weekday}, Start: "07:00", End: "09:00"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Subscribe(ctx, "u1", subscription("https://fcm.googleapis.com/fcm/send/u1")); err != nil {
+		t.Fatal(err)
+	}
+
+	conds.items = []service.RailwayCondition{cond(mita, service.RailwayNormal, 0, normalText)}
+	if err := n.Run(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	fail = true
+	now = now.Add(5 * time.Minute)
+	conds.items = []service.RailwayCondition{cond(mita, service.RailwaySuspended, 0, "見合わせ")}
+	if err := n.Run(ctx); err == nil {
+		t.Fatal("key failure should be reported")
+	}
+
+	fail = false
+	now = now.Add(5 * time.Minute)
+	if err := n.Run(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := sender.sent["https://fcm.googleapis.com/fcm/send/u1"]; len(got) != 1 || got[0].Title != "三田線：運転見合わせ" {
+		t.Fatalf("change should be sent on the next run: %+v", got)
+	}
+}
+
+// 夜のあとの最初の回に取れなかった路線は、次に取れた回も記録だけする（夜のうちの変化を朝に送らない）
+func TestNotifierAfterNightWithUnavailableRailway(t *testing.T) {
+
+	ctx := context.Background()
+	jst := time.FixedZone("JST", 9*60*60)
+	now := time.Date(2026, 10, 19, 0, 50, 0, 0, jst)
+
+	store := newStore(t, "u1")
+	sender := &fakeSender{}
+	conds := &conditions{}
+	n := notify.NewNotifier(store, conds, catalog{}, newKeys(t), "")
+	notify.SetNotifierSender(n, sender)
+	notify.SetNotifierClock(n, func() time.Time { return now })
+
+	s := notify.NewService(store, catalog{}, newKeys(t), "")
+	if err := s.SetAlert(ctx, "u1", notify.Alert{RailwayID: mita, Days: []notify.Day{notify.Weekday}, Start: "05:00", End: "09:00"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Subscribe(ctx, "u1", subscription("https://fcm.googleapis.com/fcm/send/u1")); err != nil {
+		t.Fatal(err)
+	}
+
+	run := func(c service.RailwayCondition) {
+		t.Helper()
+		conds.items = []service.RailwayCondition{c}
+		if err := n.Run(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	run(cond(mita, service.RailwaySuspended, 0, "見合わせ"))
+
+	now = time.Date(2026, 10, 19, 5, 0, 0, 0, jst)
+	unavailable := cond(mita, service.RailwayNormal, 0, normalText)
+	unavailable.LocationAvailable = false
+	run(unavailable)
+
+	now = now.Add(5 * time.Minute)
+	run(cond(mita, service.RailwayNormal, 0, normalText))
+
+	if len(sender.sent) != 0 {
+		t.Fatalf("change during the night should not be sent: %v", sender.sent)
+	}
+}

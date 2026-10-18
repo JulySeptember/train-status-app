@@ -41,7 +41,11 @@ self.addEventListener("notificationclick", (event) => {
       .then((clients) => {
         const client = clients.find((c) => "focus" in c);
         if (client) {
-          return client.navigate(url.href).then((c) => (c ?? client).focus());
+          // まだこの Service Worker の管理下にないタブは navigate できないので、新しく開く
+          return client
+            .navigate(url.href)
+            .then((c) => (c ?? client).focus())
+            .catch(() => self.clients.openWindow(url.href));
         }
         return self.clients.openWindow(url.href);
       }),

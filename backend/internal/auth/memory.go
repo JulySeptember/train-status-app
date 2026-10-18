@@ -18,8 +18,7 @@ type MemoryStore struct {
 	alerts        map[string]map[string]notify.Alert        // 利用者 ID → 路線 ID → 通知の条件
 	subscriptions map[string]map[string]notify.Subscription // 利用者 ID → endpoint → 購読
 	tested        map[string]time.Time                      // 利用者 ID → 試しの通知を送った時刻
-	states        map[string]notify.Level
-	statesAt      time.Time
+	states        map[string]notify.State
 }
 
 func NewMemoryStore() *MemoryStore {
@@ -30,7 +29,7 @@ func NewMemoryStore() *MemoryStore {
 		alerts:        map[string]map[string]notify.Alert{},
 		subscriptions: map[string]map[string]notify.Subscription{},
 		tested:        map[string]time.Time{},
-		states:        map[string]notify.Level{},
+		states:        map[string]notify.State{},
 	}
 }
 
@@ -241,26 +240,25 @@ func (m *MemoryStore) TakeTestSlot(_ context.Context, userID string, now time.Ti
 	return true, nil
 }
 
-func (m *MemoryStore) LoadStates(context.Context) (map[string]notify.Level, time.Time, error) {
+func (m *MemoryStore) LoadStates(context.Context) (map[string]notify.State, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	result := make(map[string]notify.Level, len(m.states))
+	result := make(map[string]notify.State, len(m.states))
 	for k, v := range m.states {
 		result[k] = v
 	}
-	return result, m.statesAt, nil
+	return result, nil
 }
 
-func (m *MemoryStore) SaveStates(_ context.Context, states map[string]notify.Level, at time.Time) error {
+func (m *MemoryStore) SaveStates(_ context.Context, states map[string]notify.State) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.states = make(map[string]notify.Level, len(states))
+	m.states = make(map[string]notify.State, len(states))
 	for k, v := range states {
 		m.states[k] = v
 	}
-	m.statesAt = at
 	return nil
 }
 

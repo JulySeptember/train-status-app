@@ -26,8 +26,7 @@ const (
 	quietFrom = 1
 	quietTo   = 5
 
-	// 前回の状態がこれより古ければ（夜の止める時間帯・障害のあと）、比べずに記録だけする。
-	// 時間帯の外で起きた変化を、あとからまとめて送らないため
+	// 路線の前回の状態がこれより古ければ（夜の止める時間帯・配信が止まっていたあと）、比べずに記録だけする
 	staleAfter = 15 * time.Minute
 
 	// push サービスが届けるのを待つ時間。古い運行情報は届けない
@@ -90,8 +89,7 @@ func level(c service.RailwayCondition, prev Level) (Level, bool) {
 }
 
 // Run は、運行状況を確かめ、前回から状態が変わった路線を見ている利用者に知らせる。
-// 状態は送る前に保存する（送信の途中で止まっても、次の回に同じ通知を送り直さない）。
-// 前回の状態が無いか古ければ、記録だけする
+// 前回の状態が無いか古い路線は、記録だけする
 func (n *Notifier) Run(ctx context.Context) error {
 
 	now := n.now().In(jst)
@@ -104,49 +102,59 @@ func (n *Notifier) Run(ctx context.Context) error {
 		return fmt.Errorf("railway conditions: %w", err)
 	}
 
-	prev, savedAt, err := n.store.LoadStates(ctx)
+	prev, err := n.store.LoadStates(ctx)
 	if err != nil {
 		return fmt.Errorf("load states: %w", err)
 	}
-	compare := len(prev) > 0 && now.Sub(savedAt) <= staleAfter
 
-	next := make(map[string]Level, len(conds))
-	for id, l := range prev {
-		next[id] = l
+	next := make(map[string]State, len(conds))
+	for id, st := range prev {
+		next[id] = st
 	}
 
 	var changed []service.RailwayCondition
 	for _, c := range conds {
-		l, ok := level(c, prev[c.Railway])
+		p, seen := prev[c.Railway]
+		l, ok := level(c, p.Level)
 		if !ok {
+			// 取れなかった路線は、前の状態と確かめた時刻のままにする
 			continue
 		}
-		if p, seen := prev[c.Railway]; seen && p != l {
+		// 前に確かめたのが古ければ（夜の止める時間帯・配信が止まっていたあと）、比べずに記録だけする。
+		// 時間帯の外で起きた変化を、あとからまとめて送らないため
+		if seen && p.Level != l && now.Sub(p.CheckedAt) <= staleAfter {
 			changed = append(changed, c)
 		}
-		next[c.Railway] = l
+		next[c.Railway] = State{Level: l, CheckedAt: now}
 	}
 
-	if err := n.store.SaveStates(ctx, next, now); err != nil {
+	// 送る相手と内容は、状態を保存する前に決める。鍵や条件を読めなければ、保存せずに終わり、次の回に送る
+	messages, sender, err := n.prepare(ctx, now, changed, next)
+	if err != nil {
+		return err
+	}
+
+	// 状態は送る前に保存する（送信の途中で止まっても、次の回に同じ通知を送り直さない）
+	if err := n.store.SaveStates(ctx, next); err != nil {
 		return fmt.Errorf("save states: %w", err)
 	}
 
-	if !compare || len(changed) == 0 {
-		return nil
+	if len(messages) > 0 {
+		n.send(ctx, sender, messages, len(changed))
 	}
-	return n.notify(ctx, now, changed, next)
+	return nil
 }
 
-func (n *Notifier) notify(ctx context.Context, now time.Time, changed []service.RailwayCondition, levels map[string]Level) error {
+// prepare は、変わった路線を見ていて、曜日・時間帯の合う利用者ごとに送る通知をまとめる
+func (n *Notifier) prepare(ctx context.Context, now time.Time, changed []service.RailwayCondition, states map[string]State) (map[string][]Message, Sender, error) {
 
-	if n.keys == nil {
-		return nil
+	if len(changed) == 0 || n.keys == nil {
+		return nil, nil, nil
 	}
 	keys, err := n.keys.Keys(ctx)
 	if err != nil {
-		return fmt.Errorf("vapid keys: %w", err)
+		return nil, nil, fmt.Errorf("vapid keys: %w", err)
 	}
-	sender := n.sender(keys)
 
 	day := Weekday
 	if !slices.Contains(calendar.Calendars(now), calendar.Weekday) {
@@ -154,20 +162,24 @@ func (n *Notifier) notify(ctx context.Context, now time.Time, changed []service.
 	}
 	minutes := now.Hour()*60 + now.Minute()
 
-	// 利用者ごとに、送る通知をまとめる
 	messages := map[string][]Message{}
 	for _, c := range changed {
 		alerts, err := n.store.AlertsForRailway(ctx, c.Railway)
 		if err != nil {
-			return fmt.Errorf("alerts for railway: %w", err)
+			return nil, nil, fmt.Errorf("alerts for railway: %w", err)
 		}
-		msg := message(c, levels[c.Railway], n.catalog.RailwayName(c.Railway))
+		msg := message(c, states[c.Railway].Level, n.catalog.RailwayName(c.Railway))
 		for _, a := range alerts {
 			if matches(a.Alert, day, minutes) {
 				messages[a.UserID] = append(messages[a.UserID], msg)
 			}
 		}
 	}
+	return messages, n.sender(keys), nil
+}
+
+// send は、利用者ごとに並列に送る
+func (n *Notifier) send(ctx context.Context, sender Sender, messages map[string][]Message, changed int) {
 
 	var (
 		wg          sync.WaitGroup
@@ -192,8 +204,7 @@ func (n *Notifier) notify(ctx context.Context, now time.Time, changed []service.
 	wg.Wait()
 
 	// 利用者を特定できる値は出さない
-	log.Printf("notify: %d railways changed, %d users, %d notifications sent", len(changed), users, sent)
-	return nil
+	log.Printf("notify: %d railways changed, %d users, %d notifications sent", changed, users, sent)
 }
 
 // sendToUser は、利用者のすべての端末に通知を送り、送れた数を返す

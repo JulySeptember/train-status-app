@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -359,6 +360,24 @@ func TestNotifyAPI(t *testing.T) {
 	}
 	if rec := do(t, app, http.MethodPost, "/api/me/push-subscriptions/test", "", cookie, "same-origin"); rec.Code != http.StatusConflict {
 		t.Fatalf("test without device: %d %s", rec.Code, rec.Body)
+	}
+
+	// 購読の登録・確認・解除
+	p256dh := base64.RawURLEncoding.EncodeToString(append([]byte{4}, make([]byte, 64)...))
+	auth16 := base64.RawURLEncoding.EncodeToString(make([]byte, 16))
+	sub := `{"endpoint":"https://fcm.googleapis.com/fcm/send/abc","keys":{"p256dh":"` + p256dh + `","auth":"` + auth16 + `"}}`
+	status := `{"endpoint":"https://fcm.googleapis.com/fcm/send/abc"}`
+	if rec := do(t, app, http.MethodPost, "/api/me/push-subscriptions", sub, cookie, "same-origin"); rec.Code != http.StatusNoContent {
+		t.Fatalf("subscribe: %d %s", rec.Code, rec.Body)
+	}
+	if rec := do(t, app, http.MethodPost, "/api/me/push-subscriptions/status", status, cookie, "same-origin"); !strings.Contains(rec.Body.String(), `"registered":true`) {
+		t.Fatalf("status after subscribe: %d %s", rec.Code, rec.Body)
+	}
+	if rec := do(t, app, http.MethodDelete, "/api/me/push-subscriptions", status, cookie, "same-origin"); rec.Code != http.StatusNoContent {
+		t.Fatalf("unsubscribe: %d", rec.Code)
+	}
+	if rec := do(t, app, http.MethodPost, "/api/me/push-subscriptions/status", status, cookie, "same-origin"); !strings.Contains(rec.Body.String(), `"registered":false`) {
+		t.Fatalf("status after unsubscribe: %d %s", rec.Code, rec.Body)
 	}
 
 	if rec := do(t, app, http.MethodDelete, path, "", cookie, "same-origin"); rec.Code != http.StatusNoContent {

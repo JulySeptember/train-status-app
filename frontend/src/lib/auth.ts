@@ -22,10 +22,15 @@ async function forgetThisDevice(server: boolean) {
     const registration = await navigator.serviceWorker.getRegistration("/");
     const subscription = await registration?.pushManager?.getSubscription();
     if (subscription) {
-      if (server) {
-        await api.unsubscribePush(subscription.endpoint);
+      try {
+        if (server) {
+          await api.unsubscribePush(subscription.endpoint);
+        }
+      } finally {
+        // サーバーから外せなくても（セッション切れなど）、ブラウザの購読は必ず外す。
+        // endpoint が無効になるので、次に送ったときに 410 が返り、サーバーの購読も消える
+        await subscription.unsubscribe();
       }
-      await subscription.unsubscribe();
     }
   } catch {
     // 何もしない

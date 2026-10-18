@@ -81,6 +81,12 @@ const (
 	Suspended Level = "suspended"
 )
 
+// State は、前回の路線の状態と、それを確かめた時刻
+type State struct {
+	Level     Level
+	CheckedAt time.Time
+}
+
 // Store は、通知の条件・購読・前回の路線の状態の保存先。利用者を消すと（退会）、条件と購読も消える
 type Store interface {
 	ListAlerts(ctx context.Context, userID string) ([]Alert, error)
@@ -106,10 +112,10 @@ type Store interface {
 	// TakeTestSlot は、前に試しの通知を送ってから interval たっていれば記録して true を返す
 	TakeTestSlot(ctx context.Context, userID string, now time.Time, interval time.Duration) (bool, error)
 
-	// LoadStates は前回の路線の状態と、保存した時刻を返す。まだ無ければ空
-	LoadStates(ctx context.Context) (map[string]Level, time.Time, error)
+	// LoadStates は前回の路線の状態（路線ID → 状態）を返す。まだ無ければ空
+	LoadStates(ctx context.Context) (map[string]State, error)
 
-	SaveStates(ctx context.Context, states map[string]Level, at time.Time) error
+	SaveStates(ctx context.Context, states map[string]State) error
 
 	// HasUser は、利用者がいる（退会していない）かを返す
 	HasUser(ctx context.Context, userID string) (bool, error)

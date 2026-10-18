@@ -23,7 +23,7 @@ import (
 //	USER#<sub>    ALERT#<路線ID>             days, start, end, gsi1pk = ALERT#<路線ID>, gsi1sk = USER#<sub>
 //	USER#<sub>    PUSH#<endpoint の SHA-256>  endpoint, p256dh, auth, createdAt, gsi1pk = PUSH#<endpoint の SHA-256>, gsi1sk = USER#<sub>
 //	USER#<sub>    PUSHTEST                  testedAt, expiresAt（試しの通知の間隔。TTL で消える）
-//	NOTIFY        STATE                     levels（路線ID → 状態）, savedAt
+//	NOTIFY        STATE                     levels（路線ID → 状態）, checkedAt（路線ID → 確かめた時刻）
 //
 // 利用者の項目なので、退会（DeleteUser）でいっしょに消える。
 // GSI（gsi1）で、路線を見ている利用者と、端末（endpoint）を登録している利用者を引く。
@@ -49,7 +49,7 @@ const (
 	attrAuth      = "auth"
 	attrTestedAt  = "testedAt"
 	attrLevels    = "levels"
-	attrSavedAt   = "savedAt"
+	attrCheckedAt = "checkedAt"
 	attrRailwayID = "railwayId"
 )
 
@@ -301,7 +301,7 @@ func (s *Store) TakeTestSlot(ctx context.Context, userID string, now time.Time, 
 	return err == nil, err
 }
 
-func (s *Store) LoadStates(ctx context.Context) (map[string]notify.Level, time.Time, error) {
+func (s *Store) LoadStates(ctx context.Context) (map[string]notify.State, error) {
 
 	out, err := s.api.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName:      aws.String(s.table),
@@ -309,39 +309,46 @@ func (s *Store) LoadStates(ctx context.Context) (map[string]notify.Level, time.T
 		ConsistentRead: aws.Bool(true),
 	})
 	if err != nil {
-		return nil, time.Time{}, err
+		return nil, err
 	}
 
-	result := map[string]notify.Level{}
+	result := map[string]notify.State{}
 	levels, ok := out.Item[attrLevels].(*types.AttributeValueMemberM)
 	if !ok {
-		return result, time.Time{}, nil
+		return result, nil
 	}
-	for id, v := range levels.Value {
-		if s, ok := v.(*types.AttributeValueMemberS); ok {
-			result[id] = notify.Level(s.Value)
-		}
-	}
+	checked, _ := out.Item[attrCheckedAt].(*types.AttributeValueMemberM)
 
-	var savedAt time.Time
-	if v, ok := out.Item[attrSavedAt].(*types.AttributeValueMemberN); ok {
-		if sec, err := strconv.ParseInt(v.Value, 10, 64); err == nil {
-			savedAt = time.Unix(sec, 0)
+	for id, v := range levels.Value {
+		l, ok := v.(*types.AttributeValueMemberS)
+		if !ok {
+			continue
 		}
+		st := notify.State{Level: notify.Level(l.Value)}
+		if checked != nil {
+			if n, ok := checked.Value[id].(*types.AttributeValueMemberN); ok {
+				if sec, err := strconv.ParseInt(n.Value, 10, 64); err == nil {
+					st.CheckedAt = time.Unix(sec, 0)
+				}
+			}
+		}
+		result[id] = st
 	}
-	return result, savedAt, nil
+	return result, nil
 }
 
-func (s *Store) SaveStates(ctx context.Context, states map[string]notify.Level, at time.Time) error {
+func (s *Store) SaveStates(ctx context.Context, states map[string]notify.State) error {
 
 	levels := make(map[string]types.AttributeValue, len(states))
-	for id, l := range states {
-		levels[id] = &types.AttributeValueMemberS{Value: string(l)}
+	checked := make(map[string]types.AttributeValue, len(states))
+	for id, st := range states {
+		levels[id] = &types.AttributeValueMemberS{Value: string(st.Level)}
+		checked[id] = unix(st.CheckedAt)
 	}
 
 	item := key(pkNotify, skState)
 	item[attrLevels] = &types.AttributeValueMemberM{Value: levels}
-	item[attrSavedAt] = unix(at)
+	item[attrCheckedAt] = &types.AttributeValueMemberM{Value: checked}
 
 	if _, err := s.api.PutItem(ctx, &dynamodb.PutItemInput{TableName: aws.String(s.table), Item: item}); err != nil {
 		return fmt.Errorf("save states: %w", err)
