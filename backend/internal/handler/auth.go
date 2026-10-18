@@ -101,7 +101,8 @@ func (h *Handler) session(w http.ResponseWriter, r *http.Request) (auth.Session,
 		return auth.Session{}, false
 	}
 
-	sess, err := h.auth.Authenticate(r.Context(), h.sessionToken(r))
+	token := h.sessionToken(r)
+	sess, extended, err := h.auth.Authenticate(r.Context(), token)
 	if errors.Is(err, auth.ErrUnauthenticated) {
 		h.clearSessionCookie(w)
 		writeMessage(w, http.StatusUnauthorized, "ログインしていません")
@@ -111,6 +112,11 @@ func (h *Handler) session(w http.ResponseWriter, r *http.Request) (auth.Session,
 		log.Printf("authenticate: %v", err)
 		writeMessage(w, http.StatusInternalServerError, "エラーが発生しました")
 		return auth.Session{}, false
+	}
+
+	// サーバーで期限を延ばしたら、Cookie の期限も延ばす（使い続けていればログアウトされない）
+	if extended {
+		h.setSessionCookie(w, token)
 	}
 
 	return sess, true
@@ -142,6 +148,7 @@ func (h *Handler) AuthConfig(w http.ResponseWriter, r *http.Request) {
 //	@Success		200		{object}	handler.LoginResponse
 //	@Failure		400		{object}	map[string]string
 //	@Failure		401		{object}	map[string]string
+//	@Failure		500		{object}	map[string]string
 //	@Failure		503		{object}	map[string]string
 //	@Router			/api/auth/google [post]
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
@@ -154,6 +161,11 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxLoginBody)).Decode(&req); err != nil || req.Credential == "" {
 		writeMessage(w, http.StatusBadRequest, "リクエストが正しくありません")
 		return
+	}
+
+	// ログイン中にもう一度ログインしたら、前のセッションは消す
+	if err := h.auth.Logout(r.Context(), h.sessionToken(r)); err != nil {
+		log.Printf("login: logout previous session: %v", err)
 	}
 
 	token, user, err := h.auth.Login(r.Context(), req.Credential)
@@ -178,6 +190,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 //	@Summary	Log out
 //	@Tags		Auth
 //	@Success	204
+//	@Failure	500	{object}	map[string]string
 //	@Failure	503	{object}	map[string]string
 //	@Router		/api/auth/logout [post]
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
@@ -203,6 +216,7 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 //	@Produce	json
 //	@Success	200	{object}	auth.User
 //	@Failure	401	{object}	map[string]string
+//	@Failure	500	{object}	map[string]string
 //	@Failure	503	{object}	map[string]string
 //	@Router		/api/me [get]
 func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
@@ -234,6 +248,7 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 //	@Tags			Auth
 //	@Success		204
 //	@Failure		401	{object}	map[string]string
+//	@Failure		500	{object}	map[string]string
 //	@Failure		503	{object}	map[string]string
 //	@Router			/api/me [delete]
 func (h *Handler) DeleteMe(w http.ResponseWriter, r *http.Request) {

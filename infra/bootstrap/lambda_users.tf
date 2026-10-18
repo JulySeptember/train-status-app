@@ -16,6 +16,8 @@ data "aws_iam_policy_document" "lambda_users" {
       "dynamodb:DeleteItem",
       "dynamodb:Query",
       "dynamodb:BatchWriteItem",
+      # セッションと目印を TransactWriteItems でまとめて書く（利用者がいることを確かめる）
+      "dynamodb:ConditionCheckItem",
     ]
     resources = [
       "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.current.account_id}:table/${local.users_table_name}",

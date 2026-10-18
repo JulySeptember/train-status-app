@@ -7,6 +7,11 @@
 //	SESSION#<hash>    SESSION           userId, expiresAt
 //
 // expiresAt は TTL（UNIX 秒）で、期限が過ぎると DynamoDB が消す。
+//
+// 退会と同時に別の端末でログインしても、退会した利用者のセッションや目印が残らないようにする:
+//   - セッションと目印は、PROFILE があることを条件に、1つのトランザクションで書く
+//   - 期限の延長は、セッションと目印の両方が残っているときだけ行う（消えたものを書き戻さない）
+//   - 退会は PROFILE を先に消してから、目印とセッションを引いて消す
 package dynamostore
 
 import (
@@ -32,6 +37,7 @@ type API interface {
 	DeleteItem(ctx context.Context, in *dynamodb.DeleteItemInput, opts ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error)
 	Query(ctx context.Context, in *dynamodb.QueryInput, opts ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error)
 	BatchWriteItem(ctx context.Context, in *dynamodb.BatchWriteItemInput, opts ...func(*dynamodb.Options)) (*dynamodb.BatchWriteItemOutput, error)
+	TransactWriteItems(ctx context.Context, in *dynamodb.TransactWriteItemsInput, opts ...func(*dynamodb.Options)) (*dynamodb.TransactWriteItemsOutput, error)
 }
 
 const (
@@ -123,21 +129,42 @@ func toUser(userID string, item map[string]types.AttributeValue) (auth.User, err
 	return auth.User{ID: userID, CreatedAt: createdAt}, nil
 }
 
-// CreateSession は、退会のときに引けるよう、利用者の側の目印を先に書いてからセッションを書く
+// CreateSession は、セッションと利用者の側の目印（退会のときに引く）を書く。
+// 利用者がもういなければ（退会したところなら）書かずに ErrNotFound を返す
 func (s *Store) CreateSession(ctx context.Context, sess auth.Session) error {
 
 	marker := key(userPK(sess.UserID), sessionMarkerSK(sess.Hash))
 	marker[attrExpires] = unix(sess.ExpiresAt)
 
-	if _, err := s.api.PutItem(ctx, &dynamodb.PutItemInput{TableName: aws.String(s.table), Item: marker}); err != nil {
-		return err
-	}
-
 	item := key(sessionPK(sess.Hash), skSession)
 	item[attrUserID] = &types.AttributeValueMemberS{Value: sess.UserID}
 	item[attrExpires] = unix(sess.ExpiresAt)
 
-	_, err := s.api.PutItem(ctx, &dynamodb.PutItemInput{TableName: aws.String(s.table), Item: item})
+	_, err := s.api.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{
+		TransactItems: []types.TransactWriteItem{
+			{ConditionCheck: &types.ConditionCheck{
+				TableName:                aws.String(s.table),
+				Key:                      key(userPK(sess.UserID), skProfile),
+				ConditionExpression:      aws.String("attribute_exists(#pk)"),
+				ExpressionAttributeNames: map[string]string{"#pk": attrPK},
+			}},
+			{Put: &types.Put{TableName: aws.String(s.table), Item: marker}},
+			{Put: &types.Put{TableName: aws.String(s.table), Item: item}},
+		},
+	})
+	return transactError(err)
+}
+
+// transactError は、トランザクションの条件を満たさなかったことを ErrNotFound にする
+func transactError(err error) error {
+	var canceled *types.TransactionCanceledException
+	if errors.As(err, &canceled) {
+		for _, r := range canceled.CancellationReasons {
+			if aws.ToString(r.Code) == "ConditionalCheckFailed" {
+				return auth.ErrNotFound
+			}
+		}
+	}
 	return err
 }
 
@@ -171,30 +198,27 @@ func (s *Store) GetSession(ctx context.Context, hash string) (auth.Session, erro
 	return auth.Session{Hash: hash, UserID: userID.Value, ExpiresAt: time.Unix(sec, 0)}, nil
 }
 
-// ExtendSession は、ログアウトや退会で消えたセッションを作り直さないよう、残っているときだけ期限を延ばす
+// ExtendSession は、ログアウトや退会で消えたセッション・目印を書き戻さないよう、両方が残っているときだけ期限を延ばす
 func (s *Store) ExtendSession(ctx context.Context, sess auth.Session) error {
 
-	_, err := s.api.UpdateItem(ctx, &dynamodb.UpdateItemInput{
-		TableName:                 aws.String(s.table),
-		Key:                       key(sessionPK(sess.Hash), skSession),
-		UpdateExpression:          aws.String("SET #expires = :expires"),
-		ConditionExpression:       aws.String("attribute_exists(#pk)"),
-		ExpressionAttributeNames:  map[string]string{"#expires": attrExpires, "#pk": attrPK},
-		ExpressionAttributeValues: map[string]types.AttributeValue{":expires": unix(sess.ExpiresAt)},
+	update := func(k map[string]types.AttributeValue) types.TransactWriteItem {
+		return types.TransactWriteItem{Update: &types.Update{
+			TableName:                 aws.String(s.table),
+			Key:                       k,
+			UpdateExpression:          aws.String("SET #expires = :expires"),
+			ConditionExpression:       aws.String("attribute_exists(#pk)"),
+			ExpressionAttributeNames:  map[string]string{"#expires": attrExpires, "#pk": attrPK},
+			ExpressionAttributeValues: map[string]types.AttributeValue{":expires": unix(sess.ExpiresAt)},
+		}}
+	}
+
+	_, err := s.api.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{
+		TransactItems: []types.TransactWriteItem{
+			update(key(sessionPK(sess.Hash), skSession)),
+			update(key(userPK(sess.UserID), sessionMarkerSK(sess.Hash))),
+		},
 	})
-	var failed *types.ConditionalCheckFailedException
-	if errors.As(err, &failed) {
-		return auth.ErrNotFound
-	}
-	if err != nil {
-		return err
-	}
-
-	marker := key(userPK(sess.UserID), sessionMarkerSK(sess.Hash))
-	marker[attrExpires] = unix(sess.ExpiresAt)
-
-	_, err = s.api.PutItem(ctx, &dynamodb.PutItemInput{TableName: aws.String(s.table), Item: marker})
-	return err
+	return transactError(err)
 }
 
 func (s *Store) DeleteSession(ctx context.Context, sess auth.Session) error {
@@ -210,8 +234,16 @@ func (s *Store) DeleteSession(ctx context.Context, sess auth.Session) error {
 	return nil
 }
 
-// DeleteUser は、USER#<sub> の項目をすべて消し、目印から引いたセッションも消す
+// DeleteUser は、USER#<sub> の項目をすべて消し、目印から引いたセッションも消す。
+// PROFILE を先に消し、このあと新しいセッションが作られないようにしてから、目印を引く
 func (s *Store) DeleteUser(ctx context.Context, userID string) error {
+
+	if _, err := s.api.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+		TableName: aws.String(s.table),
+		Key:       key(userPK(userID), skProfile),
+	}); err != nil {
+		return err
+	}
 
 	var keys []map[string]types.AttributeValue
 

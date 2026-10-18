@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"train-status-app/backend/internal/auth"
 	"train-status-app/backend/internal/handler"
@@ -166,5 +167,44 @@ func TestAuthDisabled(t *testing.T) {
 		if rec := do(t, app, r.method, r.path, `{"credential":"good"}`, nil, "same-origin"); rec.Code != http.StatusServiceUnavailable {
 			t.Errorf("%s %s: got %d, want 503", r.method, r.path, rec.Code)
 		}
+	}
+}
+
+// サーバーでセッションを延ばしたら、Cookie の期限も延ばす
+func TestSessionCookieRenewed(t *testing.T) {
+
+	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+	svc := auth.NewService(stubVerifier{}, auth.NewMemoryStore(), auth.WithClock(func() time.Time { return now }))
+	app := New(handler.New(nil, nil).WithAuth(svc, "client-id", true))
+
+	cookie := sessionCookie(t, do(t, app, http.MethodPost, "/api/auth/google", `{"credential":"good"}`, nil, "same-origin"), "__Host-session")
+
+	// 1日たっていなければ送り直さない
+	now = now.Add(time.Hour)
+	if rec := do(t, app, http.MethodGet, "/api/me", "", cookie, ""); rec.Code != http.StatusOK || len(rec.Result().Cookies()) != 0 {
+		t.Fatalf("cookie should not be renewed yet: %d %v", rec.Code, rec.Result().Header.Values("Set-Cookie"))
+	}
+
+	now = now.Add(2 * 24 * time.Hour)
+	rec := do(t, app, http.MethodGet, "/api/me", "", cookie, "")
+	renewed := sessionCookie(t, rec, "__Host-session")
+	if rec.Code != http.StatusOK || renewed.Value != cookie.Value || renewed.MaxAge != int(auth.SessionTTL.Seconds()) || !renewed.HttpOnly || !renewed.Secure {
+		t.Fatalf("cookie should be renewed: %d %+v", rec.Code, renewed)
+	}
+}
+
+// ログイン中にもう一度ログインしたら、前のセッションは使えなくなる
+func TestLoginReplacesSession(t *testing.T) {
+
+	app := newAuthApp(true)
+
+	first := sessionCookie(t, do(t, app, http.MethodPost, "/api/auth/google", `{"credential":"good"}`, nil, "same-origin"), "__Host-session")
+	second := sessionCookie(t, do(t, app, http.MethodPost, "/api/auth/google", `{"credential":"good"}`, first, "same-origin"), "__Host-session")
+
+	if rec := do(t, app, http.MethodGet, "/api/me", "", first, ""); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("previous session should be revoked: %d", rec.Code)
+	}
+	if rec := do(t, app, http.MethodGet, "/api/me", "", second, ""); rec.Code != http.StatusOK {
+		t.Fatalf("new session should work: %d", rec.Code)
 	}
 }

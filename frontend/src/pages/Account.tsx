@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
+import Error from "@/components/Error";
 import GoogleSignInButton from "@/components/GoogleSignInButton";
 import Loading from "@/components/Loading";
 import PageTitle from "@/components/PageTitle";
@@ -144,6 +145,8 @@ export default function Account() {
   let body;
   if (config.isPending || me.isPending) {
     body = <Loading />;
+  } else if (me.isError) {
+    body = <Error message="ログインの状態を確かめられませんでした。" />;
   } else if (me.data) {
     body = <LoggedIn createdAt={me.data.createdAt} />;
   } else if (config.data) {

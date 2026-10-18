@@ -52,6 +52,7 @@ type Store interface {
 	// GetUser は利用者を返す。いなければ ErrNotFound
 	GetUser(ctx context.Context, userID string) (User, error)
 
+	// CreateSession はセッションを作る。利用者がいなければ（退会したところなら）ErrNotFound
 	CreateSession(ctx context.Context, s Session) error
 
 	// GetSession はセッションを返す。無ければ ErrNotFound（期限の確認は Service が行う）
@@ -72,8 +73,20 @@ type Service struct {
 	now      func() time.Time
 }
 
-func NewService(verifier Verifier, store Store) *Service {
-	return &Service{verifier: verifier, store: store, now: time.Now}
+// Option は Service の設定
+type Option func(*Service)
+
+// WithClock は現在時刻を返す関数を差し替える（テスト用）
+func WithClock(now func() time.Time) Option {
+	return func(s *Service) { s.now = now }
+}
+
+func NewService(verifier Verifier, store Store, opts ...Option) *Service {
+	s := &Service{verifier: verifier, store: store, now: time.Now}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 // Login は Google の ID トークンを確かめ、利用者がいなければ作って、新しいセッション ID を返す。
@@ -107,40 +120,41 @@ func (s *Service) Login(ctx context.Context, idToken string) (string, User, erro
 	return token, user, nil
 }
 
-// Authenticate はセッション ID からセッションを引く。期限が近ければ延ばす。
-// 無いか期限が切れていれば ErrUnauthenticated
-func (s *Service) Authenticate(ctx context.Context, token string) (Session, error) {
+// Authenticate はセッション ID からセッションを引く。期限が近ければ延ばし、extended を true にする
+// （呼び出し側は Cookie の期限も延ばす）。無いか期限が切れていれば ErrUnauthenticated
+func (s *Service) Authenticate(ctx context.Context, token string) (sess Session, extended bool, err error) {
 
 	if token == "" {
-		return Session{}, ErrUnauthenticated
+		return Session{}, false, ErrUnauthenticated
 	}
 
-	sess, err := s.store.GetSession(ctx, hashToken(token))
+	sess, err = s.store.GetSession(ctx, hashToken(token))
 	if errors.Is(err, ErrNotFound) {
-		return Session{}, ErrUnauthenticated
+		return Session{}, false, ErrUnauthenticated
 	}
 	if err != nil {
-		return Session{}, fmt.Errorf("get session: %w", err)
+		return Session{}, false, fmt.Errorf("get session: %w", err)
 	}
 
 	// DynamoDB の TTL はすぐには消さないので、期限は自分で確かめる
 	now := s.now()
 	if !now.Before(sess.ExpiresAt) {
-		return Session{}, ErrUnauthenticated
+		return Session{}, false, ErrUnauthenticated
 	}
 
 	if sess.ExpiresAt.Sub(now) < SessionTTL-sessionExtendAfter {
 		sess.ExpiresAt = now.Add(SessionTTL)
 		err := s.store.ExtendSession(ctx, sess)
 		if errors.Is(err, ErrNotFound) {
-			return Session{}, ErrUnauthenticated
+			return Session{}, false, ErrUnauthenticated
 		}
 		if err != nil {
-			return Session{}, fmt.Errorf("extend session: %w", err)
+			return Session{}, false, fmt.Errorf("extend session: %w", err)
 		}
+		extended = true
 	}
 
-	return sess, nil
+	return sess, extended, nil
 }
 
 // Me はログイン中の利用者を返す。退会などで利用者がいなければ ErrUnauthenticated

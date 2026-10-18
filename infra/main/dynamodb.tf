@@ -26,6 +26,9 @@ resource "aws_dynamodb_table" "users" {
   hash_key     = "pk"
   range_key    = "sk"
 
+  # 利用者のデータを持つので、誤って消したり作り直したりしないようにする
+  deletion_protection_enabled = true
+
   attribute {
     name = "pk"
     type = "S"

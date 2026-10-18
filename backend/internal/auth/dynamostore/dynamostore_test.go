@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
@@ -101,6 +102,39 @@ func (f *fakeAPI) Query(_ context.Context, in *dynamodb.QueryInput, _ ...func(*d
 	return &dynamodb.QueryOutput{}, nil
 }
 
+// TransactWriteItems は、条件（attribute_exists）をすべて確かめてから書く
+func (f *fakeAPI) TransactWriteItems(_ context.Context, in *dynamodb.TransactWriteItemsInput, _ ...func(*dynamodb.Options)) (*dynamodb.TransactWriteItemsOutput, error) {
+	reasons := make([]types.CancellationReason, len(in.TransactItems))
+	failed := false
+	for i, t := range in.TransactItems {
+		var k map[string]types.AttributeValue
+		switch {
+		case t.ConditionCheck != nil:
+			k = t.ConditionCheck.Key
+		case t.Update != nil:
+			k = t.Update.Key
+		default:
+			continue
+		}
+		if f.items[id(k)] == nil {
+			reasons[i].Code = aws.String("ConditionalCheckFailed")
+			failed = true
+		}
+	}
+	if failed {
+		return nil, &types.TransactionCanceledException{CancellationReasons: reasons}
+	}
+	for _, t := range in.TransactItems {
+		switch {
+		case t.Put != nil:
+			f.items[id(t.Put.Item)] = maps.Clone(t.Put.Item)
+		case t.Update != nil:
+			f.items[id(t.Update.Key)][attrExpires] = t.Update.ExpressionAttributeValues[":expires"]
+		}
+	}
+	return &dynamodb.TransactWriteItemsOutput{}, nil
+}
+
 func (f *fakeAPI) BatchWriteItem(_ context.Context, in *dynamodb.BatchWriteItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.BatchWriteItemOutput, error) {
 	f.batchCalls++
 	out := &dynamodb.BatchWriteItemOutput{UnprocessedItems: map[string][]types.WriteRequest{}}
@@ -175,8 +209,50 @@ func TestStore(t *testing.T) {
 	if err := store.ExtendSession(ctx, sess); !errors.Is(err, auth.ErrNotFound) {
 		t.Fatalf("want ErrNotFound, got %v", err)
 	}
-	if api.items["SESSION#h1|SESSION"] != nil {
+	if api.items["SESSION#h1|SESSION"] != nil || api.items["USER#u1|SESSION#h1"] != nil {
 		t.Fatal("deleted session must not be recreated")
+	}
+}
+
+// 退会と同時に別の端末でログイン・延長しても、退会した利用者の項目が残らない
+func TestStoreAfterDeleteUser(t *testing.T) {
+
+	ctx := context.Background()
+	api := newFakeAPI()
+	store := New(api, "users")
+	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+
+	if _, err := store.EnsureUser(ctx, "u1", now); err != nil {
+		t.Fatal(err)
+	}
+	sess := auth.Session{Hash: "h1", UserID: "u1", ExpiresAt: now.Add(time.Hour)}
+	if err := store.CreateSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+
+	// 延長の途中で目印だけが消えていても、セッションも目印も書き戻さない
+	delete(api.items, "USER#u1|SESSION#h1")
+	sess.ExpiresAt = now.Add(2 * time.Hour)
+	if err := store.ExtendSession(ctx, sess); !errors.Is(err, auth.ErrNotFound) {
+		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+	if api.items["USER#u1|SESSION#h1"] != nil {
+		t.Fatal("marker must not be recreated")
+	}
+
+	if err := store.DeleteUser(ctx, "u1"); err != nil {
+		t.Fatal(err)
+	}
+
+	// 退会したあとは、セッションを作れない
+	if err := store.CreateSession(ctx, auth.Session{Hash: "h2", UserID: "u1", ExpiresAt: now.Add(time.Hour)}); !errors.Is(err, auth.ErrNotFound) {
+		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+	// 上で手で目印だけを消したセッションは引けないので残る（実際には、目印はセッションのあとに消す）
+	for k := range api.items {
+		if k != "SESSION#h1|SESSION" {
+			t.Errorf("item left after delete: %s", k)
+		}
 	}
 }
 

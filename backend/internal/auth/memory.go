@@ -47,6 +47,9 @@ func (m *MemoryStore) CreateSession(_ context.Context, s Session) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	if _, ok := m.users[s.UserID]; !ok {
+		return ErrNotFound
+	}
 	m.sessions[s.Hash] = s
 	return nil
 }
