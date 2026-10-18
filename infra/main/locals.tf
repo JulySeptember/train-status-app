@@ -11,6 +11,9 @@ locals {
   odpt_key_parameter           = "/${var.project_name}/${var.env}/odpt-consumer-key"
   odpt_challenge_key_parameter = "/${var.project_name}/${var.env}/odpt-challenge-consumer-key"
 
+  # ログインした利用者とセッション（infra/bootstrap と同じ名前にする）
+  users_table_name = "${local.name_prefix}-users"
+
   common_tags = merge(
     var.tags,
     {

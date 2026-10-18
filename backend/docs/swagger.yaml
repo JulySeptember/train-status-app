@@ -35,12 +35,32 @@ definitions:
       tool:
         type: string
     type: object
+  auth.User:
+    properties:
+      createdAt:
+        type: string
+    type: object
+  handler.AuthConfig:
+    properties:
+      googleClientId:
+        type: string
+    type: object
   handler.ChatError:
     properties:
       code:
         type: string
       error:
         type: string
+    type: object
+  handler.LoginRequest:
+    properties:
+      credential:
+        type: string
+    type: object
+  handler.LoginResponse:
+    properties:
+      user:
+        $ref: '#/definitions/auth.User'
     type: object
   service.DirectionTimetable:
     properties:
@@ -297,6 +317,91 @@ info:
   title: Train Status API
   version: "1.0"
 paths:
+  /api/auth/config:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.AuthConfig'
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get login settings
+      tags:
+      - Auth
+  /api/auth/google:
+    post:
+      consumes:
+      - application/json
+      description: Verifies the ID token from Google Identity Services and sets the
+        session cookie.
+      parameters:
+      - description: ID token
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.LoginResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Log in with a Google ID token
+      tags:
+      - Auth
+  /api/auth/logout:
+    post:
+      responses:
+        "204":
+          description: No Content
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Log out
+      tags:
+      - Auth
   /api/chat:
     post:
       consumes:
@@ -410,6 +515,62 @@ paths:
       summary: Search journeys
       tags:
       - Journey
+  /api/me:
+    delete:
+      description: Deletes all data of the logged-in user and the sessions.
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Delete the account
+      tags:
+      - Auth
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.User'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get the logged-in user
+      tags:
+      - Auth
   /api/routes:
     get:
       produces:

@@ -1,15 +1,18 @@
 import type {
+  AuthConfig,
   ChatErrorBody,
   ChatMessage,
   ChatResponse,
   JourneyQuery,
   JourneySearch,
+  LoginResponse,
   Railway,
   Station,
   StationDetail,
   StationSummary,
   TrainLocation,
   TrainStatus,
+  User,
 } from "./types";
 
 const API = "/api";
@@ -49,6 +52,54 @@ async function postChat(messages: ChatMessage[]): Promise<ChatResponse> {
         ? body
         : { error: "エラーが発生しました。", code: "internal" },
     );
+  }
+
+  return await res.json();
+}
+
+// send は状態を変えるリクエスト（ログイン・ログアウト・退会）。本文の無いレスポンス（204）は undefined を返す
+async function send<T>(
+  method: string,
+  url: string,
+  body?: unknown,
+): Promise<T> {
+  const res = await fetch(`${API}${url}`, {
+    method,
+    headers:
+      body === undefined ? undefined : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    throw new Error(await res.text());
+  }
+
+  return res.status === 204 ? (undefined as T) : await res.json();
+}
+
+// ログインしていなければ null を返す
+async function getMe(): Promise<User | null> {
+  const res = await fetch(`${API}/me`);
+
+  if (res.status === 401) {
+    return null;
+  }
+  if (!res.ok) {
+    throw new Error(await res.text());
+  }
+
+  return await res.json();
+}
+
+// ログインを使えない（バックエンドに設定が無い）ときは null を返す
+async function getAuthConfig(): Promise<AuthConfig | null> {
+  const res = await fetch(`${API}/auth/config`);
+
+  if (res.status === 503) {
+    return null;
+  }
+  if (!res.ok) {
+    throw new Error(await res.text());
   }
 
   return await res.json();
@@ -99,5 +150,21 @@ export const api = {
 
   chat(messages: ChatMessage[]) {
     return postChat(messages);
+  },
+
+  getAuthConfig,
+
+  getMe,
+
+  login(credential: string) {
+    return send<LoginResponse>("POST", "/auth/google", { credential });
+  },
+
+  logout() {
+    return send<void>("POST", "/auth/logout");
+  },
+
+  deleteAccount() {
+    return send<void>("DELETE", "/me");
   },
 };

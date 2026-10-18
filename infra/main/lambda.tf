@@ -47,6 +47,10 @@ resource "aws_lambda_function" "this" {
       ODPT_OPERATORS               = join(",", var.odpt_operators)
       ODPT_KEY_PARAMETER           = local.odpt_key_parameter
       ODPT_CHALLENGE_KEY_PARAMETER = local.odpt_challenge_key_parameter
+
+      # Google でのログイン。クライアント ID は秘密の値ではない
+      GOOGLE_CLIENT_ID = var.google_client_id
+      USERS_TABLE      = aws_dynamodb_table.users.name
     }
   }
 

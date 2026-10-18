@@ -19,6 +19,9 @@ odpt_operators = [
   "JR-East", "Keio", "Tobu", "Keikyu", "Tokyu", "Seibu",
 ]
 
+# Google でのログイン（docs/design/login.md 3.5）。OAuth クライアント ID は秘密の値ではない
+google_client_id = "401009185515-et7htndp1m7733fq2itm5muptg0it6uq.apps.googleusercontent.com"
+
 tags = {
   Project     = "train-status-app"
   Environment = "dev"

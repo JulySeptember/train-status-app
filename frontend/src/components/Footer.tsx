@@ -10,6 +10,10 @@ export default function Footer() {
           <Link to="/license" className="text-brand hover:underline">
             データ提供・ライセンス
           </Link>
+
+          <Link to="/privacy" className="text-brand hover:underline">
+            プライバシーポリシー
+          </Link>
         </div>
 
         {/* 公共交通オープンデータチャレンジ限定ライセンス第10条3項・基本ライセンスで求められる表示 */}

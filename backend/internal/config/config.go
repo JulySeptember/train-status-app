@@ -39,6 +39,12 @@ type Config struct {
 	// Lambda で使う、ODPT のキーを入れた SSM のパラメータ名
 	ODPTKeyParameter          string
 	ODPTChallengeKeyParameter string
+
+	// Google でログインするときの OAuth クライアント ID（秘密の値ではない）。空ならログインを使えない
+	GoogleClientID string
+
+	// 利用者とセッションを保存する DynamoDB のテーブル名。空なら（手元では）メモリ上に保存する
+	UsersTable string
 }
 
 func Load() Config {
@@ -63,6 +69,9 @@ func Load() Config {
 		ODPTChallengeConsumerKey:  os.Getenv("ODPT_CHALLENGE_CONSUMER_KEY"),
 		ODPTKeyParameter:          os.Getenv("ODPT_KEY_PARAMETER"),
 		ODPTChallengeKeyParameter: os.Getenv("ODPT_CHALLENGE_KEY_PARAMETER"),
+
+		GoogleClientID: os.Getenv("GOOGLE_CLIENT_ID"),
+		UsersTable:     os.Getenv("USERS_TABLE"),
 	}
 }
 

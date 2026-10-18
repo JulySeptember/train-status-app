@@ -1,5 +1,5 @@
 import { Link, NavLink } from "react-router-dom";
-import { TrainFront } from "lucide-react";
+import { CircleUserRound, TrainFront } from "lucide-react";
 
 import { NAV_ITEMS } from "@/components/nav";
 import { APP_NAME } from "@/components/PageTitle";
@@ -21,30 +21,49 @@ export default function Header() {
           <span className="font-bold tracking-tight">{APP_NAME}</span>
         </Link>
 
-        {/* スマホでは画面下のタブバー（BottomNav）を使う */}
-        <nav aria-label="メイン" className="hidden sm:block">
-          <ul className="flex items-center gap-1">
-            {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
-              <li key={to}>
-                <NavLink
-                  to={to}
-                  end={to === "/"}
-                  className={({ isActive }) =>
-                    cn(
-                      "flex items-center gap-1.5 rounded-md px-3 py-2 text-sm whitespace-nowrap transition",
-                      isActive
-                        ? "bg-muted font-medium text-foreground"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                    )
-                  }
-                >
-                  <Icon size={16} />
-                  {label}
-                </NavLink>
-              </li>
-            ))}
-          </ul>
-        </nav>
+        <div className="flex items-center gap-1">
+          {/* スマホでは画面下のタブバー（BottomNav）を使う */}
+          <nav aria-label="メイン" className="hidden sm:block">
+            <ul className="flex items-center gap-1">
+              {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+                <li key={to}>
+                  <NavLink
+                    to={to}
+                    end={to === "/"}
+                    className={({ isActive }) =>
+                      cn(
+                        "flex items-center gap-1.5 rounded-md px-3 py-2 text-sm whitespace-nowrap transition",
+                        isActive
+                          ? "bg-muted font-medium text-foreground"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                      )
+                    }
+                  >
+                    <Icon size={16} />
+                    {label}
+                  </NavLink>
+                </li>
+              ))}
+            </ul>
+          </nav>
+
+          {/* アカウントはスマホでもヘッダーに出す（タブバーには主な機能だけを置く） */}
+          <NavLink
+            to="/account"
+            aria-label="アカウント"
+            title="アカウント"
+            className={({ isActive }) =>
+              cn(
+                "rounded-md p-2 transition",
+                isActive
+                  ? "bg-muted text-foreground"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              )
+            }
+          >
+            <CircleUserRound size={20} />
+          </NavLink>
+        </div>
       </div>
     </header>
   );

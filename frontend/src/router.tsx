@@ -11,6 +11,8 @@ import Journey from "@/pages/Journey";
 import Chat from "@/pages/Chat";
 import NotFound from "@/pages/NotFound";
 import License from "./pages/License";
+import Account from "@/pages/Account";
+import Privacy from "@/pages/Privacy";
 
 export const router = createBrowserRouter([
   {
@@ -47,6 +49,14 @@ export const router = createBrowserRouter([
       {
         path: "/license",
         element: <License />,
+      },
+      {
+        path: "/account",
+        element: <Account />,
+      },
+      {
+        path: "/privacy",
+        element: <Privacy />,
       },
     ],
   },

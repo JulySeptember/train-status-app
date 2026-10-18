@@ -5,6 +5,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
@@ -15,6 +16,8 @@ import (
 	"train-status-app/backend/internal/ai"
 	"train-status-app/backend/internal/ai/awssetup"
 	"train-status-app/backend/internal/ai/gemini"
+	"train-status-app/backend/internal/auth"
+	"train-status-app/backend/internal/auth/dynamostore"
 	"train-status-app/backend/internal/client"
 	"train-status-app/backend/internal/config"
 	"train-status-app/backend/internal/handler"
@@ -24,6 +27,8 @@ import (
 	"train-status-app/backend/internal/service"
 
 	"github.com/aws/aws-lambda-go/lambda"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/awslabs/aws-lambda-go-api-proxy/httpadapter"
 )
 
@@ -48,6 +53,11 @@ func main() {
 	onLambda := isLambda()
 
 	h := handler.New(svc, newChat(cfg, svc, onLambda))
+
+	if a := newAuth(cfg, onLambda); a != nil {
+		// Lambda は CloudFront の HTTPS の後ろで動く
+		h.WithAuth(a, cfg.GoogleClientID, onLambda)
+	}
 
 	r := router.New(h)
 
@@ -126,6 +136,36 @@ func newChat(cfg config.Config, svc *service.Service, onLambda bool) handler.Cha
 		ai.NewMemoryLimiter(limits),
 		ai.DefaultConfig(),
 	)
+}
+
+// newAuth はログインを組み立てる。使えないときは nil を返し、ログインの API は 503 になる。
+// Lambda では利用者とセッションを DynamoDB に、手元ではメモリ上に保存する（再起動で消える）。
+func newAuth(cfg config.Config, onLambda bool) *auth.Service {
+
+	if cfg.GoogleClientID == "" {
+		log.Printf("login is disabled (GOOGLE_CLIENT_ID is not set)")
+		return nil
+	}
+
+	verifier := auth.NewGoogleVerifier(cfg.GoogleClientID)
+
+	if cfg.UsersTable == "" {
+		if onLambda {
+			log.Printf("login is disabled (USERS_TABLE is not set)")
+			return nil
+		}
+		log.Printf("login is enabled (sessions are kept in memory)")
+		return auth.NewService(verifier, auth.NewMemoryStore())
+	}
+
+	// 設定を読むだけで、AWS には接続しない
+	awsCfg, err := awsconfig.LoadDefaultConfig(context.Background())
+	if err != nil {
+		log.Printf("login is disabled (load aws config: %v)", err)
+		return nil
+	}
+
+	return auth.NewService(verifier, dynamostore.New(dynamodb.NewFromConfig(awsCfg), cfg.UsersTable))
 }
 
 func isLambda() bool {

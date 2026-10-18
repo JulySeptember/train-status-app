@@ -53,3 +53,9 @@ variable "odpt_operators" {
   type        = list(string)
   default     = []
 }
+
+variable "google_client_id" {
+  description = "Google でログインするときの OAuth クライアント ID（秘密の値ではない）。空ならログインを使えない"
+  type        = string
+  default     = ""
+}
