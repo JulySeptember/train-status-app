@@ -1,6 +1,6 @@
 # ログイン・お気に入り・運行情報の通知 設計書
 
-- 状態: 段階1（ログイン）・段階2（お気に入り）実装済み（#98・#99）。段階3（通知）を実装中（2026-10-18）
+- 状態: 実装済み（2026-10-18。段階1 ログインは #98、段階2 お気に入りは #99、段階3 通知は #101）
 - 対象: Google アカウントでのログイン、お気に入り（駅・路線・経路）、運行情報の Web Push 通知
 - 関連: [AI 鉄道エージェント 設計書](ai-api.md)、[経路探索エンジン 設計書](route-search.md)
 
@@ -171,7 +171,7 @@ EventBridge（5分ごと。1:00〜5:00 は呼ばれてもすぐ終わる）
   - ブラウザに購読があっても、自動では登録しない。「受け取る設定になっているか」は `POST /api/me/push-subscriptions/status` で、ログイン中の利用者の購読かを確かめて表示する
 - VAPID の鍵を作り直したあとは、古い購読（`applicationServerKey` が違う）を作り直す
 - push サービスのリダイレクトには従わない
-- iPhone は、ホーム画面に追加した Web アプリ（iOS 16.4 以降）でしか Web Push を受け取れない。Web App Manifest（`public/manifest.webmanifest`）を足し、通知の設定の画面で案内する
+- iPhone は、ホーム画面に追加した Web アプリ（iOS 16.4 以降）でしか Web Push を受け取れない。Web App Manifest（`public/manifest.webmanifest`）を足し、通知の設定の画面で案内する。ホーム画面と通知のアイコンは PNG（`icon-192.png`・`icon-512.png`・`apple-touch-icon.png`。Android のステータスバーのバッジは白一色の `badge-96.png`）
 - 設定の画面はアカウントの画面（`/account`）に置く
 
 ### 5.5 API

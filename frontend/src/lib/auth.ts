@@ -119,6 +119,7 @@ interface GoogleAccountsId {
       size?: "large" | "medium" | "small";
       text?: "signin_with" | "signup_with" | "continue_with" | "signin";
       shape?: "rectangular" | "pill";
+      width?: number;
       locale?: string;
     },
   ): void;

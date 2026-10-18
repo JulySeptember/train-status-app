@@ -32,11 +32,13 @@ export default function GoogleSignInButton({
           callback: (res) => callback.current(res.credential),
           ux_mode: "popup",
         });
+        // 暗い画面に合わせて黒にし、幅を決める（決めないと親の幅いっぱいに広がる）
         id.renderButton(ref.current, {
-          theme: "outline",
+          theme: "filled_black",
           size: "large",
           text: "signin_with",
           shape: "pill",
+          width: 260,
           locale: "ja",
         });
       })
@@ -60,5 +62,13 @@ export default function GoogleSignInButton({
     );
   }
 
-  return <div ref={ref} className="min-h-10" />;
+  // ページは暗い配色（color-scheme: dark）なので、そのままだと Google のボタンの iframe（明るい配色）の
+  // 背景が白く塗られる。入れ物を light にして、iframe の背景を透明にする
+  return (
+    <div
+      ref={ref}
+      className="min-h-10 w-fit"
+      style={{ colorScheme: "light" }}
+    />
+  );
 }
