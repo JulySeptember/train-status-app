@@ -28,6 +28,7 @@ resource "aws_iam_role_policy_attachment" "lambda" {
     basic_execution = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
     ai              = aws_iam_policy.lambda_ai.arn
     odpt            = aws_iam_policy.lambda_odpt.arn
+    users           = aws_iam_policy.lambda_users.arn
   }
 
   role       = aws_iam_role.lambda.name

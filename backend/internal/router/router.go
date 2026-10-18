@@ -43,5 +43,14 @@ func New(h *handler.Handler) http.Handler {
 	// AI Agent
 	mux.HandleFunc("POST /api/chat", h.Chat)
 
-	return mux
+	// Auth
+	mux.HandleFunc("GET /api/auth/config", h.AuthConfig)
+	mux.HandleFunc("POST /api/auth/google", h.Login)
+	mux.HandleFunc("POST /api/auth/logout", h.Logout)
+	mux.HandleFunc("GET /api/me", h.Me)
+	mux.HandleFunc("DELETE /api/me", h.DeleteMe)
+
+	// ほかのサイトから Cookie 付きで状態を変えるリクエストを送らせない（CSRF 対策）。
+	// Sec-Fetch-Site（無ければ Origin と Host）を見て、別のオリジンからの POST・PUT・DELETE などを 403 にする
+	return http.NewCrossOriginProtection().Handler(mux)
 }

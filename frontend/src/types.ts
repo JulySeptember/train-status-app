@@ -169,3 +169,17 @@ export interface ChatErrorBody {
   error: string;
   code: string;
 }
+
+// ログイン（GET /api/auth/config）。Google Identity Services のボタンに使う
+export interface AuthConfig {
+  googleClientId: string;
+}
+
+// ログイン中の利用者（GET /api/me）。メールアドレス・名前は保存していない
+export interface User {
+  createdAt: string;
+}
+
+export interface LoginResponse {
+  user: User;
+}

@@ -30,6 +30,9 @@ services:
     env_file:
       - path: ./backend/.env
         required: false
+    # Google でのログイン。クライアント ID は秘密の値ではない（infra/env/dev.tfvars と同じ）
+    environment:
+      GOOGLE_CLIENT_ID: 401009185515-et7htndp1m7733fq2itm5muptg0it6uq.apps.googleusercontent.com
     command: go run ./cmd/api
     stdin_open: true
     tty: true

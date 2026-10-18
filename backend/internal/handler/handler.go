@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"train-status-app/backend/internal/auth"
 	"train-status-app/backend/internal/route"
 	"train-status-app/backend/internal/service"
 )
@@ -16,6 +17,11 @@ type Handler struct {
 
 	// AI エージェント。API キーなどが設定されていなければ nil で、/api/chat は 503 を返す
 	chat ChatService
+
+	// ログイン（WithAuth で設定する）。設定していなければ nil で、ログインの API は 503 を返す
+	auth           *auth.Service
+	googleClientID string
+	secureCookie   bool
 }
 
 func New(s *service.Service, chat ChatService) *Handler {

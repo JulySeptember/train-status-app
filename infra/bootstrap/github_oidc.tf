@@ -158,12 +158,13 @@ data "aws_iam_policy_document" "github_deploy" {
     }
   }
 
-  # AI エージェントの利用上限を数えるテーブル
+  # AI エージェントの利用上限を数えるテーブルと、ログインした利用者のテーブル
   statement {
-    sid     = "AiUsageTable"
+    sid     = "AppTables"
     actions = ["dynamodb:*"]
     resources = [
       "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.current.account_id}:table/${local.ai_usage_table_name}",
+      "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.current.account_id}:table/${local.users_table_name}",
     ]
   }
 

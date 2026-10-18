@@ -1,6 +1,6 @@
 # ログイン・お気に入り・運行情報の通知 設計書
 
-- 状態: 設計中（2026-10-18）
+- 状態: 段階1（ログイン）を実装中（2026-10-18）
 - 対象: Google アカウントでのログイン、お気に入り（駅・路線・経路）、運行情報の Web Push 通知
 - 関連: [AI 鉄道エージェント 設計書](ai-api.md)、[経路探索エンジン 設計書](route-search.md)
 
@@ -47,7 +47,7 @@ Cognito を使わない理由:
 
 - 必要なのは「誰か」を特定することだけで、ユーザー管理・パスワード・MFA は要らない
 - Cognito の User Pool・ドメイン・IdP の Terraform と、トークンの更新の処理が増える
-- ID トークンの検証は `google.golang.org/api/idtoken` で済む
+- ID トークン（RS256 の JWT）の検証は、標準ライブラリで書ける（`internal/auth/google.go`）。`google.golang.org/api/idtoken` は依存が大きく、実行ファイルが大きくなる（Lambda の起動が遅くなる）ので使わない。Google の公開鍵（`https://www.googleapis.com/oauth2/v3/certs`）は `Cache-Control` の `max-age` のあいだ使い回す
 
 メールアドレス（パスワードやメールのコード）でのログインは作らない。パスワードのハッシュ・再設定・総当たり対策・メールの送信（SES は独自ドメインと本番利用の申請が要る）が増え、メールアドレスという個人情報も持つことになるため。必要になったら Cognito に移し、Google とメールの両方を Cognito で受け付ける（利用者は `sub` で付け替える）。
 
@@ -60,12 +60,13 @@ Cognito を使わない理由:
 
 ### 3.3 CSRF 対策
 
-フロントと API は CloudFront の同じオリジンなので、`SameSite=Lax` で他サイトからの POST には Cookie が付かない。加えて、状態を変えるリクエスト（POST・PUT・DELETE）では `Origin` ヘッダーが自分のオリジンと一致することを確かめる。
+フロントと API は CloudFront の同じオリジンなので、`SameSite=Lax` で他サイトからの POST には Cookie が付かない。加えて、Go 1.25 の `http.CrossOriginProtection` を router 全体にかけ、別のオリジンからの状態を変えるリクエスト（POST・PUT・DELETE など）を 403 にする。ブラウザの `Sec-Fetch-Site` を見る（無ければ `Origin` と `Host` を比べる）ので、許すオリジンの設定は要らない（CloudFront の後ろでは `Host` が API Gateway のものになり、`Origin` と比べられないため）。
 
 ### 3.4 API
 
 | メソッド・パス | 内容 |
 |---|---|
+| `GET /api/auth/config` | Google の OAuth クライアント ID。ログインを使えない（設定が無い）ときは 503 で、画面はログインのボタンを出さない |
 | `POST /api/auth/google` | ID トークンを受け取り、セッションを発行する |
 | `POST /api/auth/logout` | セッションを消す |
 | `GET /api/me` | ログイン中なら 200（利用者の作成日など）、していなければ 401 |
@@ -75,7 +76,8 @@ Cognito を使わない理由:
 
 ### 3.5 Google 側の準備（手作業）
 
-- Google Cloud のプロジェクトで OAuth 同意画面を作る。スコープは `openid` だけにする（`email`・`profile` は使わない）
+- Google Cloud のプロジェクトで OAuth 同意画面を作る
+- 「Google でログイン」のボタンが返す ID トークンには、スコープにかかわらずメールアドレス・名前・顔写真も入る。バックエンドは `sub` 以外を読まず、保存もしない
 - OAuth クライアント ID（ウェブアプリケーション）を作り、承認済みの JavaScript 生成元に CloudFront のドメインと `http://localhost:5173` を登録する
 - 同意画面にプライバシーポリシーの URL が要るので、`/privacy` のページを作る（7章）
 
@@ -177,6 +179,7 @@ DynamoDB に1つのテーブル（`train-status-app-dev-users`、オンデマン
 | pk | sk | 中身 |
 |---|---|---|
 | `USER#<sub>` | `PROFILE` | 作成日 |
+| `USER#<sub>` | `SESSION#<セッションIDの SHA-256>` | `expiresAt`（TTL）。退会のときにセッションを引くための目印 |
 | `USER#<sub>` | `FAV#STATION#<駅ID>` など | 登録日 |
 | `USER#<sub>` | `ALERT#<路線ID>` | 曜日・時間帯。GSI 用に `gsi1pk = ALERT#<路線ID>` |
 | `USER#<sub>` | `PUSH#<endpoint の SHA-256>` | endpoint・鍵 |
@@ -184,16 +187,17 @@ DynamoDB に1つのテーブル（`train-status-app-dev-users`、オンデマン
 | `NOTIFY` | `STATE` | 通知用の前回の状態（全路線を1つの項目にまとめ、1回の確認で読み書き1回ずつにする） |
 
 - GSI `gsi1`（`gsi1pk`）で、路線を見ている利用者を引く
-- 退会は `pk = USER#<sub>` を Query して全部消し、その利用者のセッションも消す（セッションを引けるよう、PROFILE にセッションのハッシュの一覧を持つ）
+- セッションは `SESSION#<hash>` のほかに、利用者の側にも目印（`USER#<sub>` / `SESSION#<hash>`、TTL 付き）を書く
+- 退会は `pk = USER#<sub>` を Query して全部消し、目印から引いたセッションも消す
 - 手元では、テーブル名の環境変数が無ければメモリ上の実装を使う（`ai/fake` と同じ考え方）。service のテストもメモリ上の実装で行う
 
 ---
 
 ## 7. プライバシーポリシー
 
-`/privacy` のページを足し、フッターからリンクする。書く内容:
+`/privacy` のページを足し、フッターからリンクする。ログイン・ログアウト・退会は `/account` の画面で行い、ヘッダーの右端（スマホでも出す）からリンクする。書く内容:
 
-- 保存するもの（Google の利用者 ID、お気に入り、通知の条件、通知の購読）と、保存しないもの（メールアドレス・名前・顔写真）
+- 保存するもの（Google の利用者 ID、お気に入り、通知の条件、通知の購読）と、受け取っても保存しないもの（メールアドレス・名前・顔写真）
 - 使い道（お気に入りと通知のためだけ）
 - 退会すると全部消えること
 - Cookie はログインの状態を保つためだけに使うこと
