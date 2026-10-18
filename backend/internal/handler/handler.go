@@ -9,6 +9,7 @@ import (
 
 	"train-status-app/backend/internal/auth"
 	"train-status-app/backend/internal/favorite"
+	"train-status-app/backend/internal/notify"
 	"train-status-app/backend/internal/route"
 	"train-status-app/backend/internal/service"
 )
@@ -26,6 +27,9 @@ type Handler struct {
 
 	// お気に入り（WithFavorites で設定する）。設定していなければ nil で、お気に入りの API は 503 を返す
 	favorites *favorite.Service
+
+	// 運行情報の通知（WithNotify で設定する）。設定していなければ nil で、通知の API は 503 を返す
+	notify *notify.Service
 }
 
 func New(s *service.Service, chat ChatService) *Handler {

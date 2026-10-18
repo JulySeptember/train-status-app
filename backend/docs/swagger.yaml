@@ -62,6 +62,17 @@ definitions:
       to:
         type: string
     type: object
+  handler.AlertRequest:
+    properties:
+      days:
+        items:
+          $ref: '#/definitions/notify.Day'
+        type: array
+      end:
+        type: string
+      start:
+        type: string
+    type: object
   handler.AuthConfig:
     properties:
       googleClientId:
@@ -84,6 +95,47 @@ definitions:
       user:
         $ref: '#/definitions/auth.User'
     type: object
+  handler.PushConfig:
+    properties:
+      publicKey:
+        type: string
+    type: object
+  handler.TestResult:
+    properties:
+      sent:
+        type: integer
+    type: object
+  handler.UnsubscribeRequest:
+    properties:
+      endpoint:
+        type: string
+    type: object
+  notify.Alert:
+    properties:
+      days:
+        items:
+          $ref: '#/definitions/notify.Day'
+        type: array
+      end:
+        type: string
+      railwayId:
+        type: string
+      start:
+        type: string
+    type: object
+  notify.Day:
+    enum:
+    - weekday
+    - holiday
+    type: string
+    x-enum-comments:
+      Holiday: 土休日
+    x-enum-descriptions:
+    - ""
+    - 土休日
+    x-enum-varnames:
+    - Weekday
+    - Holiday
   service.DirectionTimetable:
     properties:
       calendar:
@@ -332,6 +384,18 @@ definitions:
       unavailable:
         description: 事業者の運行情報を取得できなかったときは true（status は「運行情報を取得できませんでした」）
         type: boolean
+    type: object
+  webpush.Subscription:
+    properties:
+      endpoint:
+        type: string
+      keys:
+        properties:
+          auth:
+            type: string
+          p256dh:
+            type: string
+        type: object
     type: object
 info:
   contact: {}
@@ -593,6 +657,123 @@ paths:
       summary: Get the logged-in user
       tags:
       - Auth
+  /api/me/alerts:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/notify.Alert'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get notification settings
+      tags:
+      - Notifications
+  /api/me/alerts/{railwayId}:
+    delete:
+      parameters:
+      - description: railway ID
+        in: path
+        name: railwayId
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Remove the notification setting of a railway
+      tags:
+      - Notifications
+    put:
+      consumes:
+      - application/json
+      description: days are weekday and/or holiday. start and end are HH:MM in 30-minute
+        steps (start <= now < end).
+      parameters:
+      - description: railway ID
+        in: path
+        name: railwayId
+        required: true
+        type: string
+      - description: days and time window
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.AlertRequest'
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: limit reached
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Set the notification setting of a railway
+      tags:
+      - Notifications
   /api/me/favorites:
     get:
       description: Stations, railways and journeys the logged-in user registered,
@@ -718,6 +899,149 @@ paths:
       summary: Add a favorite
       tags:
       - Favorites
+  /api/me/push-subscriptions:
+    delete:
+      consumes:
+      - application/json
+      parameters:
+      - description: endpoint of the subscription
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.UnsubscribeRequest'
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Stop push notifications on this device
+      tags:
+      - Notifications
+    post:
+      consumes:
+      - application/json
+      description: The body is PushSubscription.toJSON() of the browser. Only known
+        push services are accepted.
+      parameters:
+      - description: push subscription
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/webpush.Subscription'
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Register this device for push notifications
+      tags:
+      - Notifications
+  /api/me/push-subscriptions/test:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.TestResult'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: no device
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "429":
+          description: Too Many Requests
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Send a test notification to the user's devices
+      tags:
+      - Notifications
+  /api/push/config:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.PushConfig'
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get the VAPID public key
+      tags:
+      - Notifications
   /api/routes:
     get:
       produces:

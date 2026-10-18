@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -23,13 +24,16 @@ import (
 	"train-status-app/backend/internal/favorite"
 	"train-status-app/backend/internal/handler"
 	"train-status-app/backend/internal/middleware"
+	"train-status-app/backend/internal/notify"
 	"train-status-app/backend/internal/odptkey"
 	"train-status-app/backend/internal/router"
 	"train-status-app/backend/internal/service"
 
 	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/awslabs/aws-lambda-go-api-proxy/httpadapter"
 )
 
@@ -53,12 +57,24 @@ func main() {
 
 	onLambda := isLambda()
 
+	store := newUserStore(cfg, onLambda)
+	keys := vapidKeys(cfg, onLambda)
+
+	// 通知用の Lambda（EventBridge から5分ごとに呼ばれる）。手元では1回だけ確かめて終わる
+	if cfg.AppMode == "notify" {
+		runNotifier(store, keys, svc, onLambda)
+		return
+	}
+
 	h := handler.New(svc, newChat(cfg, svc, onLambda))
 
-	if a, favorites := newAuth(cfg, onLambda); a != nil {
+	if cfg.GoogleClientID == "" || store == nil {
+		log.Printf("login is disabled (GOOGLE_CLIENT_ID or USERS_TABLE is not set)")
+	} else {
 		// Lambda は CloudFront の HTTPS の後ろで動く
-		h.WithAuth(a, cfg.GoogleClientID, onLambda)
-		h.WithFavorites(favorite.NewService(favorites, svc))
+		h.WithAuth(auth.NewService(auth.NewGoogleVerifier(cfg.GoogleClientID), store), cfg.GoogleClientID, onLambda)
+		h.WithFavorites(favorite.NewService(store, svc))
+		h.WithNotify(notify.NewService(store, svc, keys, pushSubject))
 	}
 
 	r := router.New(h)
@@ -140,36 +156,88 @@ func newChat(cfg config.Config, svc *service.Service, onLambda bool) handler.Cha
 	)
 }
 
-// newAuth はログインと、お気に入りの保存先を組み立てる。使えないときは nil を返し、ログイン・お気に入りの API は 503 になる。
-// Lambda では利用者・セッション・お気に入りを DynamoDB に、手元ではメモリ上に保存する（再起動で消える）。
-func newAuth(cfg config.Config, onLambda bool) (*auth.Service, favorite.Store) {
+// pushSubject は、push サービスが送り手に連絡するための URL（VAPID の sub）
+const pushSubject = "https://github.com/JulySeptember/train-status-app"
 
-	if cfg.GoogleClientID == "" {
-		log.Printf("login is disabled (GOOGLE_CLIENT_ID is not set)")
-		return nil, nil
-	}
+// userStore は、利用者・セッション・お気に入り・通知の保存先
+type userStore interface {
+	auth.Store
+	favorite.Store
+	notify.Store
+}
 
-	verifier := auth.NewGoogleVerifier(cfg.GoogleClientID)
+// newUserStore は、利用者の保存先を作る。Lambda では DynamoDB に、手元ではメモリ上に保存する（再起動で消える）。
+// Lambda でテーブルが設定されていなければ nil を返し、ログイン・お気に入り・通知の API は 503 になる
+func newUserStore(cfg config.Config, onLambda bool) userStore {
 
 	if cfg.UsersTable == "" {
 		if onLambda {
-			log.Printf("login is disabled (USERS_TABLE is not set)")
-			return nil, nil
+			return nil
 		}
-		log.Printf("login is enabled (sessions are kept in memory)")
-		store := auth.NewMemoryStore()
-		return auth.NewService(verifier, store), store
+		log.Printf("users and sessions are kept in memory")
+		return auth.NewMemoryStore()
 	}
 
 	// 設定を読むだけで、AWS には接続しない
 	awsCfg, err := awsconfig.LoadDefaultConfig(context.Background())
 	if err != nil {
-		log.Printf("login is disabled (load aws config: %v)", err)
-		return nil, nil
+		log.Printf("users table is disabled (load aws config: %v)", err)
+		return nil
 	}
 
-	store := dynamostore.New(dynamodb.NewFromConfig(awsCfg), cfg.UsersTable)
-	return auth.NewService(verifier, store), store
+	return dynamostore.New(dynamodb.NewFromConfig(awsCfg), cfg.UsersTable)
+}
+
+// vapidKeys は、通知に使う VAPID の鍵を返す。Lambda では初めて使うときに SSM から、手元では環境変数から読む。
+// 設定が無ければ nil を返し、購読と通知は使えない
+func vapidKeys(cfg config.Config, onLambda bool) notify.Keys {
+
+	if !onLambda {
+		if cfg.VAPIDPrivateKey == "" {
+			log.Printf("push notification is disabled (VAPID_PRIVATE_KEY is not set)")
+			return nil
+		}
+		return notify.NewKeyLoader(func(context.Context) (string, error) { return cfg.VAPIDPrivateKey, nil })
+	}
+
+	if cfg.VAPIDKeyParameter == "" {
+		log.Printf("push notification is disabled (VAPID_KEY_PARAMETER is not set)")
+		return nil
+	}
+
+	return notify.NewKeyLoader(func(ctx context.Context) (string, error) {
+		awsCfg, err := awsconfig.LoadDefaultConfig(ctx)
+		if err != nil {
+			return "", err
+		}
+		out, err := ssm.NewFromConfig(awsCfg).GetParameter(ctx, &ssm.GetParameterInput{
+			Name:           aws.String(cfg.VAPIDKeyParameter),
+			WithDecryption: aws.Bool(true),
+		})
+		if err != nil {
+			return "", fmt.Errorf("read vapid key: %w", err)
+		}
+		return aws.ToString(out.Parameter.Value), nil
+	})
+}
+
+// runNotifier は、運行情報を確かめて通知を送る。Lambda では EventBridge から呼ばれるたびに、手元では1回だけ行う
+func runNotifier(store userStore, keys notify.Keys, svc *service.Service, onLambda bool) {
+
+	if store == nil {
+		log.Fatal("notifier needs USERS_TABLE")
+	}
+
+	n := notify.NewNotifier(store, svc, svc, keys, pushSubject)
+
+	if onLambda {
+		lambda.Start(func(ctx context.Context) error { return n.Run(ctx) })
+		return
+	}
+
+	if err := n.Run(context.Background()); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func isLambda() bool {

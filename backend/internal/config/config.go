@@ -45,6 +45,15 @@ type Config struct {
 
 	// 利用者とセッションを保存する DynamoDB のテーブル名。空なら（手元では）メモリ上に保存する
 	UsersTable string
+
+	// notify なら、API ではなく運行情報の通知を1回確かめる（通知用の Lambda・手元での確認）
+	AppMode string
+
+	// 手元で使う VAPID の秘密鍵（cmd/vapid-key の出力）。本番では環境変数に置かず、SSM から読む
+	VAPIDPrivateKey string
+
+	// Lambda で使う、VAPID の秘密鍵を入れた SSM のパラメータ名
+	VAPIDKeyParameter string
 }
 
 func Load() Config {
@@ -72,6 +81,10 @@ func Load() Config {
 
 		GoogleClientID: os.Getenv("GOOGLE_CLIENT_ID"),
 		UsersTable:     os.Getenv("USERS_TABLE"),
+
+		AppMode:           os.Getenv("APP_MODE"),
+		VAPIDPrivateKey:   os.Getenv("VAPID_PRIVATE_KEY"),
+		VAPIDKeyParameter: os.Getenv("VAPID_KEY_PARAMETER"),
 	}
 }
 

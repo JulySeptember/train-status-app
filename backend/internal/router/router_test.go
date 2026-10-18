@@ -12,6 +12,8 @@ import (
 	"train-status-app/backend/internal/auth"
 	"train-status-app/backend/internal/favorite"
 	"train-status-app/backend/internal/handler"
+	"train-status-app/backend/internal/notify"
+	"train-status-app/backend/internal/notify/webpush"
 )
 
 type stubVerifier struct{}
@@ -302,5 +304,76 @@ func TestFavoritesDisabled(t *testing.T) {
 	app := newAuthApp(true)
 	if rec := do(t, app, http.MethodGet, "/api/me/favorites", "", nil, ""); rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("favorites without service: %d", rec.Code)
+	}
+}
+
+type notifyCatalog struct{ stubCatalog }
+
+func (notifyCatalog) RailwayName(string) string { return "三田線" }
+
+type vapid struct{ keys *webpush.Keys }
+
+func (v vapid) Keys(context.Context) (*webpush.Keys, error) { return v.keys, nil }
+
+func TestNotifyAPI(t *testing.T) {
+
+	keys, err := webpush.ParseKeys("q1dXpw3UpT5VOmu_cf_v6ih07Aems3njxI-JWgLcM94")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	store := auth.NewMemoryStore()
+	app := New(handler.New(nil, nil).
+		WithAuth(auth.NewService(stubVerifier{}, store), "client-id", true).
+		WithNotify(notify.NewService(store, notifyCatalog{}, vapid{keys}, "mailto:a@example.com")))
+
+	rec := do(t, app, http.MethodGet, "/api/push/config", "", nil, "")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), keys.Public) {
+		t.Fatalf("push config: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := do(t, app, http.MethodGet, "/api/me/alerts", "", nil, ""); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("alerts without login: %d", rec.Code)
+	}
+
+	cookie := sessionCookie(t, do(t, app, http.MethodPost, "/api/auth/google", `{"credential":"good"}`, nil, "same-origin"), "__Host-session")
+
+	path := "/api/me/alerts/odpt.Railway%3AToei.Mita"
+	if rec := do(t, app, http.MethodPut, path, `{"days":["weekday"],"start":"07:00","end":"09:30"}`, cookie, "same-origin"); rec.Code != http.StatusNoContent {
+		t.Fatalf("set alert: %d %s", rec.Code, rec.Body)
+	}
+	rec = do(t, app, http.MethodGet, "/api/me/alerts", "", cookie, "")
+	if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != `[{"railwayId":"odpt.Railway:Toei.Mita","days":["weekday"],"start":"07:00","end":"09:30"}]` {
+		t.Fatalf("alerts: %d %s", rec.Code, rec.Body)
+	}
+	if rec := do(t, app, http.MethodPut, path, `{"days":["weekday"],"start":"09:30","end":"07:00"}`, cookie, "same-origin"); rec.Code != http.StatusBadRequest {
+		t.Fatalf("invalid alert: %d", rec.Code)
+	}
+	if rec := do(t, app, http.MethodPut, path, `{"days":["weekday"],"start":"07:00","end":"09:30"}`, cookie, "cross-site"); rec.Code != http.StatusForbidden {
+		t.Fatalf("cross-site: %d", rec.Code)
+	}
+
+	// 既知の push サービス以外には送らない
+	if rec := do(t, app, http.MethodPost, "/api/me/push-subscriptions", `{"endpoint":"https://evil.example.com/x","keys":{"p256dh":"BAAA","auth":"AAAA"}}`, cookie, "same-origin"); rec.Code != http.StatusBadRequest {
+		t.Fatalf("invalid subscription: %d", rec.Code)
+	}
+	if rec := do(t, app, http.MethodPost, "/api/me/push-subscriptions/test", "", cookie, "same-origin"); rec.Code != http.StatusConflict {
+		t.Fatalf("test without device: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := do(t, app, http.MethodDelete, path, "", cookie, "same-origin"); rec.Code != http.StatusNoContent {
+		t.Fatalf("remove alert: %d", rec.Code)
+	}
+	if rec := do(t, app, http.MethodGet, "/api/me/alerts", "", cookie, ""); strings.TrimSpace(rec.Body.String()) != "[]" {
+		t.Fatalf("alerts after remove: %s", rec.Body)
+	}
+}
+
+func TestNotifyDisabled(t *testing.T) {
+	app := newAuthApp(true)
+	for _, path := range []string{"/api/push/config", "/api/me/alerts"} {
+		if rec := do(t, app, http.MethodGet, path, "", nil, ""); rec.Code != http.StatusServiceUnavailable {
+			t.Errorf("%s: got %d, want 503", path, rec.Code)
+		}
 	}
 }

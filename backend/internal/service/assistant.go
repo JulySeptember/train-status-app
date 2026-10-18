@@ -79,9 +79,7 @@ func (s *Service) GetRailwayConditions(ctx context.Context) ([]RailwayCondition,
 			Text:         text,
 		}
 
-		isNormalText := text == "" || slices.ContainsFunc(normalWords, func(w string) bool {
-			return strings.Contains(text, w)
-		})
+		isNormalText := IsNormalText(text)
 
 		switch {
 		case slices.Contains(conds.suspended, r.SameAs):
@@ -346,4 +344,11 @@ func (s *Service) HasStation(id string) bool {
 func (s *Service) HasRailway(id string) bool {
 	_, ok := s.railwayNames[id]
 	return ok
+}
+
+// IsNormalText は、運行情報の文章が平常を表すか（文章が無いときも平常とする）を返す
+func IsNormalText(text string) bool {
+	return text == "" || slices.ContainsFunc(normalWords, func(w string) bool {
+		return strings.Contains(text, w)
+	})
 }

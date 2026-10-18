@@ -197,3 +197,18 @@ export interface Favorites {
   railways: string[];
   journeys: JourneyFavorite[];
 }
+
+// 運行情報の通知（GET /api/me/alerts）。時間帯は start 以上 end 未満（HH:MM、30分単位、24:00 まで）
+export type AlertDay = "weekday" | "holiday";
+
+export interface Alert {
+  railwayId: string;
+  days: AlertDay[];
+  start: string;
+  end: string;
+}
+
+// GET /api/push/config
+export interface PushConfig {
+  publicKey: string;
+}
