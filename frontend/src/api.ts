@@ -98,6 +98,20 @@ async function getMe(): Promise<User | null> {
   return await res.json();
 }
 
+// セッションが切れている（401）ときは null を返す
+async function getFavorites(): Promise<Favorites | null> {
+  const res = await fetch(`${API}/me/favorites`);
+
+  if (res.status === 401) {
+    return null;
+  }
+  if (!res.ok) {
+    throw new Error(await res.text());
+  }
+
+  return await res.json();
+}
+
 // ログインを使えない（バックエンドに設定が無い）ときは null を返す
 async function getAuthConfig(): Promise<AuthConfig | null> {
   const res = await fetch(`${API}/auth/config`);
@@ -180,9 +194,7 @@ export const api = {
     return send<void>("DELETE", "/me");
   },
 
-  getFavorites() {
-    return request<Favorites>("/me/favorites");
-  },
+  getFavorites,
 
   addFavorite(kind: FavoriteKind, id: string) {
     return send<void>("PUT", favoritePath(kind, id));

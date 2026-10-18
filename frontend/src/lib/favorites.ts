@@ -40,25 +40,36 @@ function withItem(
   return { ...favorites, [kind]: add ? [...rest, id] : rest };
 }
 
-// ログイン中の利用者のお気に入り。ログインしていなければ取りに行かず、data は undefined
+// ログイン中の利用者のお気に入り。ログインしていなければ取りに行かず、favorites は undefined。
+// サーバーでセッションが切れていたら（401）、ログインの状態を取り直す（アカウントの画面や星がログイン前の表示になる）
 export function useFavorites() {
+  const client = useQueryClient();
   const me = useMe();
 
-  return useQuery({
+  const query = useQuery({
     queryKey: FAVORITES_KEY,
-    queryFn: api.getFavorites,
+    queryFn: async () => {
+      const favorites = await api.getFavorites();
+      if (favorites === null) {
+        await client.invalidateQueries({ queryKey: ["me"] });
+      }
+      return favorites;
+    },
     enabled: !!me.data,
   });
+
+  // ログアウトした（セッションが切れた）あとに、前に読み込んだお気に入りを出さない
+  const favorites = me.data ? (query.data ?? undefined) : undefined;
+
+  return { favorites, ready: !!favorites };
 }
 
 // お気に入りの登録・解除。画面にはすぐ反映し、失敗したら元に戻す
 export function useToggleFavorite(kind: FavoriteKind, id: string) {
   const client = useQueryClient();
-  const favorites = useFavorites();
+  const { favorites, ready } = useFavorites();
 
-  const active = favorites.data
-    ? ids(favorites.data, kind).includes(id)
-    : false;
+  const active = favorites ? ids(favorites, kind).includes(id) : false;
 
   const mutation = useMutation({
     mutationFn: (add: boolean) =>
@@ -75,13 +86,15 @@ export function useToggleFavorite(kind: FavoriteKind, id: string) {
       if (context?.previous) {
         client.setQueryData(FAVORITES_KEY, context.previous);
       }
+      // セッションが切れていたときは、ログイン前の表示に戻す
+      client.invalidateQueries({ queryKey: ["me"] });
     },
     onSettled: () => client.invalidateQueries({ queryKey: FAVORITES_KEY }),
   });
 
   return {
     // お気に入りを読み込めていなければ、登録・解除できない
-    ready: favorites.isSuccess,
+    ready,
     active,
     toggle: () => mutation.mutate(!active),
     pending: mutation.isPending,

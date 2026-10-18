@@ -261,6 +261,10 @@ func TestFavorites(t *testing.T) {
 	if rec := do(t, app, http.MethodDelete, "/api/me/favorites/railways/odpt.Railway%3AToei.Mita", "", cookie, "same-origin"); rec.Code != http.StatusNoContent {
 		t.Fatalf("delete: %d", rec.Code)
 	}
+	// データの更新で無くなった駅も外せる
+	if rec := do(t, app, http.MethodDelete, "/api/me/favorites/stations/odpt.Station%3ANowhere", "", cookie, "same-origin"); rec.Code != http.StatusNoContent {
+		t.Fatalf("delete removed station: %d", rec.Code)
+	}
 	rec = do(t, app, http.MethodGet, "/api/me/favorites", "", cookie, "")
 	if !strings.Contains(rec.Body.String(), `"railways":[]`) {
 		t.Fatalf("railway should be removed: %s", rec.Body)

@@ -268,7 +268,7 @@ function OperatorSummary({
 
 // ログインした利用者のお気に入り。登録が無ければ出さない
 function FavoritesSection() {
-  const favorites = useFavorites();
+  const { favorites } = useFavorites();
   const status = useQuery({
     queryKey: ["status"],
     queryFn: api.getStatus,
@@ -279,7 +279,7 @@ function FavoritesSection() {
     queryFn: api.getAllStations,
   });
 
-  const data = favorites.data;
+  const data = favorites;
   if (
     !data ||
     data.stations.length + data.railways.length + data.journeys.length === 0
