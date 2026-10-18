@@ -39,6 +39,32 @@ resource "aws_dynamodb_table" "users" {
     type = "S"
   }
 
+  # 通知の条件（USER#<sub> / ALERT#<路線ID>）だけが持つ。路線を見ている利用者を引く
+  attribute {
+    name = "gsi1pk"
+    type = "S"
+  }
+
+  attribute {
+    name = "gsi1sk"
+    type = "S"
+  }
+
+  global_secondary_index {
+    name            = "gsi1"
+    projection_type = "ALL"
+
+    key_schema {
+      attribute_name = "gsi1pk"
+      key_type       = "HASH"
+    }
+
+    key_schema {
+      attribute_name = "gsi1sk"
+      key_type       = "RANGE"
+    }
+  }
+
   ttl {
     attribute_name = "expiresAt"
     enabled        = true

@@ -4,9 +4,37 @@ import { api } from "@/api";
 
 const ME_KEY = ["me"];
 
-// ログインし直し・ログアウト・退会したら、前の利用者のお気に入り（lib/favorites.ts）を残さない
-function clearFavorites(client: ReturnType<typeof useQueryClient>) {
-  client.removeQueries({ queryKey: ["favorites"] });
+// ログインし直し・ログアウト・退会したら、前の利用者のデータ（lib/favorites.ts・lib/push.ts）を残さない
+function clearUserData(client: ReturnType<typeof useQueryClient>) {
+  for (const key of ["favorites", "alerts", "pushDevice"]) {
+    client.removeQueries({ queryKey: [key] });
+  }
+}
+
+// ログアウト・退会のときに、この端末の通知の購読を外す（次にこの端末を使う人に、前の人の通知を出さない）。
+// server が true なら、サーバーの購読からも外す（ログアウトの前。退会ではサーバーがまとめて消す）。
+// 失敗してもログアウト・退会は続ける（サーバーの購読は、退会すれば消える）
+async function forgetThisDevice(server: boolean) {
+  try {
+    if (!("serviceWorker" in navigator)) {
+      return;
+    }
+    const registration = await navigator.serviceWorker.getRegistration("/");
+    const subscription = await registration?.pushManager?.getSubscription();
+    if (subscription) {
+      try {
+        if (server) {
+          await api.unsubscribePush(subscription.endpoint);
+        }
+      } finally {
+        // サーバーから外せなくても（セッション切れなど）、ブラウザの購読は必ず外す。
+        // endpoint が無効になるので、次に送ったときに 410 が返り、サーバーの購読も消える
+        await subscription.unsubscribe();
+      }
+    }
+  } catch {
+    // 何もしない
+  }
 }
 
 // ログインの設定。ログインを使えない（バックエンドに設定が無い）ときは data が null
@@ -34,7 +62,7 @@ export function useLogin() {
     mutationFn: api.login,
     onSuccess: (res) => {
       // 別の利用者でログインし直したときに、前のお気に入りを出さない
-      clearFavorites(client);
+      clearUserData(client);
       client.setQueryData(ME_KEY, res.user);
     },
   });
@@ -45,11 +73,14 @@ export function useLogout() {
   const client = useQueryClient();
 
   return useMutation({
-    mutationFn: api.logout,
+    mutationFn: async () => {
+      await forgetThisDevice(true);
+      await api.logout();
+    },
     onSuccess: () => {
       window.google?.accounts.id.disableAutoSelect();
       client.setQueryData(ME_KEY, null);
-      clearFavorites(client);
+      clearUserData(client);
     },
   });
 }
@@ -58,11 +89,14 @@ export function useDeleteAccount() {
   const client = useQueryClient();
 
   return useMutation({
-    mutationFn: api.deleteAccount,
+    mutationFn: async () => {
+      await api.deleteAccount();
+      await forgetThisDevice(false);
+    },
     onSuccess: () => {
       window.google?.accounts.id.disableAutoSelect();
       client.setQueryData(ME_KEY, null);
-      clearFavorites(client);
+      clearUserData(client);
     },
   });
 }

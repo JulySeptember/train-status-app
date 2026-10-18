@@ -14,6 +14,10 @@ locals {
   # ログインした利用者とセッション（infra/bootstrap と同じ名前にする）
   users_table_name = "${local.name_prefix}-users"
 
+  # 運行情報の通知（Web Push）の VAPID の秘密鍵（infra/bootstrap と同じ名前にする）。
+  # Terraform では作らず、backend/cmd/vapid-key で作って手で登録する
+  vapid_key_parameter = "/${var.project_name}/${var.env}/vapid-private-key"
+
   common_tags = merge(
     var.tags,
     {

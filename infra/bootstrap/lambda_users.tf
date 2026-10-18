@@ -3,7 +3,8 @@
 
 locals {
   # infra/main と同じ名前にする
-  users_table_name = "${local.name_prefix}-users"
+  users_table_name    = "${local.name_prefix}-users"
+  vapid_key_parameter = "/${var.project_name}/${var.env}/vapid-private-key"
 }
 
 data "aws_iam_policy_document" "lambda_users" {
@@ -21,6 +22,24 @@ data "aws_iam_policy_document" "lambda_users" {
     ]
     resources = [
       "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.current.account_id}:table/${local.users_table_name}",
+    ]
+  }
+
+  # 通知: 路線を見ている利用者を GSI から引く
+  statement {
+    sid     = "QueryUsersIndex"
+    actions = ["dynamodb:Query"]
+    resources = [
+      "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.current.account_id}:table/${local.users_table_name}/index/*",
+    ]
+  }
+
+  # 通知: VAPID の秘密鍵（SecureString）。AWS 管理キー（aws/ssm）で暗号化するので、kms の権限は要らない
+  statement {
+    sid     = "ReadVapidKey"
+    actions = ["ssm:GetParameter"]
+    resources = [
+      "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${local.vapid_key_parameter}",
     ]
   }
 }

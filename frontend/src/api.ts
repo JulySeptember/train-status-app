@@ -1,4 +1,5 @@
 import type {
+  Alert,
   AuthConfig,
   ChatErrorBody,
   ChatMessage,
@@ -8,6 +9,7 @@ import type {
   JourneyQuery,
   JourneySearch,
   LoginResponse,
+  PushConfig,
   Railway,
   Station,
   StationDetail,
@@ -202,5 +204,55 @@ export const api = {
 
   removeFavorite(kind: FavoriteKind, id: string) {
     return send<void>("DELETE", favoritePath(kind, id));
+  },
+
+  // 通知を使えない（VAPID の鍵が無い）ときは null を返す
+  async getPushConfig(): Promise<PushConfig | null> {
+    const res = await fetch(`${API}/push/config`);
+    if (res.status === 503) {
+      return null;
+    }
+    if (!res.ok) {
+      throw new Error(await res.text());
+    }
+    return await res.json();
+  },
+
+  getAlerts() {
+    return request<Alert[]>("/me/alerts");
+  },
+
+  setAlert({ railwayId, ...body }: Alert) {
+    return send<void>(
+      "PUT",
+      `/me/alerts/${encodeURIComponent(railwayId)}`,
+      body,
+    );
+  },
+
+  removeAlert(railwayId: string) {
+    return send<void>("DELETE", `/me/alerts/${encodeURIComponent(railwayId)}`);
+  },
+
+  // subscription は PushSubscription.toJSON() の形
+  subscribePush(subscription: PushSubscriptionJSON) {
+    return send<void>("POST", "/me/push-subscriptions", subscription);
+  },
+
+  // この端末がログイン中の利用者の購読に登録されているか（endpoint は URL に入れない）
+  subscriptionStatus(endpoint: string) {
+    return send<{ registered: boolean }>(
+      "POST",
+      "/me/push-subscriptions/status",
+      { endpoint },
+    );
+  },
+
+  unsubscribePush(endpoint: string) {
+    return send<void>("DELETE", "/me/push-subscriptions", { endpoint });
+  },
+
+  sendTestNotification() {
+    return send<{ sent: number }>("POST", "/me/push-subscriptions/test");
   },
 };

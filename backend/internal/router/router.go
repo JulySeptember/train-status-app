@@ -55,6 +55,16 @@ func New(h *handler.Handler) http.Handler {
 	mux.HandleFunc("PUT /api/me/favorites/{kind}/{id}", h.AddFavorite)
 	mux.HandleFunc("DELETE /api/me/favorites/{kind}/{id}", h.RemoveFavorite)
 
+	// Notifications
+	mux.HandleFunc("GET /api/push/config", h.PushConfig)
+	mux.HandleFunc("GET /api/me/alerts", h.Alerts)
+	mux.HandleFunc("PUT /api/me/alerts/{railwayId}", h.SetAlert)
+	mux.HandleFunc("DELETE /api/me/alerts/{railwayId}", h.RemoveAlert)
+	mux.HandleFunc("POST /api/me/push-subscriptions", h.Subscribe)
+	mux.HandleFunc("DELETE /api/me/push-subscriptions", h.Unsubscribe)
+	mux.HandleFunc("POST /api/me/push-subscriptions/status", h.SubscriptionStatus)
+	mux.HandleFunc("POST /api/me/push-subscriptions/test", h.SendTestNotification)
+
 	// ほかのサイトから Cookie 付きで状態を変えるリクエストを送らせない（CSRF 対策）。
 	// Sec-Fetch-Site（無ければ Origin と Host）を見て、別のオリジンからの POST・PUT・DELETE などを 403 にする
 	return http.NewCrossOriginProtection().Handler(mux)

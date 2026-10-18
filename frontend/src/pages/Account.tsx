@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import Error from "@/components/Error";
 import GoogleSignInButton from "@/components/GoogleSignInButton";
 import Loading from "@/components/Loading";
+import NotificationSettings from "@/components/NotificationSettings";
 import PageTitle from "@/components/PageTitle";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,7 +39,7 @@ function LoggedOut({ clientId }: { clientId: string }) {
     <div className="space-y-4">
       <p className="text-foreground/80">
         Google
-        アカウントでログインすると、駅・路線・経路をお気に入りに登録して、ホームからすぐ開けるようになります（運行情報の通知は準備中）。ログインしなくても、ほかの機能はすべて使えます。
+        アカウントでログインすると、駅・路線・経路をお気に入りに登録して、ホームからすぐ開けるようになります。登録した路線の運行情報の通知も受け取れます。ログインしなくても、ほかの機能はすべて使えます。
       </p>
 
       <GoogleSignInButton
@@ -100,6 +101,8 @@ function LoggedIn({ createdAt }: { createdAt: string }) {
           ログアウトできませんでした。もう一度お試しください。
         </p>
       )}
+
+      <NotificationSettings />
 
       <Dialog open={confirming} onOpenChange={setConfirming}>
         <DialogContent>

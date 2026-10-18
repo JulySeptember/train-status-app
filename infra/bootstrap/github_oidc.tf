@@ -132,6 +132,16 @@ data "aws_iam_policy_document" "github_deploy" {
     actions = ["lambda:*"]
     resources = [
       "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:${local.name_prefix}-api",
+      "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:${local.name_prefix}-notifier",
+    ]
+  }
+
+  # 運行情報の通知を5分ごとに呼ぶ EventBridge のルール（ターゲットは Lambda なので、ロールを渡さない）
+  statement {
+    sid     = "EventBridgeRules"
+    actions = ["events:*"]
+    resources = [
+      "arn:aws:events:${var.aws_region}:${data.aws_caller_identity.current.account_id}:rule/${local.name_prefix}-*",
     ]
   }
 

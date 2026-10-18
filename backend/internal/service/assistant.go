@@ -47,6 +47,12 @@ type RailwayCondition struct {
 
 	// 運行情報の文章
 	Text string `json:"text"`
+
+	// 今回、この路線の運行情報（文章）を取得できたか。配信していない事業者は false
+	StatusAvailable bool `json:"-"`
+
+	// 今回、この路線の列車位置（遅れ）を取得できたか。列車位置を配信していない路線は true（もともと遅れに使わない）
+	LocationAvailable bool `json:"-"`
 }
 
 // GetRailwayConditions は、路線ごとの運行状況を分類して返す。経路検索と同じキャッシュを使う。
@@ -71,24 +77,25 @@ func (s *Service) GetRailwayConditions(ctx context.Context) ([]RailwayCondition,
 
 		text := conds.texts[r.SameAs]
 
+		op := operatorOf(r.Operator)
 		item := RailwayCondition{
-			Railway:      r.SameAs,
-			RailwayName:  r.RailwayTitle.Ja,
-			State:        RailwayNormal,
-			DelayMinutes: delays[r.SameAs],
-			Text:         text,
+			Railway:           r.SameAs,
+			RailwayName:       r.RailwayTitle.Ja,
+			State:             RailwayNormal,
+			DelayMinutes:      delays[r.SameAs],
+			Text:              text,
+			StatusAvailable:   conds.statusOperators[op],
+			LocationAvailable: !locationAvailable(r.SameAs) || conds.locationOperators[op],
 		}
 
-		isNormalText := text == "" || slices.ContainsFunc(normalWords, func(w string) bool {
-			return strings.Contains(text, w)
-		})
+		isNormalText := IsNormalText(text)
 
 		switch {
 		case slices.Contains(conds.suspended, r.SameAs):
 			item.State = RailwaySuspended
 		case item.DelayMinutes > 0 || !isNormalText:
 			item.State = RailwayDelayed
-		case text == "" && !conds.statusOperators[operatorOf(r.Operator)]:
+		case text == "" && !conds.statusOperators[op]:
 			item.State = RailwayUnknown
 		}
 
@@ -346,4 +353,11 @@ func (s *Service) HasStation(id string) bool {
 func (s *Service) HasRailway(id string) bool {
 	_, ok := s.railwayNames[id]
 	return ok
+}
+
+// IsNormalText は、運行情報の文章が平常を表すか（文章が無いときも平常とする）を返す
+func IsNormalText(text string) bool {
+	return text == "" || slices.ContainsFunc(normalWords, func(w string) bool {
+		return strings.Contains(text, w)
+	})
 }

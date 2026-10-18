@@ -5,6 +5,7 @@ import (
 	"errors"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +16,7 @@ import (
 
 	"train-status-app/backend/internal/auth"
 	"train-status-app/backend/internal/favorite"
+	"train-status-app/backend/internal/notify"
 )
 
 // fakeAPI は、このパッケージが使う式だけを解釈するメモリ上の DynamoDB
@@ -36,6 +38,8 @@ func s(v types.AttributeValue) string {
 		return v.Value
 	case *types.AttributeValueMemberN:
 		return v.Value
+	case *types.AttributeValueMemberSS:
+		return strings.Join(v.Value, ",")
 	}
 	return ""
 }
@@ -47,6 +51,16 @@ func (f *fakeAPI) GetItem(_ context.Context, in *dynamodb.GetItemInput, _ ...fun
 }
 
 func (f *fakeAPI) PutItem(_ context.Context, in *dynamodb.PutItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
+	// 試しの通知の間隔（TakeTestSlot）の条件だけを解釈する
+	if in.ConditionExpression != nil && strings.Contains(*in.ConditionExpression, "#testedAt") {
+		if old := f.items[id(in.Item)]; old != nil {
+			last, _ := strconv.ParseInt(s(old[attrTestedAt]), 10, 64)
+			cutoff, _ := strconv.ParseInt(s(in.ExpressionAttributeValues[":cutoff"]), 10, 64)
+			if last > cutoff {
+				return nil, &types.ConditionalCheckFailedException{}
+			}
+		}
+	}
 	f.items[id(in.Item)] = maps.Clone(in.Item)
 	return &dynamodb.PutItemOutput{}, nil
 }
@@ -79,6 +93,18 @@ func (f *fakeAPI) DeleteItem(_ context.Context, in *dynamodb.DeleteItemInput, _ 
 
 // Query は1件ずつページを分けて返し、ページ送りも確かめる
 func (f *fakeAPI) Query(_ context.Context, in *dynamodb.QueryInput, _ ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
+	// GSI（gsi1pk）はまとめて返す
+	if in.IndexName != nil {
+		gpk := s(in.ExpressionAttributeValues[":gpk"])
+		var items []map[string]types.AttributeValue
+		for _, item := range f.items {
+			if s(item[attrGSIPK]) == gpk {
+				items = append(items, maps.Clone(item))
+			}
+		}
+		return &dynamodb.QueryOutput{Items: items}, nil
+	}
+
 	pk := s(in.ExpressionAttributeValues[":pk"])
 	prefix := s(in.ExpressionAttributeValues[":prefix"])
 	var ids []string
@@ -384,5 +410,105 @@ func TestFavorites(t *testing.T) {
 	}
 	if len(api.items) != 0 {
 		t.Fatalf("items left after delete: %v", slices.Collect(maps.Keys(api.items)))
+	}
+}
+
+func TestNotifyStore(t *testing.T) {
+
+	ctx := context.Background()
+	api := newFakeAPI()
+	store := New(api, "users")
+	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+	mita := "odpt.Railway:Toei.Mita"
+	alert := notify.Alert{RailwayID: mita, Days: []notify.Day{notify.Weekday}, Start: "07:00", End: "09:30"}
+
+	var sub notify.Subscription
+	sub.Endpoint = "https://fcm.googleapis.com/fcm/send/abc"
+	sub.Keys.P256dh = "key"
+	sub.Keys.Auth = "auth"
+	sub.CreatedAt = now
+
+	// 利用者がいなければ書けない
+	if err := store.PutAlert(ctx, "u1", alert); !errors.Is(err, notify.ErrUserNotFound) {
+		t.Fatalf("want ErrUserNotFound, got %v", err)
+	}
+	if err := store.PutSubscription(ctx, "u1", sub); !errors.Is(err, notify.ErrUserNotFound) {
+		t.Fatalf("want ErrUserNotFound, got %v", err)
+	}
+
+	for _, u := range []string{"u1", "u2"} {
+		if _, err := store.EnsureUser(ctx, u, now); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.PutAlert(ctx, u, alert); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := store.PutSubscription(ctx, "u1", sub); err != nil {
+		t.Fatal(err)
+	}
+
+	alerts, err := store.ListAlerts(ctx, "u1")
+	if err != nil || len(alerts) != 1 || alerts[0].RailwayID != mita || alerts[0].Start != "07:00" || !slices.Equal(alerts[0].Days, alert.Days) {
+		t.Fatalf("unexpected alerts %+v %v", alerts, err)
+	}
+
+	users, err := store.AlertsForRailway(ctx, mita)
+	if err != nil || len(users) != 2 {
+		t.Fatalf("unexpected railway alerts %+v %v", users, err)
+	}
+
+	subs, err := store.ListSubscriptions(ctx, "u1")
+	if err != nil || len(subs) != 1 || subs[0].Endpoint != sub.Endpoint || subs[0].Keys.Auth != "auth" || !subs[0].CreatedAt.Equal(now) {
+		t.Fatalf("unexpected subscriptions %+v %v", subs, err)
+	}
+
+	// 試しの通知は間隔をあける
+	for i, want := range []bool{true, false, true} {
+		at := now.Add([]time.Duration{0, 30 * time.Second, 61 * time.Second}[i])
+		if ok, err := store.TakeTestSlot(ctx, "u1", at, time.Minute); err != nil || ok != want {
+			t.Fatalf("test slot %d: got %v %v, want %v", i, ok, err, want)
+		}
+	}
+
+	if err := store.SaveStates(ctx, map[string]notify.State{mita: {Level: notify.Delayed, CheckedAt: now}}); err != nil {
+		t.Fatal(err)
+	}
+	if states, err := store.LoadStates(ctx); err != nil || states[mita].Level != notify.Delayed || !states[mita].CheckedAt.Equal(now) {
+		t.Fatalf("unexpected states %v %v", states, err)
+	}
+
+	// 同じ端末を登録している利用者を引ける
+	if owners, err := store.SubscriptionOwners(ctx, sub.Endpoint); err != nil || !slices.Equal(owners, []string{"u1"}) {
+		t.Fatalf("unexpected owners %v %v", owners, err)
+	}
+	if ok, err := store.HasUser(ctx, "u1"); err != nil || !ok {
+		t.Fatalf("HasUser: %v %v", ok, err)
+	}
+	if ok, err := store.HasUser(ctx, "nobody"); err != nil || ok {
+		t.Fatalf("HasUser(nobody): %v %v", ok, err)
+	}
+
+	if err := store.DeleteSubscription(ctx, "u1", sub.Endpoint); err != nil {
+		t.Fatal(err)
+	}
+	if subs, _ := store.ListSubscriptions(ctx, "u1"); len(subs) != 0 {
+		t.Fatalf("subscription should be deleted: %+v", subs)
+	}
+	if err := store.PutSubscription(ctx, "u1", sub); err != nil {
+		t.Fatal(err)
+	}
+
+	// 退会で、条件・購読・試しの通知の記録が消え、路線から引けなくなる
+	if err := store.DeleteUser(ctx, "u1"); err != nil {
+		t.Fatal(err)
+	}
+	for k := range api.items {
+		if strings.HasPrefix(k, "USER#u1|") {
+			t.Errorf("item left after delete: %s", k)
+		}
+	}
+	if users, _ := store.AlertsForRailway(ctx, mita); len(users) != 1 || users[0].UserID != "u2" {
+		t.Fatalf("unexpected railway alerts after delete %+v", users)
 	}
 }

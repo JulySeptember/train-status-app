@@ -51,6 +51,9 @@ resource "aws_lambda_function" "this" {
       # Google でのログイン。クライアント ID は秘密の値ではない
       GOOGLE_CLIENT_ID = var.google_client_id
       USERS_TABLE      = aws_dynamodb_table.users.name
+
+      # 運行情報の通知。キーの値ではなく、キーを入れた SSM のパラメータ名を渡す
+      VAPID_KEY_PARAMETER = local.vapid_key_parameter
     }
   }
 

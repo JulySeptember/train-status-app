@@ -1,6 +1,6 @@
 # ログイン・お気に入り・運行情報の通知 設計書
 
-- 状態: 段階1（ログイン）実装済み（#98）。段階2（お気に入り）を実装中（2026-10-18）
+- 状態: 段階1（ログイン）・段階2（お気に入り）実装済み（#98・#99）。段階3（通知）を実装中（2026-10-18）
 - 対象: Google アカウントでのログイン、お気に入り（駅・路線・経路）、運行情報の Web Push 通知
 - 関連: [AI 鉄道エージェント 設計書](ai-api.md)、[経路探索エンジン 設計書](route-search.md)
 
@@ -120,11 +120,11 @@ Cognito を使わない理由:
 ### 5.1 しくみ
 
 ```
-EventBridge（5分ごと、5:00〜翌1:00）
+EventBridge（5分ごと。1:00〜5:00 は呼ばれてもすぐ終わる）
    │
    ▼
 通知用の Lambda（API と同じ実行ファイル、APP_MODE=notify）
-   ├ 運行状況を取る（service の railwayConditions と同じ処理）
+   ├ 運行状況を取る（service の GetRailwayConditions。AI の道具と同じ分類）
    ├ 路線ごとの状態を、前回の状態（DynamoDB）と比べる
    ├ 状態が変わった路線を見ている利用者を、通知の条件の索引（GSI）から引く
    ├ 曜日・時間帯が合う利用者の端末に Web Push を送る
@@ -133,6 +133,11 @@ EventBridge（5分ごと、5:00〜翌1:00）
 
 - API の Lambda とは別の関数にする。API の同時実行やタイムアウトの設定と切り離すため。zip は同じものを使い、`cmd/api/main.go` が環境変数 `APP_MODE` で起動のしかたを変える
 - ODPT への問い合わせは5分に1回（1日 240 回ほど）で、利用者の数には比例しない
+- 失敗しても再実行しない（EventBridge・Lambda の非同期呼び出しの再試行を 0 にする）。同じ通知を二重に送らず、5分後の実行で確かめ直す
+- 最初の1回（前回の状態が無い）と、新しく増えた路線は、記録だけして送らない。路線ごとに確かめた時刻を持ち、前に確かめたのが15分より前の路線（夜の止める時間帯・配信が止まっていたあと）も記録だけする（時間帯の外で起きた変化をあとから送らない）
+- 送る相手と内容（VAPID の鍵・通知の条件）を読んでから状態を保存し、そのあとで送る。鍵や条件を読めなければ保存せずに終わり、次の回に送る。送信の途中で止まっても（タイムアウト）、次の回に同じ通知を送り直さない（送り漏れは許す）
+- 送る前に利用者の PROFILE があるかを確かめる（退会の途中で失敗して、条件・購読だけが残っていても送らない）
+- 状態は全路線を1つの項目（`NOTIFY` / `STATE`）にまとめ、1回の実行で読み書き1回ずつにする
 
 ### 5.2 路線の状態と通知する変化
 
@@ -141,36 +146,46 @@ EventBridge（5分ごと、5:00〜翌1:00）
 | 状態 | 判定 |
 |---|---|
 | 平常 | 下の2つに当たらない |
-| 遅れ | 列車の遅れの中央値（`medianDelays`）が 10 分以上の方向がある、または運行情報の文章が平常の文章でない（平常の判定は `service/assistant.go` の `normalWords` と同じ。平常時も「現在、１５分以上の遅延はありません。」のような文章が配信される） |
+| 遅れ | 列車の遅れの中央値（`medianDelays`）が 10 分以上の方向がある、または運行情報の文章が平常の文章でない（平常の判定は `service.IsNormalText`。平常時も「現在、１５分以上の遅延はありません。」のような文章が配信される）。前回が遅れなら、中央値が 5 分未満になるまで遅れのままにする（10分の前後を行き来するたびに知らせない） |
 | 見合わせ | `isSuspended` が真（経路検索と同じ判定） |
 
 - 状態が変わったときだけ通知する（平常→遅れ、遅れ→見合わせ、見合わせ→平常 など）。同じ状態が続く間は送らない
 - 文章だけが変わったとき（「10分遅れ」→「20分遅れ」）は送らない
-- 運行情報を取れなかった事業者（`statusOperators` に無い）の路線は、状態を変えない（取れないだけで「平常に戻った」と送らないため）
+- その回に運行情報（文章）か列車位置（遅れ）を取れなかった事業者の路線は、状態を変えない（取れないだけで「平常に戻った」と送らないため）。`service.RailwayCondition` の `StatusAvailable`・`LocationAvailable` で見分ける。運行情報を配信していない事業者（小田急・ゆりかもめ）の路線は通知しない
 - 通知の本文は路線名と運行情報の文章だけにする。押すとその路線の画面を開く
 
 ### 5.3 通知の条件
 
-利用者は路線ごとに、曜日（平日・土休日。祝日は `internal/calendar` で判定する）と時間帯（開始・終了。30分単位）を決める。上限は 10 路線。時間帯の外で起きた変化は、あとから送らない。
+利用者は路線ごとに、曜日（平日・土休日。運行日と祝日は `internal/calendar` で判定する。3時前は前日）と時間帯（開始以上・終了未満。30分単位、00:00〜24:00）を決める。上限は 10 路線。時間帯の外で起きた変化は、あとから送らない。
 
 ### 5.4 Web Push
 
-- VAPID の鍵の組を作り、秘密鍵は SSM（`/train-status-app/dev/vapid-private-key`）に手で登録する。公開鍵はフロントのビルド時の環境変数に置く
-- 送信は `github.com/SherClockHolmes/webpush-go` を使う
+- VAPID の秘密鍵（P-256）は `backend/cmd/vapid-key` で作り、画面に出さずにそのまま SSM（`/train-status-app/dev/vapid-private-key`）に登録する（コマンドは `cmd/vapid-key` の説明）。公開鍵はバックエンドが秘密鍵から計算し、`GET /api/push/config` で返す（管理する値を1つにする）。手元では環境変数 `VAPID_PRIVATE_KEY`
+- 送信（本文の暗号化 RFC 8291 と VAPID の JWT）は標準ライブラリで書く（`internal/notify/webpush`。RFC 8291 の付録の例で確かめている）。ログインと同じく依存を増やさないため
+- 購読の endpoint にはサーバーから POST するので、既知の push サービス（FCM・Mozilla・Apple・Windows）の HTTPS の URL だけを受け付ける。ログに endpoint を出さない（ホストだけ）
 - フロントに Service Worker（`public/sw.js`）を足し、`push` で通知を出し、`notificationclick` で画面を開く
-- 購読（endpoint と鍵）は端末ごとに保存する。1人 5 端末まで。送ったときに 404・410 が返った購読は消す
-- iPhone は、ホーム画面に追加した Web アプリ（iOS 16.4 以降）でしか Web Push を受け取れない。Web App Manifest を足し、通知の設定の画面で案内する
+- 購読（endpoint と鍵）は端末ごとに保存する。1人 5 端末までで、超えたら古い端末から外す。送ったときに 404・410 が返った購読は消す
+- 共用の端末で、次の人に前の人の通知が届かないようにする:
+  - ログアウトでは、その端末の購読をサーバーとブラウザの両方から外す。退会ではサーバーがまとめて消し、ブラウザの購読も外す
+  - 購読を登録するとき、同じ endpoint をほかの利用者が登録していたら外す（GSI `gsi1` に `PUSH#<endpoint の SHA-256>` を入れて引く）
+  - ブラウザに購読があっても、自動では登録しない。「受け取る設定になっているか」は `POST /api/me/push-subscriptions/status` で、ログイン中の利用者の購読かを確かめて表示する
+- VAPID の鍵を作り直したあとは、古い購読（`applicationServerKey` が違う）を作り直す
+- push サービスのリダイレクトには従わない
+- iPhone は、ホーム画面に追加した Web アプリ（iOS 16.4 以降）でしか Web Push を受け取れない。Web App Manifest（`public/manifest.webmanifest`）を足し、通知の設定の画面で案内する
+- 設定の画面はアカウントの画面（`/account`）に置く
 
 ### 5.5 API
 
 | メソッド・パス | 内容 |
 |---|---|
+| `GET /api/push/config` | VAPID の公開鍵。鍵が無いときは 503 で、画面は通知の設定を出さない |
 | `GET /api/me/alerts` | 通知の条件の一覧 |
 | `PUT /api/me/alerts/{railwayId}` | 条件を登録・変更する（曜日・時間帯） |
 | `DELETE /api/me/alerts/{railwayId}` | 条件を消す |
 | `POST /api/me/push-subscriptions` | この端末の購読を登録する |
 | `DELETE /api/me/push-subscriptions` | この端末の購読を消す（本文で endpoint を渡す） |
-| `POST /api/me/push-subscriptions/test` | この利用者の端末に試しの通知を送る（1分に1回まで） |
+| `POST /api/me/push-subscriptions/status` | この端末（本文で endpoint を渡す）がログイン中の利用者の購読か |
+| `POST /api/me/push-subscriptions/test` | この利用者の端末に試しの通知を送る（1分に1回まで。超えたら 429、端末が無ければ 409） |
 
 ---
 
@@ -183,12 +198,13 @@ DynamoDB に1つのテーブル（`train-status-app-dev-users`、オンデマン
 | `USER#<sub>` | `PROFILE` | 作成日 |
 | `USER#<sub>` | `SESSION#<セッションIDの SHA-256>` | `expiresAt`（TTL）。退会のときにセッションを引くための目印 |
 | `USER#<sub>` | `FAV#stations#<駅ID>`・`FAV#railways#<路線ID>`・`FAV#journeys#<出発駅ID>~<到着駅ID>` | 登録日 |
-| `USER#<sub>` | `ALERT#<路線ID>` | 曜日・時間帯。GSI 用に `gsi1pk = ALERT#<路線ID>` |
-| `USER#<sub>` | `PUSH#<endpoint の SHA-256>` | endpoint・鍵 |
+| `USER#<sub>` | `ALERT#<路線ID>` | 曜日・時間帯。GSI 用に `gsi1pk = ALERT#<路線ID>`・`gsi1sk = USER#<sub>` |
+| `USER#<sub>` | `PUSH#<endpoint の SHA-256>` | endpoint・鍵・登録日。GSI 用に `gsi1pk = PUSH#<endpoint の SHA-256>`・`gsi1sk = USER#<sub>` |
+| `USER#<sub>` | `PUSHTEST` | 試しの通知を送った時刻（1分に1回まで。TTL で消える） |
 | `SESSION#<セッションIDの SHA-256>` | `SESSION` | 利用者 ID、`expiresAt`（TTL） |
-| `NOTIFY` | `STATE` | 通知用の前回の状態（全路線を1つの項目にまとめ、1回の確認で読み書き1回ずつにする） |
+| `NOTIFY` | `STATE` | 通知用の前回の路線ごとの状態と確かめた時刻（全路線を1つの項目にまとめ、1回の確認で読み書き1回ずつにする） |
 
-- GSI `gsi1`（`gsi1pk`）で、路線を見ている利用者を引く
+- GSI `gsi1`（`gsi1pk`）で、路線を見ている利用者と、端末（endpoint）を登録している利用者を引く
 - セッションは `SESSION#<hash>` のほかに、利用者の側にも目印（`USER#<sub>` / `SESSION#<hash>`、TTL 付き）を書く
 - 退会は PROFILE を先に消してから、`pk = USER#<sub>` を Query して全部消し、目印から引いたセッションも消す
 - 退会と同時に別の端末でログイン・延長しても項目が残らないよう、セッションと目印は PROFILE があることを条件に TransactWriteItems で書き、延長は両方が残っているときだけ行う
