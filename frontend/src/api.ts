@@ -239,6 +239,15 @@ export const api = {
     return send<void>("POST", "/me/push-subscriptions", subscription);
   },
 
+  // この端末がログイン中の利用者の購読に登録されているか（endpoint は URL に入れない）
+  subscriptionStatus(endpoint: string) {
+    return send<{ registered: boolean }>(
+      "POST",
+      "/me/push-subscriptions/status",
+      { endpoint },
+    );
+  },
+
   unsubscribePush(endpoint: string) {
     return send<void>("DELETE", "/me/push-subscriptions", { endpoint });
   },

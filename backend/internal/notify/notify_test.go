@@ -224,7 +224,10 @@ func (c *conditions) GetRailwayConditions(context.Context) ([]service.RailwayCon
 }
 
 func cond(railway, state string, delay int, text string) service.RailwayCondition {
-	return service.RailwayCondition{Railway: railway, State: state, DelayMinutes: delay, Text: text}
+	return service.RailwayCondition{
+		Railway: railway, State: state, DelayMinutes: delay, Text: text,
+		StatusAvailable: true, LocationAvailable: true,
+	}
 }
 
 const normalText = "現在、１５分以上の遅延はありません。"
@@ -284,19 +287,31 @@ func TestNotifier(t *testing.T) {
 		t.Fatal("u2 (holiday only) and u3 (evening) should not be notified")
 	}
 
-	// 運行情報を取れなかった路線は、前の状態のまま（知らせない）
-	run(cond(mita, service.RailwayUnknown, 0, ""), cond(oedo, service.RailwayNormal, 0, normalText))
-	run(cond(mita, service.RailwayNormal, 0, normalText), cond(oedo, service.RailwayNormal, 0, normalText))
-	if got := sentTo("u1"); len(got) != 1 {
-		t.Fatalf("unknown should keep the previous state: %+v", got)
-	}
-
 	// 見合わせ
-	run(cond(mita, service.RailwaySuspended, 0, "三田線は運転を見合わせています。"), cond(oedo, service.RailwayNormal, 0, normalText))
+	suspended := "三田線は運転を見合わせています。"
+	run(cond(mita, service.RailwaySuspended, 0, suspended), cond(oedo, service.RailwayNormal, 0, normalText))
 	got := sentTo("u1")
-	if len(got) != 2 || got[1].Title != "三田線：運転見合わせ" || got[1].Body != "三田線は運転を見合わせています。" ||
+	if len(got) != 2 || got[1].Title != "三田線：運転見合わせ" || got[1].Body != suspended ||
 		got[1].URL != "/routes/odpt.Railway:Toei.Mita" || got[1].Tag != "railway:"+mita {
 		t.Fatalf("unexpected suspension message: %+v", got)
+	}
+
+	// 運行情報（文章）か列車位置を取れなかった回は、前の状態のまま（「平常に戻った」と送らない）
+	noStatus := cond(mita, service.RailwayDelayed, 3, "")
+	noStatus.StatusAvailable = false
+	run(noStatus, cond(oedo, service.RailwayNormal, 0, normalText))
+	noLocation := cond(mita, service.RailwaySuspended, 0, suspended)
+	noLocation.LocationAvailable = false
+	run(noLocation)
+	unknown := cond(mita, service.RailwayUnknown, 0, "")
+	unknown.StatusAvailable = false
+	run(unknown)
+	if got := sentTo("u1"); len(got) != 2 {
+		t.Fatalf("unavailable conditions should keep the previous state: %+v", got)
+	}
+	run(cond(mita, service.RailwaySuspended, 0, suspended))
+	if got := sentTo("u1"); len(got) != 2 {
+		t.Fatalf("still suspended: %+v", got)
 	}
 
 	// 同じ状態が続く間は送らない
@@ -311,10 +326,150 @@ func TestNotifier(t *testing.T) {
 		t.Fatalf("unexpected delay message: %+v", got)
 	}
 
+	// 10分を少し下回っても、5分未満になるまでは遅れのまま（境目で通知を繰り返さない）
+	run(cond(mita, service.RailwayDelayed, 8, normalText))
+	run(cond(mita, service.RailwayDelayed, 11, normalText))
+	if got := sentTo("u1"); len(got) != 3 {
+		t.Fatalf("should not flap around the threshold: %+v", got)
+	}
+	run(cond(mita, service.RailwayDelayed, 4, normalText))
+	if got := sentTo("u1"); len(got) != 4 || got[3].Title != "三田線：平常運転に戻りました" {
+		t.Fatalf("should recover below 5 minutes: %+v", got)
+	}
+
+	// 前回の状態が古い（15分より前）ときは、記録だけする
+	now = now.Add(20 * time.Minute)
+	run(cond(mita, service.RailwaySuspended, 0, suspended))
+	if got := sentTo("u1"); len(got) != 4 {
+		t.Fatalf("stale state should not notify: %+v", got)
+	}
+
 	// 終電から始発の間は確かめない
 	now = time.Date(2026, 10, 20, 2, 0, 0, 0, jst)
 	run(cond(mita, service.RailwayNormal, 0, normalText))
-	if len(sentTo("u1")) != 3 {
+	if len(sentTo("u1")) != 4 {
 		t.Fatal("should not run at night")
+	}
+}
+
+// 0時台は、曜日を前日の運行日で決める（土曜 0:30 は金曜の運行日なので平日）
+func TestNotifierAfterMidnight(t *testing.T) {
+
+	ctx := context.Background()
+	jst := time.FixedZone("JST", 9*60*60)
+	now := time.Date(2026, 10, 24, 0, 30, 0, 0, jst) // 土曜
+
+	store := newStore(t, "u1")
+	sender := &fakeSender{}
+	conds := &conditions{}
+	n := notify.NewNotifier(store, conds, catalog{}, newKeys(t), "")
+	notify.SetNotifierSender(n, sender)
+	notify.SetNotifierClock(n, func() time.Time { return now })
+
+	s := notify.NewService(store, catalog{}, newKeys(t), "")
+	if err := s.SetAlert(ctx, "u1", notify.Alert{RailwayID: mita, Days: []notify.Day{notify.Weekday}, Start: "00:00", End: "01:00"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Subscribe(ctx, "u1", subscription("https://fcm.googleapis.com/fcm/send/u1")); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, c := range []service.RailwayCondition{
+		cond(mita, service.RailwayNormal, 0, normalText),
+		cond(mita, service.RailwaySuspended, 0, "見合わせ"),
+	} {
+		conds.items = []service.RailwayCondition{c}
+		if err := n.Run(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(sender.sent) != 1 {
+		t.Fatalf("weekday alert should match at 0:30 on Saturday: %v", sender.sent)
+	}
+}
+
+// profileGone は、退会の途中で失敗して、利用者の PROFILE だけが消えた状態を表す
+type profileGone struct {
+	*auth.MemoryStore
+	gone string
+}
+
+func (p profileGone) HasUser(ctx context.Context, userID string) (bool, error) {
+	if userID == p.gone {
+		return false, nil
+	}
+	return p.MemoryStore.HasUser(ctx, userID)
+}
+
+// 退会の途中で条件だけが残っていても、送らない。長い本文は切る
+func TestNotifierSkipsDeletedUserAndTruncates(t *testing.T) {
+
+	ctx := context.Background()
+	jst := time.FixedZone("JST", 9*60*60)
+	now := time.Date(2026, 10, 19, 8, 0, 0, 0, jst)
+
+	store := newStore(t, "u1", "u2")
+	sender := &fakeSender{}
+	conds := &conditions{}
+	n := notify.NewNotifier(profileGone{store, "u2"}, conds, catalog{}, newKeys(t), "")
+	notify.SetNotifierSender(n, sender)
+	notify.SetNotifierClock(n, func() time.Time { return now })
+
+	s := notify.NewService(store, catalog{}, newKeys(t), "")
+	for _, u := range []string{"u1", "u2"} {
+		if err := s.SetAlert(ctx, u, notify.Alert{RailwayID: mita, Days: []notify.Day{notify.Weekday}, Start: "07:00", End: "09:00"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.Subscribe(ctx, u, subscription("https://fcm.googleapis.com/fcm/send/"+u)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	long := strings.Repeat("あ", 2000)
+	for _, c := range []service.RailwayCondition{
+		cond(mita, service.RailwayNormal, 0, normalText),
+		cond(mita, service.RailwaySuspended, 0, long),
+	} {
+		conds.items = []service.RailwayCondition{c}
+		if err := n.Run(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if got := sender.sent["https://fcm.googleapis.com/fcm/send/u2"]; len(got) != 0 {
+		t.Fatalf("deleted user should not be notified: %+v", got)
+	}
+	got := sender.sent["https://fcm.googleapis.com/fcm/send/u1"]
+	if len(got) != 1 || len([]rune(got[0].Body)) > 300 || !strings.HasSuffix(got[0].Body, "…") {
+		t.Fatalf("body should be truncated: %d", len([]rune(got[0].Body)))
+	}
+}
+
+// 共用の端末: 同じ端末をほかの利用者が登録したら、前の利用者の購読から外す
+func TestSubscribeMovesSharedDevice(t *testing.T) {
+
+	ctx := context.Background()
+	store := newStore(t, "u1", "u2")
+	s := notify.NewService(store, catalog{}, newKeys(t), "")
+	endpoint := "https://fcm.googleapis.com/fcm/send/shared"
+
+	if err := s.Subscribe(ctx, "u1", subscription(endpoint)); err != nil {
+		t.Fatal(err)
+	}
+	if ok, _ := s.IsSubscribed(ctx, "u1", endpoint); !ok {
+		t.Fatal("u1 should be subscribed")
+	}
+	if ok, _ := s.IsSubscribed(ctx, "u2", endpoint); ok {
+		t.Fatal("u2 should not be subscribed yet")
+	}
+
+	if err := s.Subscribe(ctx, "u2", subscription(endpoint)); err != nil {
+		t.Fatal(err)
+	}
+	if ok, _ := s.IsSubscribed(ctx, "u1", endpoint); ok {
+		t.Fatal("u1 should lose the shared device")
+	}
+	if ok, _ := s.IsSubscribed(ctx, "u2", endpoint); !ok {
+		t.Fatal("u2 should be subscribed")
 	}
 }

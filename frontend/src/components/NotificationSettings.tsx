@@ -327,6 +327,9 @@ export default function NotificationSettings() {
         <p className="text-sm text-muted-foreground">
           選んだ路線で、決めた曜日・時間帯に遅れ（10分以上）や運転見合わせが起きたとき、平常に戻ったときに知らせます。5分ごとに確かめます。
         </p>
+        <p className="text-sm text-muted-foreground">
+          曜日は運行日で決めます（0時台は前日の扱いで、土曜の0時台は「平日」）。
+        </p>
       </div>
 
       <DeviceSettings />

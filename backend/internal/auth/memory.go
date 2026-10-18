@@ -19,6 +19,7 @@ type MemoryStore struct {
 	subscriptions map[string]map[string]notify.Subscription // 利用者 ID → endpoint → 購読
 	tested        map[string]time.Time                      // 利用者 ID → 試しの通知を送った時刻
 	states        map[string]notify.Level
+	statesAt      time.Time
 }
 
 func NewMemoryStore() *MemoryStore {
@@ -240,7 +241,7 @@ func (m *MemoryStore) TakeTestSlot(_ context.Context, userID string, now time.Ti
 	return true, nil
 }
 
-func (m *MemoryStore) LoadStates(context.Context) (map[string]notify.Level, error) {
+func (m *MemoryStore) LoadStates(context.Context) (map[string]notify.Level, time.Time, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -248,10 +249,10 @@ func (m *MemoryStore) LoadStates(context.Context) (map[string]notify.Level, erro
 	for k, v := range m.states {
 		result[k] = v
 	}
-	return result, nil
+	return result, m.statesAt, nil
 }
 
-func (m *MemoryStore) SaveStates(_ context.Context, states map[string]notify.Level) error {
+func (m *MemoryStore) SaveStates(_ context.Context, states map[string]notify.Level, at time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -259,5 +260,27 @@ func (m *MemoryStore) SaveStates(_ context.Context, states map[string]notify.Lev
 	for k, v := range states {
 		m.states[k] = v
 	}
+	m.statesAt = at
 	return nil
+}
+
+func (m *MemoryStore) SubscriptionOwners(_ context.Context, endpoint string) ([]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var owners []string
+	for userID, subs := range m.subscriptions {
+		if _, ok := subs[endpoint]; ok {
+			owners = append(owners, userID)
+		}
+	}
+	return owners, nil
+}
+
+func (m *MemoryStore) HasUser(_ context.Context, userID string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	_, ok := m.users[userID]
+	return ok, nil
 }

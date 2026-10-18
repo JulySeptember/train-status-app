@@ -95,6 +95,9 @@ type Store interface {
 
 	ListSubscriptions(ctx context.Context, userID string) ([]Subscription, error)
 
+	// SubscriptionOwners は、endpoint を購読に登録しているすべての利用者を返す
+	SubscriptionOwners(ctx context.Context, endpoint string) ([]string, error)
+
 	// PutSubscription は購読を足すか置き換える（endpoint で見分ける）。利用者がいなければ ErrUserNotFound
 	PutSubscription(ctx context.Context, userID string, sub Subscription) error
 
@@ -103,10 +106,13 @@ type Store interface {
 	// TakeTestSlot は、前に試しの通知を送ってから interval たっていれば記録して true を返す
 	TakeTestSlot(ctx context.Context, userID string, now time.Time, interval time.Duration) (bool, error)
 
-	// LoadStates は前回の路線の状態を返す。まだ無ければ空
-	LoadStates(ctx context.Context) (map[string]Level, error)
+	// LoadStates は前回の路線の状態と、保存した時刻を返す。まだ無ければ空
+	LoadStates(ctx context.Context) (map[string]Level, time.Time, error)
 
-	SaveStates(ctx context.Context, states map[string]Level) error
+	SaveStates(ctx context.Context, states map[string]Level, at time.Time) error
+
+	// HasUser は、利用者がいる（退会していない）かを返す
+	HasUser(ctx context.Context, userID string) (bool, error)
 }
 
 // Sender は通知を送る（webpush.Sender、またはテストの偽物）

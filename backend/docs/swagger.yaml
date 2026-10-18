@@ -100,6 +100,11 @@ definitions:
       publicKey:
         type: string
     type: object
+  handler.SubscriptionStatus:
+    properties:
+      registered:
+        type: boolean
+    type: object
   handler.TestResult:
     properties:
       sent:
@@ -980,6 +985,53 @@ paths:
               type: string
             type: object
       summary: Register this device for push notifications
+      tags:
+      - Notifications
+  /api/me/push-subscriptions/status:
+    post:
+      consumes:
+      - application/json
+      description: The endpoint is sent in the body so that it does not appear in
+        URLs or logs.
+      parameters:
+      - description: endpoint of the subscription
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.UnsubscribeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.SubscriptionStatus'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Check whether this device is registered
       tags:
       - Notifications
   /api/me/push-subscriptions/test:

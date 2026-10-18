@@ -24,6 +24,9 @@ type mockClient struct {
 	statusErr error
 	locErr    error
 
+	// 列車位置を取得できた事業者。nil なら都営だけが成功
+	locSucceeded []string
+
 	// true なら GetOperatorTrainLocations が client.ErrNoSource を返す（事業者を設定していない）
 	locNoSource bool
 
@@ -54,7 +57,11 @@ func (m *mockClient) GetTrainLocations(
 	if m.locErr != nil {
 		return client.Result[model.TrainLocation]{}, m.locErr
 	}
-	return client.Result[model.TrainLocation]{Items: m.trainLocations, Succeeded: []string{"Toei"}}, nil
+	succeeded := m.locSucceeded
+	if succeeded == nil {
+		succeeded = []string{"Toei"}
+	}
+	return client.Result[model.TrainLocation]{Items: m.trainLocations, Succeeded: succeeded}, nil
 }
 
 func (m *mockClient) GetOperatorTrainLocations(

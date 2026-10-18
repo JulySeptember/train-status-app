@@ -238,3 +238,21 @@ func TestRFC8291Example(t *testing.T) {
 		t.Fatalf("unexpected plaintext %q", got)
 	}
 }
+
+// push サービスのリダイレクトには従わない（許可したホストの外に送らない）
+func TestSendDoesNotFollowRedirect(t *testing.T) {
+
+	hit := false
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hit = true }))
+	defer other.Close()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, other.URL, http.StatusTemporaryRedirect)
+	}))
+	defer server.Close()
+
+	err := NewSender(testKeys(t), "mailto:a@example.com").Send(context.Background(), newBrowser(t).subscription(server.URL), []byte("x"), time.Minute)
+	if err == nil || hit {
+		t.Fatalf("redirect should not be followed: err=%v hit=%v", err, hit)
+	}
+}

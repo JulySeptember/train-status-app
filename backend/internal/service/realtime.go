@@ -57,6 +57,9 @@ type railwayConditions struct {
 	// 運行情報を取得できた事業者（client.Source の Name）。
 	// 含まれない事業者の路線は、文章が無くても平常とは限らない
 	statusOperators map[string]bool
+
+	// 列車位置を取得できた事業者（client.Source の Name）
+	locationOperators map[string]bool
 }
 
 type realtimeCache struct {
@@ -98,9 +101,14 @@ func (s *Service) railwayConditions(ctx context.Context) (*railwayConditions, er
 	}
 
 	value := &railwayConditions{
-		delays:          medianDelays(trains.Items),
-		texts:           s.statusTexts(statuses.Items),
-		statusOperators: make(map[string]bool, len(statuses.Succeeded)),
+		delays:            medianDelays(trains.Items),
+		texts:             s.statusTexts(statuses.Items),
+		statusOperators:   make(map[string]bool, len(statuses.Succeeded)),
+		locationOperators: make(map[string]bool, len(trains.Succeeded)),
+	}
+
+	for _, name := range trains.Succeeded {
+		value.locationOperators[name] = true
 	}
 
 	for _, name := range statuses.Succeeded {

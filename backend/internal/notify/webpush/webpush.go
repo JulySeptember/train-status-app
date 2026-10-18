@@ -91,8 +91,12 @@ func NewSender(keys *Keys, subject string) *Sender {
 	return &Sender{
 		keys:    keys,
 		subject: subject,
-		client:  &http.Client{Timeout: 10 * time.Second},
-		now:     time.Now,
+		client: &http.Client{
+			Timeout: 10 * time.Second,
+			// push サービスのリダイレクトには従わない（許可したホストの外に送らない）
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		},
+		now: time.Now,
 	}
 }
 

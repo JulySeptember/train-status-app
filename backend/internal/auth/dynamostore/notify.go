@@ -21,11 +21,12 @@ import (
 // 通知の項目（docs/design/login.md 6章）:
 //
 //	USER#<sub>    ALERT#<路線ID>             days, start, end, gsi1pk = ALERT#<路線ID>, gsi1sk = USER#<sub>
-//	USER#<sub>    PUSH#<endpoint の SHA-256>  endpoint, p256dh, auth, createdAt
+//	USER#<sub>    PUSH#<endpoint の SHA-256>  endpoint, p256dh, auth, createdAt, gsi1pk = PUSH#<endpoint の SHA-256>, gsi1sk = USER#<sub>
 //	USER#<sub>    PUSHTEST                  testedAt, expiresAt（試しの通知の間隔。TTL で消える）
-//	NOTIFY        STATE                     levels（路線ID → 状態）
+//	NOTIFY        STATE                     levels（路線ID → 状態）, savedAt
 //
-// 利用者の項目なので、退会（DeleteUser）でいっしょに消える。GSI（gsi1）で路線を見ている利用者を引く。
+// 利用者の項目なので、退会（DeleteUser）でいっしょに消える。
+// GSI（gsi1）で、路線を見ている利用者と、端末（endpoint）を登録している利用者を引く。
 
 const (
 	alertPrefix = "ALERT#"
@@ -35,7 +36,7 @@ const (
 	pkNotify = "NOTIFY"
 	skState  = "STATE"
 
-	// 路線を見ている利用者を引く GSI（infra/main/dynamodb.tf）
+	// 路線を見ている利用者と、端末を登録している利用者を引く GSI（infra/main/dynamodb.tf）
 	gsiAlerts = "gsi1"
 
 	attrGSIPK     = "gsi1pk"
@@ -48,6 +49,7 @@ const (
 	attrAuth      = "auth"
 	attrTestedAt  = "testedAt"
 	attrLevels    = "levels"
+	attrSavedAt   = "savedAt"
 	attrRailwayID = "railwayId"
 )
 
@@ -163,9 +165,10 @@ func (s *Store) DeleteAlert(ctx context.Context, userID, railwayID string) error
 	return err
 }
 
-func (s *Store) AlertsForRailway(ctx context.Context, railwayID string) ([]notify.UserAlert, error) {
+// queryIndex は、GSI（gsi1）で gsi1pk が value の項目をすべて返す
+func (s *Store) queryIndex(ctx context.Context, value string) ([]map[string]types.AttributeValue, error) {
 
-	var result []notify.UserAlert
+	var items []map[string]types.AttributeValue
 	var start map[string]types.AttributeValue
 	for {
 		out, err := s.api.Query(ctx, &dynamodb.QueryInput{
@@ -174,25 +177,59 @@ func (s *Store) AlertsForRailway(ctx context.Context, railwayID string) ([]notif
 			KeyConditionExpression:   aws.String("#gpk = :gpk"),
 			ExpressionAttributeNames: map[string]string{"#gpk": attrGSIPK},
 			ExpressionAttributeValues: map[string]types.AttributeValue{
-				":gpk": &types.AttributeValueMemberS{Value: alertPrefix + railwayID},
+				":gpk": &types.AttributeValueMemberS{Value: value},
 			},
 			ExclusiveStartKey: start,
 		})
 		if err != nil {
 			return nil, err
 		}
-		for _, item := range out.Items {
-			userID, ok := strings.CutPrefix(str(item, attrPK), "USER#")
-			if !ok {
-				continue
-			}
-			result = append(result, notify.UserAlert{UserID: userID, Alert: toAlert(item)})
-		}
+		items = append(items, out.Items...)
 		if len(out.LastEvaluatedKey) == 0 {
-			return result, nil
+			return items, nil
 		}
 		start = out.LastEvaluatedKey
 	}
+}
+
+func (s *Store) AlertsForRailway(ctx context.Context, railwayID string) ([]notify.UserAlert, error) {
+
+	items, err := s.queryIndex(ctx, alertPrefix+railwayID)
+	if err != nil {
+		return nil, err
+	}
+
+	var result []notify.UserAlert
+	for _, item := range items {
+		if userID, ok := strings.CutPrefix(str(item, attrPK), "USER#"); ok {
+			result = append(result, notify.UserAlert{UserID: userID, Alert: toAlert(item)})
+		}
+	}
+	return result, nil
+}
+
+func (s *Store) SubscriptionOwners(ctx context.Context, endpoint string) ([]string, error) {
+
+	items, err := s.queryIndex(ctx, pushSK(endpoint))
+	if err != nil {
+		return nil, err
+	}
+
+	var owners []string
+	for _, item := range items {
+		if userID, ok := strings.CutPrefix(str(item, attrPK), "USER#"); ok {
+			owners = append(owners, userID)
+		}
+	}
+	return owners, nil
+}
+
+func (s *Store) HasUser(ctx context.Context, userID string) (bool, error) {
+	_, err := s.GetUser(ctx, userID)
+	if errors.Is(err, auth.ErrNotFound) {
+		return false, nil
+	}
+	return err == nil, err
 }
 
 func (s *Store) ListSubscriptions(ctx context.Context, userID string) ([]notify.Subscription, error) {
@@ -223,6 +260,8 @@ func (s *Store) PutSubscription(ctx context.Context, userID string, sub notify.S
 	item[attrP256dh] = &types.AttributeValueMemberS{Value: sub.Keys.P256dh}
 	item[attrAuth] = &types.AttributeValueMemberS{Value: sub.Keys.Auth}
 	item[attrCreatedAt] = &types.AttributeValueMemberS{Value: sub.CreatedAt.UTC().Format(time.RFC3339Nano)}
+	item[attrGSIPK] = &types.AttributeValueMemberS{Value: pushSK(sub.Endpoint)}
+	item[attrGSISK] = &types.AttributeValueMemberS{Value: userPK(userID)}
 
 	err := s.putUserItem(ctx, userID, item)
 	if errors.Is(err, auth.ErrNotFound) {
@@ -262,7 +301,7 @@ func (s *Store) TakeTestSlot(ctx context.Context, userID string, now time.Time, 
 	return err == nil, err
 }
 
-func (s *Store) LoadStates(ctx context.Context) (map[string]notify.Level, error) {
+func (s *Store) LoadStates(ctx context.Context) (map[string]notify.Level, time.Time, error) {
 
 	out, err := s.api.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName:      aws.String(s.table),
@@ -270,23 +309,30 @@ func (s *Store) LoadStates(ctx context.Context) (map[string]notify.Level, error)
 		ConsistentRead: aws.Bool(true),
 	})
 	if err != nil {
-		return nil, err
+		return nil, time.Time{}, err
 	}
 
 	result := map[string]notify.Level{}
 	levels, ok := out.Item[attrLevels].(*types.AttributeValueMemberM)
 	if !ok {
-		return result, nil
+		return result, time.Time{}, nil
 	}
 	for id, v := range levels.Value {
 		if s, ok := v.(*types.AttributeValueMemberS); ok {
 			result[id] = notify.Level(s.Value)
 		}
 	}
-	return result, nil
+
+	var savedAt time.Time
+	if v, ok := out.Item[attrSavedAt].(*types.AttributeValueMemberN); ok {
+		if sec, err := strconv.ParseInt(v.Value, 10, 64); err == nil {
+			savedAt = time.Unix(sec, 0)
+		}
+	}
+	return result, savedAt, nil
 }
 
-func (s *Store) SaveStates(ctx context.Context, states map[string]notify.Level) error {
+func (s *Store) SaveStates(ctx context.Context, states map[string]notify.Level, at time.Time) error {
 
 	levels := make(map[string]types.AttributeValue, len(states))
 	for id, l := range states {
@@ -295,6 +341,7 @@ func (s *Store) SaveStates(ctx context.Context, states map[string]notify.Level) 
 
 	item := key(pkNotify, skState)
 	item[attrLevels] = &types.AttributeValueMemberM{Value: levels}
+	item[attrSavedAt] = unix(at)
 
 	if _, err := s.api.PutItem(ctx, &dynamodb.PutItemInput{TableName: aws.String(s.table), Item: item}); err != nil {
 		return fmt.Errorf("save states: %w", err)

@@ -55,22 +55,39 @@ export function usePushConfig() {
   });
 }
 
-// この端末で通知を受け取る設定になっているか。
-// ログイン中にブラウザの購読があれば、サーバーにも登録し直す（別の端末で退会・ログインし直したときなどに合わせる）
+// 購読が今の VAPID の公開鍵で作られたか（鍵を作り直すと、古い購読には届かない）
+function sameKey(subscription: PushSubscription, publicKey: string): boolean {
+  const key = subscription.options.applicationServerKey;
+  if (!key) {
+    return false;
+  }
+  const a = new Uint8Array(key);
+  const b = decodeKey(publicKey);
+  return a.length === b.length && a.every((v, i) => v === b[i]);
+}
+
+// この端末で、ログイン中の利用者が通知を受け取る設定になっているか。
+// ブラウザに購読があっても、サーバーでこの利用者の購読になっていなければ false（共用の端末で、前の人の購読を引き継がない）
 export function usePushDevice() {
   const me = useMe();
+  const config = usePushConfig();
 
   return useQuery({
     queryKey: DEVICE_KEY,
     queryFn: async () => {
       const subscription = await currentSubscription();
-      if (subscription && Notification.permission === "granted") {
-        await api.subscribePush(subscription.toJSON());
-        return true;
+      if (
+        !subscription ||
+        Notification.permission !== "granted" ||
+        !config.data ||
+        !sameKey(subscription, config.data.publicKey)
+      ) {
+        return false;
       }
-      return false;
+      const status = await api.subscriptionStatus(subscription.endpoint);
+      return status.registered;
     },
-    enabled: !!me.data && pushSupported(),
+    enabled: !!me.data && pushSupported() && config.isSuccess,
     staleTime: Infinity,
     retry: false,
   });
@@ -97,12 +114,16 @@ export function useEnablePush() {
       const registration = await navigator.serviceWorker.register("/sw.js");
       await navigator.serviceWorker.ready;
 
-      const subscription =
-        (await registration.pushManager.getSubscription()) ??
-        (await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: decodeKey(config.publicKey),
-        }));
+      let subscription = await registration.pushManager.getSubscription();
+      // 鍵を作り直したあとの古い購読は、作り直す
+      if (subscription && !sameKey(subscription, config.publicKey)) {
+        await subscription.unsubscribe();
+        subscription = null;
+      }
+      subscription ??= await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: decodeKey(config.publicKey),
+      });
 
       await api.subscribePush(subscription.toJSON());
     },

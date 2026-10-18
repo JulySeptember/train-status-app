@@ -31,6 +31,11 @@ type UnsubscribeRequest struct {
 	Endpoint string `json:"endpoint"`
 }
 
+// SubscriptionStatus は、この端末がログイン中の利用者の購読に登録されているか
+type SubscriptionStatus struct {
+	Registered bool `json:"registered"`
+}
+
 // TestResult は、試しの通知を送れた端末の数
 type TestResult struct {
 	Sent int `json:"sent"`
@@ -241,6 +246,37 @@ func (h *Handler) Unsubscribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// SubscriptionStatus godoc
+//
+//	@Summary		Check whether this device is registered
+//	@Description	The endpoint is sent in the body so that it does not appear in URLs or logs.
+//	@Tags			Notifications
+//	@Accept			json
+//	@Produce		json
+//	@Param			body	body		handler.UnsubscribeRequest	true	"endpoint of the subscription"
+//	@Success		200		{object}	handler.SubscriptionStatus
+//	@Failure		400		{object}	map[string]string
+//	@Failure		401		{object}	map[string]string
+//	@Failure		500		{object}	map[string]string
+//	@Failure		503		{object}	map[string]string
+//	@Router			/api/me/push-subscriptions/status [post]
+func (h *Handler) SubscriptionStatus(w http.ResponseWriter, r *http.Request) {
+	userID, ok := h.notifySession(w, r)
+	if !ok {
+		return
+	}
+	var req UnsubscribeRequest
+	if !decodeNotifyBody(w, r, &req) {
+		return
+	}
+	registered, err := h.notify.IsSubscribed(r.Context(), userID, req.Endpoint)
+	if err != nil {
+		writeNotifyError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, SubscriptionStatus{Registered: registered})
 }
 
 // SendTestNotification godoc

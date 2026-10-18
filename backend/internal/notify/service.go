@@ -187,6 +187,19 @@ func (s *Service) Subscribe(ctx context.Context, userID string, sub webpush.Subs
 		return err
 	}
 
+	// 同じ端末（endpoint）をほかの利用者が登録していたら外す。共用の端末で、前の人の通知が次の人に届かないように
+	owners, err := s.store.SubscriptionOwners(ctx, sub.Endpoint)
+	if err != nil {
+		return err
+	}
+	for _, owner := range owners {
+		if owner != userID {
+			if err := s.store.DeleteSubscription(ctx, owner, sub.Endpoint); err != nil {
+				return err
+			}
+		}
+	}
+
 	subs, err := s.store.ListSubscriptions(ctx, userID)
 	if err != nil {
 		return err
@@ -201,6 +214,18 @@ func (s *Service) Subscribe(ctx context.Context, userID string, sub webpush.Subs
 	}
 
 	return s.store.PutSubscription(ctx, userID, Subscription{Subscription: sub, CreatedAt: s.now()})
+}
+
+// IsSubscribed は、この端末（endpoint）がこの利用者の購読に登録されているかを返す
+func (s *Service) IsSubscribed(ctx context.Context, userID, endpoint string) (bool, error) {
+	if endpoint == "" {
+		return false, fmt.Errorf("%w: endpoint", ErrInvalid)
+	}
+	subs, err := s.store.ListSubscriptions(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	return slices.ContainsFunc(subs, func(sub Subscription) bool { return sub.Endpoint == endpoint }), nil
 }
 
 func (s *Service) Unsubscribe(ctx context.Context, userID, endpoint string) error {

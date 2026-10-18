@@ -62,6 +62,7 @@ func New(h *handler.Handler) http.Handler {
 	mux.HandleFunc("DELETE /api/me/alerts/{railwayId}", h.RemoveAlert)
 	mux.HandleFunc("POST /api/me/push-subscriptions", h.Subscribe)
 	mux.HandleFunc("DELETE /api/me/push-subscriptions", h.Unsubscribe)
+	mux.HandleFunc("POST /api/me/push-subscriptions/status", h.SubscriptionStatus)
 	mux.HandleFunc("POST /api/me/push-subscriptions/test", h.SendTestNotification)
 
 	// ほかのサイトから Cookie 付きで状態を変えるリクエストを送らせない（CSRF 対策）。

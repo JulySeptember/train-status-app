@@ -200,3 +200,35 @@ func TestHasStationAndRailway(t *testing.T) {
 		t.Error("HasRailway")
 	}
 }
+
+// 運行情報・列車位置を取得できたかを、路線ごとに返す（通知で、取れなかった回に状態を変えないため）
+func TestGetRailwayConditionsAvailability(t *testing.T) {
+
+	for _, tt := range []struct {
+		name                string
+		status, location    []string
+		wantStatus, wantLoc bool
+	}{
+		{"both", nil, nil, true, true},
+		{"status failed", []string{}, nil, false, true},
+		{"location failed", nil, []string{}, true, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newJourneyServiceWith(t, &mockClient{statusSucceeded: tt.status, locSucceeded: tt.location})
+			got, err := s.GetRailwayConditions(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, c := range got {
+				if c.Railway != mitaRailway {
+					continue
+				}
+				if c.StatusAvailable != tt.wantStatus || c.LocationAvailable != tt.wantLoc {
+					t.Fatalf("got status=%v location=%v", c.StatusAvailable, c.LocationAvailable)
+				}
+				return
+			}
+			t.Fatal("mita not found")
+		})
+	}
+}

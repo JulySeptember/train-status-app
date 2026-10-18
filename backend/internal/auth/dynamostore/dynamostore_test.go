@@ -471,11 +471,22 @@ func TestNotifyStore(t *testing.T) {
 		}
 	}
 
-	if err := store.SaveStates(ctx, map[string]notify.Level{mita: notify.Delayed}); err != nil {
+	if err := store.SaveStates(ctx, map[string]notify.Level{mita: notify.Delayed}, now); err != nil {
 		t.Fatal(err)
 	}
-	if states, err := store.LoadStates(ctx); err != nil || states[mita] != notify.Delayed {
-		t.Fatalf("unexpected states %v %v", states, err)
+	if states, at, err := store.LoadStates(ctx); err != nil || states[mita] != notify.Delayed || !at.Equal(now) {
+		t.Fatalf("unexpected states %v %v %v", states, at, err)
+	}
+
+	// 同じ端末を登録している利用者を引ける
+	if owners, err := store.SubscriptionOwners(ctx, sub.Endpoint); err != nil || !slices.Equal(owners, []string{"u1"}) {
+		t.Fatalf("unexpected owners %v %v", owners, err)
+	}
+	if ok, err := store.HasUser(ctx, "u1"); err != nil || !ok {
+		t.Fatalf("HasUser: %v %v", ok, err)
+	}
+	if ok, err := store.HasUser(ctx, "nobody"); err != nil || ok {
+		t.Fatalf("HasUser(nobody): %v %v", ok, err)
 	}
 
 	if err := store.DeleteSubscription(ctx, "u1", sub.Endpoint); err != nil {
