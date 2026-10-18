@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"train-status-app/backend/internal/auth"
+	"train-status-app/backend/internal/favorite"
 	"train-status-app/backend/internal/handler"
 )
 
@@ -206,5 +207,100 @@ func TestLoginReplacesSession(t *testing.T) {
 	}
 	if rec := do(t, app, http.MethodGet, "/api/me", "", second, ""); rec.Code != http.StatusOK {
 		t.Fatalf("new session should work: %d", rec.Code)
+	}
+}
+
+type stubCatalog struct{}
+
+func (stubCatalog) HasStation(id string) bool {
+	return id == "odpt.Station:Toei.Asakusa.Asakusa" || id == "odpt.Station:Toei.Oedo.Shinjuku"
+}
+func (stubCatalog) HasRailway(id string) bool { return id == "odpt.Railway:Toei.Mita" }
+
+func TestFavorites(t *testing.T) {
+
+	store := auth.NewMemoryStore()
+	h := handler.New(nil, nil).
+		WithAuth(auth.NewService(stubVerifier{}, store), "client-id", true).
+		WithFavorites(favorite.NewService(store, stubCatalog{}))
+	app := New(h)
+
+	if rec := do(t, app, http.MethodGet, "/api/me/favorites", "", nil, ""); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("favorites without login: %d", rec.Code)
+	}
+
+	cookie := sessionCookie(t, do(t, app, http.MethodPost, "/api/auth/google", `{"credential":"good"}`, nil, "same-origin"), "__Host-session")
+
+	// ID は encodeURIComponent した形で届く
+	for _, path := range []string{
+		"/api/me/favorites/stations/odpt.Station%3AToei.Oedo.Shinjuku",
+		"/api/me/favorites/railways/odpt.Railway%3AToei.Mita",
+		"/api/me/favorites/journeys/odpt.Station%3AToei.Asakusa.Asakusa~odpt.Station%3AToei.Oedo.Shinjuku",
+	} {
+		if rec := do(t, app, http.MethodPut, path, "", cookie, "same-origin"); rec.Code != http.StatusNoContent {
+			t.Fatalf("PUT %s: %d %s", path, rec.Code, rec.Body)
+		}
+	}
+
+	rec := do(t, app, http.MethodGet, "/api/me/favorites", "", cookie, "")
+	want := `{"stations":["odpt.Station:Toei.Oedo.Shinjuku"],"railways":["odpt.Railway:Toei.Mita"],"journeys":[{"from":"odpt.Station:Toei.Asakusa.Asakusa","to":"odpt.Station:Toei.Oedo.Shinjuku"}]}`
+	if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != want {
+		t.Fatalf("favorites: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := do(t, app, http.MethodPut, "/api/me/favorites/stations/odpt.Station%3ANowhere", "", cookie, "same-origin"); rec.Code != http.StatusBadRequest {
+		t.Fatalf("unknown station: %d", rec.Code)
+	}
+	if rec := do(t, app, http.MethodPut, "/api/me/favorites/trains/x", "", cookie, "same-origin"); rec.Code != http.StatusBadRequest {
+		t.Fatalf("unknown kind: %d", rec.Code)
+	}
+	if rec := do(t, app, http.MethodPut, "/api/me/favorites/railways/odpt.Railway%3AToei.Mita", "", cookie, "cross-site"); rec.Code != http.StatusForbidden {
+		t.Fatalf("cross-site: %d", rec.Code)
+	}
+
+	if rec := do(t, app, http.MethodDelete, "/api/me/favorites/railways/odpt.Railway%3AToei.Mita", "", cookie, "same-origin"); rec.Code != http.StatusNoContent {
+		t.Fatalf("delete: %d", rec.Code)
+	}
+	// データの更新で無くなった駅も外せる
+	if rec := do(t, app, http.MethodDelete, "/api/me/favorites/stations/odpt.Station%3ANowhere", "", cookie, "same-origin"); rec.Code != http.StatusNoContent {
+		t.Fatalf("delete removed station: %d", rec.Code)
+	}
+	rec = do(t, app, http.MethodGet, "/api/me/favorites", "", cookie, "")
+	if !strings.Contains(rec.Body.String(), `"railways":[]`) {
+		t.Fatalf("railway should be removed: %s", rec.Body)
+	}
+
+	// 退会したら、お気に入りも消える
+	if rec := do(t, app, http.MethodDelete, "/api/me", "", cookie, "same-origin"); rec.Code != http.StatusNoContent {
+		t.Fatalf("delete account: %d", rec.Code)
+	}
+	if items, _ := store.ListFavorites(t.Context(), "u1"); len(items) != 0 {
+		t.Fatalf("favorites left after account deletion: %+v", items)
+	}
+}
+
+func TestFavoritesLimitMessage(t *testing.T) {
+
+	store := auth.NewMemoryStore()
+	app := New(handler.New(nil, nil).
+		WithAuth(auth.NewService(stubVerifier{}, store), "client-id", true).
+		WithFavorites(favorite.NewService(store, stubCatalog{})))
+
+	cookie := sessionCookie(t, do(t, app, http.MethodPost, "/api/auth/google", `{"credential":"good"}`, nil, "same-origin"), "__Host-session")
+
+	saved := favorite.Limits[favorite.Railways]
+	favorite.Limits[favorite.Railways] = 0
+	t.Cleanup(func() { favorite.Limits[favorite.Railways] = saved })
+
+	rec := do(t, app, http.MethodPut, "/api/me/favorites/railways/odpt.Railway%3AToei.Mita", "", cookie, "same-origin")
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "0件まで") {
+		t.Fatalf("limit: %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestFavoritesDisabled(t *testing.T) {
+	app := newAuthApp(true)
+	if rec := do(t, app, http.MethodGet, "/api/me/favorites", "", nil, ""); rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("favorites without service: %d", rec.Code)
 	}
 }

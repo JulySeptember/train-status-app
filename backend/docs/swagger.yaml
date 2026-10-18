@@ -40,6 +40,28 @@ definitions:
       createdAt:
         type: string
     type: object
+  favorite.Favorites:
+    properties:
+      journeys:
+        items:
+          $ref: '#/definitions/favorite.JourneyFavorite'
+        type: array
+      railways:
+        items:
+          type: string
+        type: array
+      stations:
+        items:
+          type: string
+        type: array
+    type: object
+  favorite.JourneyFavorite:
+    properties:
+      from:
+        type: string
+      to:
+        type: string
+    type: object
   handler.AuthConfig:
     properties:
       googleClientId:
@@ -571,6 +593,131 @@ paths:
       summary: Get the logged-in user
       tags:
       - Auth
+  /api/me/favorites:
+    get:
+      description: Stations, railways and journeys the logged-in user registered,
+        in the order added.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/favorite.Favorites'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get favorites
+      tags:
+      - Favorites
+  /api/me/favorites/{kind}/{id}:
+    delete:
+      parameters:
+      - description: stations, railways or journeys
+        in: path
+        name: kind
+        required: true
+        type: string
+      - description: station ID, railway ID or <from>~<to>
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Remove a favorite
+      tags:
+      - Favorites
+    put:
+      description: kind is stations, railways or journeys. The id of a journey is
+        "<from station ID>~<to station ID>".
+      parameters:
+      - description: stations, railways or journeys
+        in: path
+        name: kind
+        required: true
+        type: string
+      - description: station ID, railway ID or <from>~<to>
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: limit reached
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Add a favorite
+      tags:
+      - Favorites
   /api/routes:
     get:
       produces:

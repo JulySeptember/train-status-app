@@ -38,7 +38,7 @@ function LoggedOut({ clientId }: { clientId: string }) {
     <div className="space-y-4">
       <p className="text-foreground/80">
         Google
-        アカウントでログインすると、お気に入りの駅・路線・経路の登録や、運行情報の通知を使えるようになります（準備中）。ログインしなくても、ほかの機能はすべて使えます。
+        アカウントでログインすると、駅・路線・経路をお気に入りに登録して、ホームからすぐ開けるようになります（運行情報の通知は準備中）。ログインしなくても、ほかの機能はすべて使えます。
       </p>
 
       <GoogleSignInButton

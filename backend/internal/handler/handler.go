@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"train-status-app/backend/internal/auth"
+	"train-status-app/backend/internal/favorite"
 	"train-status-app/backend/internal/route"
 	"train-status-app/backend/internal/service"
 )
@@ -22,6 +23,9 @@ type Handler struct {
 	auth           *auth.Service
 	googleClientID string
 	secureCookie   bool
+
+	// お気に入り（WithFavorites で設定する）。設定していなければ nil で、お気に入りの API は 503 を返す
+	favorites *favorite.Service
 }
 
 func New(s *service.Service, chat ChatService) *Handler {

@@ -20,6 +20,7 @@ import (
 	"train-status-app/backend/internal/auth/dynamostore"
 	"train-status-app/backend/internal/client"
 	"train-status-app/backend/internal/config"
+	"train-status-app/backend/internal/favorite"
 	"train-status-app/backend/internal/handler"
 	"train-status-app/backend/internal/middleware"
 	"train-status-app/backend/internal/odptkey"
@@ -54,9 +55,10 @@ func main() {
 
 	h := handler.New(svc, newChat(cfg, svc, onLambda))
 
-	if a := newAuth(cfg, onLambda); a != nil {
+	if a, favorites := newAuth(cfg, onLambda); a != nil {
 		// Lambda は CloudFront の HTTPS の後ろで動く
 		h.WithAuth(a, cfg.GoogleClientID, onLambda)
+		h.WithFavorites(favorite.NewService(favorites, svc))
 	}
 
 	r := router.New(h)
@@ -138,13 +140,13 @@ func newChat(cfg config.Config, svc *service.Service, onLambda bool) handler.Cha
 	)
 }
 
-// newAuth はログインを組み立てる。使えないときは nil を返し、ログインの API は 503 になる。
-// Lambda では利用者とセッションを DynamoDB に、手元ではメモリ上に保存する（再起動で消える）。
-func newAuth(cfg config.Config, onLambda bool) *auth.Service {
+// newAuth はログインと、お気に入りの保存先を組み立てる。使えないときは nil を返し、ログイン・お気に入りの API は 503 になる。
+// Lambda では利用者・セッション・お気に入りを DynamoDB に、手元ではメモリ上に保存する（再起動で消える）。
+func newAuth(cfg config.Config, onLambda bool) (*auth.Service, favorite.Store) {
 
 	if cfg.GoogleClientID == "" {
 		log.Printf("login is disabled (GOOGLE_CLIENT_ID is not set)")
-		return nil
+		return nil, nil
 	}
 
 	verifier := auth.NewGoogleVerifier(cfg.GoogleClientID)
@@ -152,20 +154,22 @@ func newAuth(cfg config.Config, onLambda bool) *auth.Service {
 	if cfg.UsersTable == "" {
 		if onLambda {
 			log.Printf("login is disabled (USERS_TABLE is not set)")
-			return nil
+			return nil, nil
 		}
 		log.Printf("login is enabled (sessions are kept in memory)")
-		return auth.NewService(verifier, auth.NewMemoryStore())
+		store := auth.NewMemoryStore()
+		return auth.NewService(verifier, store), store
 	}
 
 	// 設定を読むだけで、AWS には接続しない
 	awsCfg, err := awsconfig.LoadDefaultConfig(context.Background())
 	if err != nil {
 		log.Printf("login is disabled (load aws config: %v)", err)
-		return nil
+		return nil, nil
 	}
 
-	return auth.NewService(verifier, dynamostore.New(dynamodb.NewFromConfig(awsCfg), cfg.UsersTable))
+	store := dynamostore.New(dynamodb.NewFromConfig(awsCfg), cfg.UsersTable)
+	return auth.NewService(verifier, store), store
 }
 
 func isLambda() bool {

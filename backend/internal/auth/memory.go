@@ -4,19 +4,23 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"train-status-app/backend/internal/favorite"
 )
 
-// MemoryStore はメモリ上の Store。手元での実行（USERS_TABLE が無いとき）とテストで使う
+// MemoryStore はメモリ上の Store と favorite.Store。手元での実行（USERS_TABLE が無いとき）とテストで使う
 type MemoryStore struct {
-	mu       sync.Mutex
-	users    map[string]User
-	sessions map[string]Session
+	mu        sync.Mutex
+	users     map[string]User
+	sessions  map[string]Session
+	favorites map[string]map[string]favorite.Item // 利用者 ID → 種類と ID → お気に入り
 }
 
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
-		users:    map[string]User{},
-		sessions: map[string]Session{},
+		users:     map[string]User{},
+		sessions:  map[string]Session{},
+		favorites: map[string]map[string]favorite.Item{},
 	}
 }
 
@@ -89,10 +93,47 @@ func (m *MemoryStore) DeleteUser(_ context.Context, userID string) error {
 	defer m.mu.Unlock()
 
 	delete(m.users, userID)
+	delete(m.favorites, userID)
 	for hash, s := range m.sessions {
 		if s.UserID == userID {
 			delete(m.sessions, hash)
 		}
 	}
+	return nil
+}
+
+func (m *MemoryStore) ListFavorites(_ context.Context, userID string) ([]favorite.Item, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var items []favorite.Item
+	for _, item := range m.favorites[userID] {
+		items = append(items, item)
+	}
+	return items, nil
+}
+
+func (m *MemoryStore) PutFavorite(_ context.Context, userID string, item favorite.Item) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if _, ok := m.users[userID]; !ok {
+		return favorite.ErrUserNotFound
+	}
+	if m.favorites[userID] == nil {
+		m.favorites[userID] = map[string]favorite.Item{}
+	}
+	key := string(item.Kind) + "#" + item.ID
+	if _, ok := m.favorites[userID][key]; !ok {
+		m.favorites[userID][key] = item
+	}
+	return nil
+}
+
+func (m *MemoryStore) DeleteFavorite(_ context.Context, userID string, kind favorite.Kind, id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	delete(m.favorites[userID], string(kind)+"#"+id)
 	return nil
 }

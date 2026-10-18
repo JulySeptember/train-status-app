@@ -4,6 +4,11 @@ import { api } from "@/api";
 
 const ME_KEY = ["me"];
 
+// ログインし直し・ログアウト・退会したら、前の利用者のお気に入り（lib/favorites.ts）を残さない
+function clearFavorites(client: ReturnType<typeof useQueryClient>) {
+  client.removeQueries({ queryKey: ["favorites"] });
+}
+
 // ログインの設定。ログインを使えない（バックエンドに設定が無い）ときは data が null
 export function useAuthConfig() {
   return useQuery({
@@ -27,7 +32,11 @@ export function useLogin() {
 
   return useMutation({
     mutationFn: api.login,
-    onSuccess: (res) => client.setQueryData(ME_KEY, res.user),
+    onSuccess: (res) => {
+      // 別の利用者でログインし直したときに、前のお気に入りを出さない
+      clearFavorites(client);
+      client.setQueryData(ME_KEY, res.user);
+    },
   });
 }
 
@@ -40,6 +49,7 @@ export function useLogout() {
     onSuccess: () => {
       window.google?.accounts.id.disableAutoSelect();
       client.setQueryData(ME_KEY, null);
+      clearFavorites(client);
     },
   });
 }
@@ -52,6 +62,7 @@ export function useDeleteAccount() {
     onSuccess: () => {
       window.google?.accounts.id.disableAutoSelect();
       client.setQueryData(ME_KEY, null);
+      clearFavorites(client);
     },
   });
 }
