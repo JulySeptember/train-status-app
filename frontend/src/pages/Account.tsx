@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { Bell, Star } from "lucide-react";
 
 import Error from "@/components/Error";
 import GoogleSignInButton from "@/components/GoogleSignInButton";
@@ -7,6 +8,7 @@ import Loading from "@/components/Loading";
 import NotificationSettings from "@/components/NotificationSettings";
 import PageTitle from "@/components/PageTitle";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogClose,
@@ -37,24 +39,49 @@ function LoggedOut({ clientId }: { clientId: string }) {
 
   return (
     <div className="space-y-4">
-      <p className="text-foreground/80">
-        Google
-        アカウントでログインすると、駅・路線・経路をお気に入りに登録して、ホームからすぐ開けるようになります。登録した路線の運行情報の通知も受け取れます。ログインしなくても、ほかの機能はすべて使えます。
+      <Card>
+        <CardContent className="space-y-5">
+          <p className="font-medium">
+            Google アカウントでログインすると、次の機能を使えます。
+          </p>
+
+          <ul className="space-y-3 text-sm">
+            <li className="flex items-start gap-3">
+              <Star size={18} className="mt-0.5 shrink-0 text-warning" />
+              <span>
+                駅・路線・経路をお気に入りに登録して、ホームからすぐ開ける
+              </span>
+            </li>
+            <li className="flex items-start gap-3">
+              <Bell size={18} className="mt-0.5 shrink-0 text-brand" />
+              <span>
+                登録した路線で遅れや運転見合わせが起きたら、通知を受け取る
+              </span>
+            </li>
+          </ul>
+
+          <GoogleSignInButton
+            clientId={clientId}
+            onCredential={(credential) => login.mutate(credential)}
+          />
+
+          {login.isPending && (
+            <p className="text-sm text-muted-foreground">
+              ログインしています...
+            </p>
+          )}
+          {login.isError && (
+            <p className="text-sm text-destructive-foreground">
+              ログインできませんでした。もう一度お試しください。
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <p className="text-sm text-muted-foreground">
+        ログインしなくても、運行情報・経路検索・時刻表・AI
+        乗換相談はすべて使えます。
       </p>
-
-      <GoogleSignInButton
-        clientId={clientId}
-        onCredential={(credential) => login.mutate(credential)}
-      />
-
-      {login.isPending && (
-        <p className="text-sm text-muted-foreground">ログインしています...</p>
-      )}
-      {login.isError && (
-        <p className="text-sm text-destructive-foreground">
-          ログインできませんでした。もう一度お試しください。
-        </p>
-      )}
 
       <p className="text-sm text-muted-foreground">
         保存するのは Google

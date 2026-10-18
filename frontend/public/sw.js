@@ -16,7 +16,9 @@ self.addEventListener("push", (event) => {
       tag: message.tag,
       // 同じ路線の新しい通知で置き換えたときも、知らせる
       renotify: Boolean(message.tag),
-      icon: "/favicon.svg",
+      icon: "/icon-192.png",
+      // Android のステータスバーに出す白一色のアイコン
+      badge: "/badge-96.png",
       data: { url: message.url || "/" },
     }),
   );
