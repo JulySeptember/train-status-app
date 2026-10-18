@@ -50,6 +50,11 @@ func New(h *handler.Handler) http.Handler {
 	mux.HandleFunc("GET /api/me", h.Me)
 	mux.HandleFunc("DELETE /api/me", h.DeleteMe)
 
+	// Favorites
+	mux.HandleFunc("GET /api/me/favorites", h.Favorites)
+	mux.HandleFunc("PUT /api/me/favorites/{kind}/{id}", h.AddFavorite)
+	mux.HandleFunc("DELETE /api/me/favorites/{kind}/{id}", h.RemoveFavorite)
+
 	// ほかのサイトから Cookie 付きで状態を変えるリクエストを送らせない（CSRF 対策）。
 	// Sec-Fetch-Site（無ければ Origin と Host）を見て、別のオリジンからの POST・PUT・DELETE などを 403 にする
 	return http.NewCrossOriginProtection().Handler(mux)

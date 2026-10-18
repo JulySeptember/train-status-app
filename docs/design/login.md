@@ -1,6 +1,6 @@
 # ログイン・お気に入り・運行情報の通知 設計書
 
-- 状態: 段階1（ログイン）を実装中（2026-10-18）
+- 状態: 段階1（ログイン）実装済み（#98）。段階2（お気に入り）を実装中（2026-10-18）
 - 対象: Google アカウントでのログイン、お気に入り（駅・路線・経路）、運行情報の Web Push 通知
 - 関連: [AI 鉄道エージェント 設計書](ai-api.md)、[経路探索エンジン 設計書](route-search.md)
 
@@ -103,11 +103,13 @@ Cognito を使わない理由:
 | `PUT /api/me/favorites/{kind}/{id}` | 登録する（経路の `id` は `<出発駅ID>~<到着駅ID>`） |
 | `DELETE /api/me/favorites/{kind}/{id}` | 外す |
 
-ID が assets に無いものは 400 を返す。
+- ID が assets に無いもの、種類が違うものは 400、上限に達していれば 409 を返す。登録済みのものを足しても何もしない（204）
+- 上限は、データの更新で無くなった駅・路線を数えない（一覧に出ず、外せないため）
+- お気に入りの項目（`USER#<sub>` / `FAV#<種類>#<ID>`）は、セッションと同じく PROFILE があることを条件に TransactWriteItems で書く。退会でいっしょに消える
 
 ### 4.3 画面
 
-- 駅・路線・経路検索の結果の画面に星のボタンを置く。ログインしていないときに押したら、ログインを勧める
+- 駅・路線の画面の名前の横と、経路検索の結果の上に星のボタンを置く。ログインしていないときに押したら、アカウントの画面（`/account`）を開く。ログインを使えない（`GET /api/auth/config` が 503）ときは出さない
 - ホームの上部に「お気に入り」を出す。経路は、押すとその区間の経路検索を今の時刻で開く。路線は、今の運行情報を並べて出す
 - ホームの運行情報の並び順（`lib/railwayOrder.ts`、`localStorage`）は今のまま端末ごとに持つ
 
@@ -180,7 +182,7 @@ DynamoDB に1つのテーブル（`train-status-app-dev-users`、オンデマン
 |---|---|---|
 | `USER#<sub>` | `PROFILE` | 作成日 |
 | `USER#<sub>` | `SESSION#<セッションIDの SHA-256>` | `expiresAt`（TTL）。退会のときにセッションを引くための目印 |
-| `USER#<sub>` | `FAV#STATION#<駅ID>` など | 登録日 |
+| `USER#<sub>` | `FAV#stations#<駅ID>`・`FAV#railways#<路線ID>`・`FAV#journeys#<出発駅ID>~<到着駅ID>` | 登録日 |
 | `USER#<sub>` | `ALERT#<路線ID>` | 曜日・時間帯。GSI 用に `gsi1pk = ALERT#<路線ID>` |
 | `USER#<sub>` | `PUSH#<endpoint の SHA-256>` | endpoint・鍵 |
 | `SESSION#<セッションIDの SHA-256>` | `SESSION` | 利用者 ID、`expiresAt`（TTL） |

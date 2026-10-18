@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
 	"train-status-app/backend/internal/auth"
+	"train-status-app/backend/internal/favorite"
 )
 
 // fakeAPI は、このパッケージが使う式だけを解釈するメモリ上の DynamoDB
@@ -79,9 +80,10 @@ func (f *fakeAPI) DeleteItem(_ context.Context, in *dynamodb.DeleteItemInput, _ 
 // Query は1件ずつページを分けて返し、ページ送りも確かめる
 func (f *fakeAPI) Query(_ context.Context, in *dynamodb.QueryInput, _ ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
 	pk := s(in.ExpressionAttributeValues[":pk"])
+	prefix := s(in.ExpressionAttributeValues[":prefix"])
 	var ids []string
 	for k := range f.items {
-		if strings.HasPrefix(k, pk+"|") {
+		if strings.HasPrefix(k, pk+"|"+prefix) {
 			ids = append(ids, k)
 		}
 	}
@@ -96,8 +98,12 @@ func (f *fakeAPI) Query(_ context.Context, in *dynamodb.QueryInput, _ ...func(*d
 			continue
 		}
 		item := f.items[k]
-		page := map[string]types.AttributeValue{attrPK: item[attrPK], attrSK: item[attrSK]}
-		return &dynamodb.QueryOutput{Items: []map[string]types.AttributeValue{page}, LastEvaluatedKey: page}, nil
+		last := map[string]types.AttributeValue{attrPK: item[attrPK], attrSK: item[attrSK]}
+		page := maps.Clone(item)
+		if in.ProjectionExpression != nil {
+			page = last
+		}
+		return &dynamodb.QueryOutput{Items: []map[string]types.AttributeValue{page}, LastEvaluatedKey: last}, nil
 	}
 	return &dynamodb.QueryOutput{}, nil
 }
@@ -116,6 +122,10 @@ func (f *fakeAPI) TransactWriteItems(_ context.Context, in *dynamodb.TransactWri
 		default:
 			continue
 		}
+		// 条件の無い Update（お気に入りの登録日）は、項目が無くても作る
+		if t.Update != nil && t.Update.ConditionExpression == nil {
+			continue
+		}
 		if f.items[id(k)] == nil {
 			reasons[i].Code = aws.String("ConditionalCheckFailed")
 			failed = true
@@ -128,6 +138,14 @@ func (f *fakeAPI) TransactWriteItems(_ context.Context, in *dynamodb.TransactWri
 		switch {
 		case t.Put != nil:
 			f.items[id(t.Put.Item)] = maps.Clone(t.Put.Item)
+		case t.Update != nil && strings.Contains(*t.Update.UpdateExpression, "if_not_exists"):
+			k := id(t.Update.Key)
+			if f.items[k] == nil {
+				f.items[k] = maps.Clone(t.Update.Key)
+			}
+			if _, ok := f.items[k][attrCreatedAt]; !ok {
+				f.items[k][attrCreatedAt] = t.Update.ExpressionAttributeValues[":now"]
+			}
 		case t.Update != nil:
 			f.items[id(t.Update.Key)][attrExpires] = t.Update.ExpressionAttributeValues[":expires"]
 		}
@@ -303,3 +321,68 @@ func TestDeleteUser(t *testing.T) {
 
 // 実際の *dynamodb.Client が API を満たすこと
 var _ API = (*dynamodb.Client)(nil)
+
+func TestFavorites(t *testing.T) {
+
+	ctx := context.Background()
+	api := newFakeAPI()
+	store := New(api, "users")
+	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+
+	// 利用者がいなければ足せない
+	if err := store.PutFavorite(ctx, "u1", favorite.Item{Kind: favorite.Stations, ID: "s1", CreatedAt: now}); !errors.Is(err, favorite.ErrUserNotFound) {
+		t.Fatalf("want ErrUserNotFound, got %v", err)
+	}
+
+	if _, err := store.EnsureUser(ctx, "u1", now); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CreateSession(ctx, auth.Session{Hash: "h1", UserID: "u1", ExpiresAt: now.Add(time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
+
+	journey := "odpt.Station:Toei.Asakusa.Asakusa~odpt.Station:Toei.Oedo.Shinjuku"
+	for i, item := range []favorite.Item{
+		{Kind: favorite.Stations, ID: "odpt.Station:Toei.Oedo.Shinjuku"},
+		{Kind: favorite.Railways, ID: "odpt.Railway:Toei.Asakusa"},
+		{Kind: favorite.Journeys, ID: journey},
+	} {
+		item.CreatedAt = now.Add(time.Duration(i) * time.Minute)
+		if err := store.PutFavorite(ctx, "u1", item); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// もう一度足しても登録日は変わらない
+	if err := store.PutFavorite(ctx, "u1", favorite.Item{Kind: favorite.Journeys, ID: journey, CreatedAt: now.Add(time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
+
+	items, err := store.ListFavorites(ctx, "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 3 {
+		t.Fatalf("want 3 favorites (sessions excluded), got %+v", items)
+	}
+	for _, item := range items {
+		if item.Kind == favorite.Journeys && (item.ID != journey || !item.CreatedAt.Equal(now.Add(2*time.Minute))) {
+			t.Fatalf("unexpected journey %+v", item)
+		}
+	}
+
+	if err := store.DeleteFavorite(ctx, "u1", favorite.Railways, "odpt.Railway:Toei.Asakusa"); err != nil {
+		t.Fatal(err)
+	}
+	if items, _ := store.ListFavorites(ctx, "u1"); len(items) != 2 {
+		t.Fatalf("want 2 favorites after delete, got %+v", items)
+	}
+
+	// 退会でお気に入りも消える
+	if err := store.DeleteUser(ctx, "u1"); err != nil {
+		t.Fatal(err)
+	}
+	if len(api.items) != 0 {
+		t.Fatalf("items left after delete: %v", slices.Collect(maps.Keys(api.items)))
+	}
+}

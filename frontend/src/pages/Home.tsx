@@ -8,10 +8,12 @@ import {
   ChevronRight,
   CircleCheck,
   Info,
+  MapPin,
   Route,
   RotateCcw,
   SendHorizontal,
   Sparkles,
+  Star,
   TriangleAlert,
 } from "lucide-react";
 
@@ -43,6 +45,8 @@ import {
   useRailwayOrder,
 } from "@/lib/railwayOrder";
 import { groupByOperator, useRailways } from "@/lib/railways";
+import { useFavorites } from "@/lib/favorites";
+import { stationPath } from "@/lib/station";
 import { EXAMPLES, MAX_INPUT_CHARS, type ChatLocationState } from "@/lib/chat";
 import { cn } from "@/lib/utils";
 
@@ -262,6 +266,110 @@ function OperatorSummary({
   );
 }
 
+// ログインした利用者のお気に入り。登録が無ければ出さない
+function FavoritesSection() {
+  const favorites = useFavorites();
+  const status = useQuery({
+    queryKey: ["status"],
+    queryFn: api.getStatus,
+  });
+  const railways = useRailways();
+  const stations = useQuery({
+    queryKey: ["stations"],
+    queryFn: api.getAllStations,
+  });
+
+  const data = favorites.data;
+  if (
+    !data ||
+    data.stations.length + data.railways.length + data.journeys.length === 0
+  ) {
+    return null;
+  }
+
+  const stationName = (id: string) =>
+    stations.data?.find((s) => s.id === id)?.name ?? "…";
+
+  return (
+    <section className="space-y-4">
+      <h2 className="flex items-center gap-2 text-2xl font-bold">
+        <Star size={22} className="fill-current text-warning" />
+        お気に入り
+      </h2>
+
+      {data.journeys.length > 0 && (
+        <ul className="grid gap-3 md:grid-cols-2">
+          {data.journeys.map((j) => (
+            <li key={`${j.from}~${j.to}`}>
+              <Link
+                to={`/journeys?${new URLSearchParams({ from: j.from, to: j.to })}`}
+                className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3 transition hover:bg-muted"
+              >
+                <Route size={18} className="shrink-0 text-brand" />
+                <span className="min-w-0 flex-1 font-semibold">
+                  {stationName(j.from)} → {stationName(j.to)}
+                </span>
+                <span className="text-sm text-muted-foreground">
+                  今から探す
+                </span>
+                <ChevronRight
+                  size={18}
+                  className="shrink-0 text-muted-foreground"
+                />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {data.railways.length > 0 && (
+        <ul className="grid gap-3 md:grid-cols-2">
+          {data.railways.map((id) => {
+            const railway = railways.data?.find((r) => r.id === id);
+            const s = status.data?.find((st) => st.railwayId === id);
+            if (!railway) {
+              return null;
+            }
+            return (
+              <li key={id}>
+                <StatusCard
+                  railway={railway}
+                  status={
+                    s ?? {
+                      railwayId: id,
+                      railway: railway.name,
+                      status: status.isPending
+                        ? "運行情報を読み込んでいます"
+                        : "運行情報は配信されていません",
+                      unavailable: true,
+                    }
+                  }
+                />
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {data.stations.length > 0 && (
+        <ul className="flex flex-wrap gap-2">
+          {data.stations.map((id) => (
+            <li key={id}>
+              <Link
+                to={stationPath(id)}
+                className="inline-flex items-center gap-1.5 rounded-full border bg-card px-3 py-1.5 text-sm transition hover:bg-muted"
+              >
+                <MapPin size={14} className="text-muted-foreground" />
+                {stationName(id)}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 function StatusSection() {
   const status = useQuery({
     queryKey: ["status"],
@@ -468,6 +576,7 @@ export default function Home() {
     <div className="space-y-10">
       <PageTitle />
       <SearchPanel />
+      <FavoritesSection />
       <StatusSection />
     </div>
   );

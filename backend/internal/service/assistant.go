@@ -335,3 +335,15 @@ func (s *Service) RailwayName(id string) string {
 	}
 	return lastSegment(id)
 }
+
+// HasStation は、駅があるか（assets の駅か）を返す
+func (s *Service) HasStation(id string) bool {
+	_, ok := s.stationGroups[id]
+	return ok
+}
+
+// HasRailway は、路線があるか（assets の路線か）を返す
+func (s *Service) HasRailway(id string) bool {
+	_, ok := s.railwayNames[id]
+	return ok
+}

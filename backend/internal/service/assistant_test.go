@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"train-status-app/backend/assets"
 	"train-status-app/backend/internal/model"
 )
 
@@ -181,5 +182,21 @@ func TestOperators(t *testing.T) {
 
 	if len(got) != 1 || got[0].Name != "都営交通" || !got[0].RouteSearch {
 		t.Fatalf("unexpected operators: %+v", got)
+	}
+}
+
+// お気に入りに登録できる駅・路線（assets にあるもの）
+func TestHasStationAndRailway(t *testing.T) {
+	loader, err := assets.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := New(&mockClient{}, loader)
+
+	if !svc.HasStation("odpt.Station:Toei.Oedo.Shinjuku") || svc.HasStation("odpt.Station:Toei.Oedo.Nowhere") {
+		t.Error("HasStation")
+	}
+	if !svc.HasRailway("odpt.Railway:Toei.Mita") || svc.HasRailway("odpt.Railway:Toei.Nowhere") {
+		t.Error("HasRailway")
 	}
 }

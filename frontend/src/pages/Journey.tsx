@@ -9,6 +9,9 @@ import JourneyForm, { readJourneyQuery } from "@/components/JourneyForm";
 import JourneyList from "@/components/JourneyList";
 import RealtimeNotice from "@/components/RealtimeNotice";
 import PageTitle from "@/components/PageTitle";
+import FavoriteButton from "@/components/FavoriteButton";
+
+import { journeyFavoriteId } from "@/lib/favorites";
 
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -62,6 +65,17 @@ export default function Journey() {
         <Message title="経路を検索できませんでした。">
           駅や時刻の指定を確かめて、もう一度検索してください。
         </Message>
+      )}
+
+      {query && journeys.data && (
+        <div className="flex justify-end">
+          <FavoriteButton
+            kind="journeys"
+            id={journeyFavoriteId(query.from, query.to)}
+            name={`${stationName(query.from) ?? "出発駅"}から${stationName(query.to) ?? "到着駅"}までの経路`}
+            label
+          />
+        </div>
       )}
 
       {query && journeys.data && (

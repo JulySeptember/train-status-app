@@ -183,3 +183,17 @@ export interface User {
 export interface LoginResponse {
   user: User;
 }
+
+// お気に入り（GET /api/me/favorites）。種類ごとに登録した順
+export type FavoriteKind = "stations" | "railways" | "journeys";
+
+export interface JourneyFavorite {
+  from: string;
+  to: string;
+}
+
+export interface Favorites {
+  stations: string[];
+  railways: string[];
+  journeys: JourneyFavorite[];
+}

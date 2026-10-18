@@ -3,6 +3,8 @@ import type {
   ChatErrorBody,
   ChatMessage,
   ChatResponse,
+  FavoriteKind,
+  Favorites,
   JourneyQuery,
   JourneySearch,
   LoginResponse,
@@ -57,7 +59,8 @@ async function postChat(messages: ChatMessage[]): Promise<ChatResponse> {
   return await res.json();
 }
 
-// send は状態を変えるリクエスト（ログイン・ログアウト・退会）。本文の無いレスポンス（204）は undefined を返す
+// send は状態を変えるリクエスト（ログイン・ログアウト・退会・お気に入り）。本文の無いレスポンス（204）は undefined を返す。
+// 失敗したときの message は、ユーザーに見せられる文言（バックエンドの error）にする
 async function send<T>(
   method: string,
   url: string,
@@ -71,7 +74,11 @@ async function send<T>(
   });
 
   if (!res.ok) {
-    throw new Error(await res.text());
+    // CloudFront や API Gateway のエラーは JSON でないことがある
+    const err = await res.json().catch(() => null);
+    throw new Error(
+      typeof err?.error === "string" ? err.error : "エラーが発生しました。",
+    );
   }
 
   return res.status === 204 ? (undefined as T) : await res.json();
@@ -103,6 +110,11 @@ async function getAuthConfig(): Promise<AuthConfig | null> {
   }
 
   return await res.json();
+}
+
+// 経路の id は「出発駅ID~到着駅ID」。ID は : を含むので、それぞれ encodeURIComponent する
+function favoritePath(kind: FavoriteKind, id: string) {
+  return `/me/favorites/${kind}/${id.split("~").map(encodeURIComponent).join("~")}`;
 }
 
 export const api = {
@@ -166,5 +178,17 @@ export const api = {
 
   deleteAccount() {
     return send<void>("DELETE", "/me");
+  },
+
+  getFavorites() {
+    return request<Favorites>("/me/favorites");
+  },
+
+  addFavorite(kind: FavoriteKind, id: string) {
+    return send<void>("PUT", favoritePath(kind, id));
+  },
+
+  removeFavorite(kind: FavoriteKind, id: string) {
+    return send<void>("DELETE", favoritePath(kind, id));
   },
 };
