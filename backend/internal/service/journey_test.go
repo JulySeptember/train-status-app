@@ -24,6 +24,7 @@ const (
 	oedoRailway  = "odpt.Railway:Toei.Oedo"
 	mitaRailway  = "odpt.Railway:Toei.Mita"
 	mitaMita     = "odpt.Station:Toei.Mita.Mita"
+	tochomae     = "odpt.Station:Toei.Oedo.Tochomae"
 )
 
 // 2026-10-08（木）10:00。平日ダイヤ
@@ -55,14 +56,16 @@ func assertTimetable(t *testing.T, s *Service, journeys []Journey) {
 
 	calendars := calendar.Calendars(journeyNow)
 
-	departures := make(map[[2]string]string)
+	// 大江戸線の都庁前は、環状部を回って光が丘方面へ続ける列車が2回発車するので、時刻を全部持つ
+	departures := make(map[[2]string][]string)
 	for _, tt := range s.assets.StationTimetables() {
 		if !slices.Contains(calendars, tt.Calendar) {
 			continue
 		}
 		for _, obj := range tt.StationTimetableObject {
 			if obj.DepartureTime != "" {
-				departures[[2]string{tt.Station, obj.Train}] = obj.DepartureTime
+				key := [2]string{tt.Station, obj.Train}
+				departures[key] = append(departures[key], obj.DepartureTime)
 			}
 		}
 	}
@@ -97,8 +100,8 @@ func assertTimetable(t *testing.T, s *Service, journeys []Journey) {
 			}
 			scheduled := formatClock(dep - l.DelayMinutes)
 
-			got, ok := departures[[2]string{l.From, l.Train}]
-			if !ok || got != scheduled {
+			got := departures[[2]string{l.From, l.Train}]
+			if !slices.Contains(got, scheduled) {
 				t.Errorf("%s at %s: departure %s (delay %d), station timetable %q", l.Train, l.From, l.DepartureTime, l.DelayMinutes, got)
 			}
 
@@ -136,6 +139,8 @@ func TestSearchJourneys(t *testing.T) {
 		// 馬喰横山 ⇔ 東日本橋で乗り換える
 		{"新宿 → 押上", shinjukuLine, oshiage},
 		{"西馬込 → 押上", nishiMagome, oshiage},
+		// 都庁前を2回発車する列車（1017B は 10:00 に環状部へ、11:03 に光が丘方面へ）の1回目に乗る
+		{"都庁前 → 東新宿", tochomae, "odpt.Station:Toei.Oedo.HigashiShinjuku"},
 	}
 
 	for _, tt := range tests {
