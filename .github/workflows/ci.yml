@@ -119,6 +119,19 @@ jobs:
       - run: npm run lint
       - run: npm run build
 
+      # E2E テスト。/api はテストの中でモックするので、バックエンドは起動しない
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 7
+
   infra:
     needs: changes
     if: needs.changes.outputs.infra == 'true'

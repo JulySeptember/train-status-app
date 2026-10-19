@@ -19,6 +19,7 @@ make backend-vet        # go vet ./...
 make frontend-dev       # vite dev server（/api は BACKEND_URL か localhost:8080 にプロキシ）
 make frontend-lint      # eslint
 make frontend-build     # tsc -b && vite build（型チェックも兼ねる）
+make frontend-e2e       # Playwright の E2E テスト（初回は cd frontend && npx playwright install chromium）
 ```
 
 単一テストの実行:
@@ -29,7 +30,7 @@ cd backend && go test ./internal/service -run TestGetTrainLocation -v
 
 テスト・vet・lint・build は、サブエージェントの `test-runner`（`.claude/agents/test-runner.md`、Haiku で動く。実行と結果の報告だけを行い、コードは直さない）に実行させる。失敗の調査と修正はメインの会話で行う。数秒で終わる単一テストは直接実行してよい。
 
-フロントエンドにテストはない。
+フロントエンドのテストは Playwright の E2E テスト（`frontend/e2e/`）だけ。`/api` は `e2e/mock.ts` の `page.route` で固定の応答（`e2e/data.ts`、`src/types.ts` の型付き）を返すので、バックエンドは起動しない。登録していない API が呼ばれるとテストが失敗する。現在時刻は `NOW`（平日の朝）に固定している。DTO を変えたら `data.ts` も合わせる（`tsc -b` で型のずれに気づける）。対象は運行情報・路線・駅（時刻表）・列車・経路検索で、AI チャット・ログイン・通知・スマホの幅は無い。
 画面は `verify-ui` スキル（`.claude/skills/verify-ui/SKILL.md`）の手順で、手元で起動して Playwright MCP で確かめる。スクリーンショットはリポジトリの `.playwright-mcp/`（gitignore 済み）にしか保存できない。
 
 AI エージェントの評価セット（`backend/internal/ai/testdata/eval.yaml`）は実際の Gemini を呼ぶので、手で実行する（CI では動かない。無料枠を数十回使い、約7分かかる）。キーは SSM から直接渡し、画面や会話に出さない:
@@ -90,7 +91,7 @@ aws logs filter-log-events --region ap-northeast-1 \
 
 ブランチを切る・PR を作る前に `git fetch` と `gh pr list --state all` で main と PR の状態を確認する（`gh` は導入済み）。
 
-PR では `.github/workflows/ci.yml` が変更のあった領域だけを検証する（backend: gofmt・vet・test・Swagger が最新か / frontend: lint・build / infra: terraform fmt・validate と、PR への `terraform plan` の結果のコメント）。Swagger のチェックは go.mod の swaggo/swag と同じバージョンの CLI で再生成して差分を見る。
+PR では `.github/workflows/ci.yml` が変更のあった領域だけを検証する（backend: gofmt・vet・test・Swagger が最新か / frontend: lint・build・E2E / infra: terraform fmt・validate と、PR への `terraform plan` の結果のコメント）。Swagger のチェックは go.mod の swaggo/swag と同じバージョンの CLI で再生成して差分を見る。
 
 main は Ruleset（`main`）で保護している: PR 必須（承認は不要）、force push・削除の禁止、必須チェックは `changes`・`backend`・`frontend`・`infra`（ci.yml のジョブ名）。`if` でスキップされたジョブは成功として扱われるので、変更のない領域があってもマージできる。`changes` が失敗すると後続がスキップされて通ってしまうため、`changes` も必須にしている。ci.yml のジョブ名を変えたり検証のジョブを足したりしたら、Ruleset の必須チェックも合わせて変える（`gh api repos/JulySeptember/train-status-app/rulesets`）。`infra-plan` は AWS 側の一時的な失敗やフォークからの PR があるので必須にしていない。
 
