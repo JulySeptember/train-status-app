@@ -62,6 +62,10 @@ frontend-dev:
 frontend-build:
 	cd $(FRONTEND_DIR) && npm run build
 
+# 初回は cd frontend && npx playwright install chromium でブラウザを入れる
+frontend-e2e:
+	cd $(FRONTEND_DIR) && npm run test:e2e
+
 # ファイル名にハッシュが付く assets/ は長期キャッシュし、index.html などは毎回再検証させる。
 # Cache-Control を確実に付けるため cp で全件上げ直し、最後の sync で不要になったファイルを消す
 frontend-upload:
