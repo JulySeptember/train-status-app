@@ -1,4 +1,4 @@
-import { ASAKUSA, asakusaStations, railways, statuses } from "./data.ts";
+import { ASAKUSA, OEDO, asakusaStations, railways, statuses } from "./data.ts";
 import { expect, test } from "./mock.ts";
 
 test("運行情報: 平常の路線と遅れのある路線を見分けて出す", async ({
@@ -91,6 +91,57 @@ test("運行情報: 事業者が複数なら、遅れのある事業者だけを
   await expect(page.getByRole("link", { name: /^浅草線/ })).toBeHidden();
   await toei.click();
   await expect(page.getByRole("link", { name: /^浅草線/ })).toBeVisible();
+});
+
+test("運行情報: 事業者の運行情報を取れなかった路線は、遅れとも平常とも出さない", async ({
+  page,
+  api,
+}) => {
+  const ginza = "odpt.Railway:TokyoMetro.Ginza";
+  const unavailable = {
+    status: "運行情報を取得できませんでした",
+    unavailable: true,
+  };
+  api.set("/routes", {
+    body: [
+      ...railways,
+      {
+        id: ginza,
+        name: "銀座線",
+        lineCode: "G",
+        color: "#F39700",
+        operator: "odpt.Operator:TokyoMetro",
+        operatorName: "東京メトロ",
+      },
+    ],
+  });
+  api.set("/status", {
+    body: [
+      ...statuses.map((s) =>
+        s.railwayId === OEDO ? { ...s, ...unavailable } : s,
+      ),
+      { railwayId: ginza, railway: "銀座線", ...unavailable },
+    ],
+  });
+
+  await page.goto("/");
+
+  // 遅れの案内には、取れなかった路線を含めない
+  await expect(
+    page.getByText("三田線で遅れが出ています。", { exact: true }),
+  ).toBeVisible();
+
+  const metro = page.getByRole("button", { name: /^東京メトロ/ });
+  await expect(metro).toContainText("取得できませんでした");
+  await expect(metro).toHaveAttribute("aria-expanded", "false");
+
+  const toei = page.getByRole("button", { name: /^都営交通/ });
+  await expect(toei).toContainText("1路線で遅れ");
+  await expect(toei).toHaveAttribute("aria-expanded", "true");
+
+  const oedo = page.getByRole("link", { name: /^大江戸線/ });
+  await expect(oedo).toContainText("運行情報を取得できませんでした");
+  await expect(oedo).not.toContainText("平常運転");
 });
 
 test("運行情報: 取得に失敗したらエラーを出す", async ({ page, api }) => {

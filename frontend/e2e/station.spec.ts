@@ -75,3 +75,52 @@ test("駅: 本日のダイヤの列車を選ぶと、列車の位置を開く", 
   await expect(page).toHaveURL(`/trains/${encodeURIComponent(RUNNING_TRAIN)}`);
   await expect(page.getByRole("heading", { level: 1 })).toContainText("押上行");
 });
+
+test("駅: 深夜は0時台の列車を運行日の最後として、次発を決める", async ({
+  page,
+  api,
+}) => {
+  // 23:50。運行日は3時で切り替わるので、00:10 の列車は同じ運行日のうちで、次発になる
+  await page.clock.setFixedTime(new Date("2026-10-19T23:50:00+09:00"));
+  const weekday = gotanda.timetables[0];
+  api.set(`/stations/${GOTANDA}`, {
+    body: {
+      ...gotanda,
+      timetables: [
+        {
+          ...weekday,
+          timetables: [
+            { ...weekday.timetables[0], time: "05:10" },
+            { ...weekday.timetables[1], time: "23:40" },
+            { ...weekday.timetables[2], time: "00:10" },
+          ],
+        },
+      ],
+    },
+  });
+
+  await page.goto(`/stations/${encodeURIComponent(GOTANDA)}`);
+
+  await expect(
+    card(page, "平日").getByRole("link").filter({ hasText: "次発" }),
+  ).toContainText("00:10");
+});
+
+test("駅: 列車位置を配信しない路線は、本日のダイヤでも列車へのリンクにしない", async ({
+  page,
+  api,
+}) => {
+  api.set(`/stations/${GOTANDA}`, {
+    body: { ...gotanda, trainLocationAvailable: false },
+  });
+
+  await page.goto(`/stations/${encodeURIComponent(GOTANDA)}`);
+
+  await expect(
+    page.getByText("この路線は列車位置情報が提供されていません。"),
+  ).toBeVisible();
+  const weekday = card(page, "平日");
+  await expect(weekday).toContainText("本日");
+  await expect(weekday.getByText("次発")).toHaveCount(1);
+  await expect(weekday.getByRole("link")).toHaveCount(0);
+});

@@ -1,6 +1,13 @@
 import { type Page } from "@playwright/test";
 
-import { GOTANDA, MITA, ROPPONGI, journeySearch } from "./data.ts";
+import {
+  ASAKUSA_DAIMON,
+  GOTANDA,
+  MITA,
+  OEDO_DAIMON,
+  ROPPONGI,
+  journeySearch,
+} from "./data.ts";
 import { expect, test } from "./mock.ts";
 
 // 駅を選ぶ（ボタンを押し、駅名で絞り込んで選ぶ）。
@@ -44,6 +51,10 @@ test("経路検索: ホームから駅を選んで検索し、乗り換えと遅
 
   await selectStation(page, "出発駅", "五反田");
   await selectStation(page, "到着駅", "六本木");
+  // 時刻を入れてから「今すぐ」に戻したときも、時刻は送らない
+  await page.getByRole("tab", { name: "出発" }).click();
+  await page.getByLabel("出発時刻").fill("09:00");
+  await page.getByRole("tab", { name: "今すぐ" }).click();
   const request = waitForJourneys(page);
   await search.click();
 
@@ -53,6 +64,9 @@ test("経路検索: ホームから駅を選んで検索し、乗り換えと遅
   expect(params.get("from")).toBe(GOTANDA);
   expect(params.get("to")).toBe(ROPPONGI);
   expect(params.has("realtime")).toBe(false);
+  // 「今すぐ」は時刻を送らない（バックエンドが現在時刻で探す）
+  expect(params.has("departAt")).toBe(false);
+  expect(params.has("arriveBy")).toBe(false);
 
   await expect(page.getByText("08:0508:26")).toBeVisible();
   await expect(page.getByText("21分", { exact: true })).toBeVisible();
@@ -112,9 +126,61 @@ test("経路検索: 出発駅と到着駅が同じなら検索できない", asy
   await page
     .getByRole("button", { name: "出発駅と到着駅を入れ替える" })
     .click();
-  await expect(page.getByRole("combobox").first()).toContainText("五反田");
+  await expect(page.getByRole("combobox").nth(0)).toContainText("五反田");
+  await expect(page.getByRole("combobox").nth(1)).toContainText("大門");
+  await expect(page.getByRole("button", { name: "検索" })).toBeEnabled();
   await selectStation(page, "到着駅", "五反田");
   await expect(page.getByRole("button", { name: "検索" })).toBeDisabled();
+});
+
+test("経路検索: 経路検索で1つにまとめた駅どうし（大江戸線と浅草線の大門）は検索できない", async ({
+  page,
+  api,
+}) => {
+  // URL で指定されると結果も取りにいくので、空の結果を返す
+  api.set("/journeys", {
+    body: { journeys: [], delayApplied: true, suspendedRailways: [] },
+  });
+
+  await page.goto(
+    `/journeys?from=${encodeURIComponent(OEDO_DAIMON)}&to=${encodeURIComponent(ASAKUSA_DAIMON)}`,
+  );
+
+  await expect(page.getByRole("combobox").nth(0)).toContainText("大門");
+  await expect(page.getByRole("combobox").nth(1)).toContainText("大門");
+  await expect(page.getByRole("button", { name: "検索" })).toBeDisabled();
+});
+
+test("経路検索: 0時をまたぐ経路の所要時間", async ({ page, api }) => {
+  const [leg] = journeySearch.journeys[0].legs;
+  api.set("/journeys", {
+    body: {
+      ...journeySearch,
+      journeys: [
+        {
+          departureTime: "23:50",
+          arrivalTime: "00:10",
+          transfers: 0,
+          walkBeforeMinutes: 0,
+          walkAfterMinutes: 0,
+          legs: [
+            {
+              ...leg,
+              departureTime: "23:50",
+              arrivalTime: "00:10",
+              delayMinutes: 0,
+            },
+          ],
+        },
+      ],
+    },
+  });
+
+  await page.goto(resultUrl);
+
+  await expect(page.getByText("乗り換えなし")).toBeVisible();
+  await expect(page.getByText("20分", { exact: true })).toBeVisible();
+  await expect(page.getByText("20分乗車")).toBeVisible();
 });
 
 test("経路検索: 運転見合わせの路線と、経路が無いことを知らせる", async ({

@@ -212,7 +212,7 @@ export const waitingTrain: TrainLocation = {
   delay: 0,
   delayAvailable: false,
   available: false,
-  message: "この列車はまだ出発していません。",
+  message: "西馬込を08:15に出発する予定です。出発すると位置を表示します",
   notRunning: "beforeDeparture",
   scheduledStationId: NISHI_MAGOME,
   scheduledStation: "西馬込",

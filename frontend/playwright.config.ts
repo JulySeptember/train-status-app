@@ -21,7 +21,7 @@ export default defineConfig({
 
   // 開発用の vite（5173）と重ならないポートで起動する
   webServer: {
-    command: `npx vite --port ${PORT} --strictPort`,
+    command: `npx vite --host localhost --port ${PORT} --strictPort`,
     url: `http://localhost:${PORT}`,
     reuseExistingServer: !process.env.CI,
   },
