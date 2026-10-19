@@ -49,14 +49,12 @@ func newJourneyServiceWith(t *testing.T, c *mockClient) *Service {
 	return s
 }
 
-// assertTimetable は、経路の各区間の乗車時刻が駅時刻表どおりで、
-// 区間どうしがつながっていることを確かめる。
-func assertTimetable(t *testing.T, s *Service, journeys []Journey) {
-	t.Helper()
+// stationDepartures は、journeyNow の運行日の駅時刻表の発車時刻を、駅・列車ID ごとに返す。
+// 大江戸線の都庁前は、環状部を回って光が丘方面へ続ける列車が2回発車するので、時刻を全部持つ。
+func stationDepartures(s *Service) map[[2]string][]string {
 
 	calendars := calendar.Calendars(journeyNow)
 
-	// 大江戸線の都庁前は、環状部を回って光が丘方面へ続ける列車が2回発車するので、時刻を全部持つ
 	departures := make(map[[2]string][]string)
 	for _, tt := range s.assets.StationTimetables() {
 		if !slices.Contains(calendars, tt.Calendar) {
@@ -69,6 +67,16 @@ func assertTimetable(t *testing.T, s *Service, journeys []Journey) {
 			}
 		}
 	}
+
+	return departures
+}
+
+// assertTimetable は、経路の各区間の乗車時刻が駅時刻表どおりで、
+// 区間どうしがつながっていることを確かめる。
+func assertTimetable(t *testing.T, s *Service, journeys []Journey) {
+	t.Helper()
+
+	departures := stationDepartures(s)
 
 	for _, j := range journeys {
 
@@ -130,17 +138,21 @@ func TestSearchJourneys(t *testing.T) {
 
 	s := newJourneyService(t)
 
+	departures := stationDepartures(s)
+
 	tests := []struct {
 		name     string
 		from, to string
+		// 出発駅を2回発車する列車の、1回目の発車に乗ること
+		firstPass bool
 	}{
 		// 三田線の春日を指定しても、大江戸線の春日から乗れる
-		{"春日 → 浅草", kasugaMita, asakusa},
+		{"春日 → 浅草", kasugaMita, asakusa, false},
 		// 馬喰横山 ⇔ 東日本橋で乗り換える
-		{"新宿 → 押上", shinjukuLine, oshiage},
-		{"西馬込 → 押上", nishiMagome, oshiage},
+		{"新宿 → 押上", shinjukuLine, oshiage, false},
+		{"西馬込 → 押上", nishiMagome, oshiage, false},
 		// 都庁前を2回発車する列車（1017B は 10:00 に環状部へ、11:03 に光が丘方面へ）の1回目に乗る
-		{"都庁前 → 東新宿", tochomae, "odpt.Station:Toei.Oedo.HigashiShinjuku"},
+		{"都庁前 → 東新宿", tochomae, "odpt.Station:Toei.Oedo.HigashiShinjuku", true},
 	}
 
 	for _, tt := range tests {
@@ -161,6 +173,14 @@ func TestSearchJourneys(t *testing.T) {
 			}
 
 			assertTimetable(t, s, got.Journeys)
+
+			if tt.firstPass {
+				first := got.Journeys[0].Legs[0]
+				times := departures[[2]string{first.From, first.Train}]
+				if len(times) < 2 || first.DepartureTime != slices.Min(times) {
+					t.Errorf("%s departs %s at %s, want the first of %q", first.Train, first.From, first.DepartureTime, times)
+				}
+			}
 
 			// 次の列車の経路も足すので、複数の経路が返る
 			if len(got.Journeys) < 2 {

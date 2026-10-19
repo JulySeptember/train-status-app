@@ -142,6 +142,7 @@ PR を作ったら、実装時の会話を持たないサブエージェント�
 - 時刻表の行先には直通運転先（京急・京成・東急など他社）の駅が含まれるが、他社の駅データは公開 API から取れない。駅名は `service/through_service.go` の辞書で引く（`assets/extra` があれば、都外の行先駅は `extra/destination_station.json` から引く）。assets 更新後に起動ログへ `unknown destination station` が出たら辞書に追加する（辞書には ODPT にデータの無い事業者の駅だけを書く）
 - 都営の駅データ（`station.json`）には乗り換え先の情報（`odpt:connectingStation`）がない（他社の駅データにはある）。都営どうしの名前が違う乗り換え駅は `service/transfer.go` の `differentNameTransfers` に手で足す
 - 大江戸線の環状部（外回り・内回り）は、駅時刻表に行先（`odpt:destinationStation`）が入っていない
+- 大江戸線の環状部を回って光が丘方面へ続ける列車は、都庁前を同じ列車ID で2回発車する（駅時刻表にも2回載る）。駅・列車ID の組で時刻を1つに決めない
 - ODPT 公開 API は1回の取得で最大1,000件しか返さない。列車時刻表は全件ダウンロード用の URL（`odpt:TrainTimetable.json`、リダイレクトされる）から取っている
 - ODPT のデータの一覧は `https://ckan.odpt.org/dataset/?_organization_limit=0&tags=%E9%89%84%E9%81%93-railway`（鉄道）。CKAN の API は使えないので HTML から読む。都営は JSON のほかに GTFS / GTFS-RT もあるが使っていない（理由は `docs/design/route-search.md` 3章）
 - 都営以外の事業者のデータは、キーの要る `api.odpt.org`（公共交通オープンデータ基本ライセンス）と `api-challenge.odpt.org`（チャレンジ限定ライセンス）から取る。どちらのライセンスも第8条4項で、データと派生データ（gob のように元のデータを復元できるもの）を第三者が再利用できる状態で公開することを禁じている。このリポジトリは公開なので、**他社のデータは JSON も gob もコミットしない**（一度入れると履歴から消すのに force push が要り、main では禁止している）。今の `backend/assets` は都営（CC BY 4.0）だけなので置いてよい。置き場所は `docs/design/multi-operator.md` 4章
