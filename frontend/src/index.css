@@ -112,6 +112,9 @@
   body {
     @apply bg-background text-foreground;
     min-width: 320px;
+    /* viewport-fit=cover なので、横向きの iPhone でノッチの下に文字がかからないようにする */
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
   }
 
   #root {
