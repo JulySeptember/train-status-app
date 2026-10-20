@@ -438,6 +438,10 @@ type StationSummary struct {
 	// 同じ名前で近くにある駅をつないだまとまりの中で、ID 順に最初の経路検索に使える駅。
 	// 経路検索に使えない駅（列車時刻表の無い事業者の駅で、近くに同じ名前の駅も無いもの）では空になる
 	JourneyStation string `json:"journeyStation"`
+
+	// 駅の座標（ODPT の geo:lat / geo:long）。データに無い駅では 0
+	Lat float64 `json:"lat"`
+	Lon float64 `json:"lon"`
 }
 
 func (s *Service) GetStations(
@@ -472,6 +476,11 @@ func (s *Service) indexAllStations() []StationSummary {
 	journey := journeyStations(s.stationGroups)
 	items := make([]StationSummary, 0, len(s.assets.Stations()))
 
+	coords := make(map[string]model.Station, len(s.assets.Stations()))
+	for _, st := range s.assets.Stations() {
+		coords[st.SameAs] = st
+	}
+
 	for _, r := range s.railwaysByOperator() {
 		for _, st := range s.railwayStations(r) {
 
@@ -480,6 +489,8 @@ func (s *Service) indexAllStations() []StationSummary {
 				Name:           st.Name,
 				RailwayID:      r.SameAs,
 				JourneyStation: journey[st.ID],
+				Lat:            coords[st.ID].Latitude,
+				Lon:            coords[st.ID].Longitude,
 			})
 		}
 	}

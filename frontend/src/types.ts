@@ -38,6 +38,9 @@ export interface StationSummary extends Station {
   // 経路検索で1つの駅として扱う駅の代表。同じ値の駅は経路検索で同じ結果になる。
   // 経路検索に使えない駅（列車時刻表の無い事業者の駅で、近くに同じ名前の駅も無いもの）では空
   journeyStation: string;
+  // 駅の座標。データに無い駅では 0
+  lat: number;
+  lon: number;
 }
 
 export interface Timetable {

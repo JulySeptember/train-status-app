@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"math"
 	"slices"
 	"strings"
 	"testing"
@@ -365,6 +366,11 @@ func TestGetAllStations(t *testing.T) {
 	// 名前の違う駅はまとめない
 	if byID["odpt.Station:Toei.Mita.Suidobashi"].JourneyStation == mita.JourneyStation {
 		t.Fatal("Suidobashi must not be grouped with Kasuga")
+	}
+
+	// 駅の座標が入る（春日はおよそ北緯35.71度・東経139.75度）
+	if math.Abs(mita.Lat-35.71) > 0.01 || math.Abs(mita.Lon-139.75) > 0.01 {
+		t.Fatalf("Kasuga coordinates: %v, %v", mita.Lat, mita.Lon)
 	}
 }
 
