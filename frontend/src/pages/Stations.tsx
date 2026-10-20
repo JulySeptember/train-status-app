@@ -324,8 +324,11 @@ export default function Stations() {
         </div>
       </div>
 
-      {/* 駅名で絞り込んでいるあいだは、検索の結果だけを出す */}
-      {word === "" && <NearbyStations />}
+      {/* 駅名で絞り込んでいるあいだは、検索の結果だけを出す。
+          取った現在地を検索欄を空に戻したときに残すため、外さずに隠す */}
+      <div hidden={word !== ""}>
+        <NearbyStations />
+      </div>
 
       {word === "" ? (
         <OperatorAccordion groups={groups} />

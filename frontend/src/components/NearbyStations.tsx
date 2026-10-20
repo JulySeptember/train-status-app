@@ -63,7 +63,11 @@ export default function NearbyStations() {
           state: "error",
           message: LOCATE_ERRORS[err.code] ?? LOCATE_ERRORS[2],
         }),
-      { timeout: 10_000, maximumAge: 60_000 },
+      // 取り直すときは、前に取った位置（ブラウザのキャッシュ）を使わない
+      {
+        timeout: 10_000,
+        maximumAge: locate.state === "located" ? 0 : 60_000,
+      },
     );
   };
 

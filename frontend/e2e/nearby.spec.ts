@@ -111,10 +111,20 @@ test("近くの駅: 駅・時刻表の画面でも出し、駅名で絞り込ん
     section.getByRole("listitem").filter({ hasText: /徒歩/ }).first(),
   ).toContainText("大門");
 
-  await page.getByRole("searchbox", { name: "駅名" }).fill("戸越");
+  const search = page.getByRole("searchbox", { name: "駅名" });
+  await search.fill("戸越");
   await expect(
     page.getByRole("heading", { name: "近くの駅" }),
   ).not.toBeVisible();
+
+  // 検索欄を空に戻すと、取り直さずに前の結果を出す
+  await search.fill("");
+  await expect(
+    section.getByRole("listitem").filter({ hasText: /徒歩/ }).first(),
+  ).toContainText("大門");
+  await expect(
+    section.getByRole("button", { name: "現在地を取り直す" }),
+  ).toBeVisible();
 });
 
 test("近くの駅: 位置情報が許可されていなければ、その旨を出す", async ({
