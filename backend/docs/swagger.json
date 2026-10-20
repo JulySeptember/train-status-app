@@ -1734,6 +1734,13 @@
                     "description": "経路検索の選択肢として、この駅とまとめる駅の代表（journeyStations）。\n同じ名前で近くにある駅をつないだまとまりの中で、ID 順に最初の経路検索に使える駅。\n経路検索に使えない駅（列車時刻表の無い事業者の駅で、近くに同じ名前の駅も無いもの）では空になる",
                     "type": "string"
                 },
+                "lat": {
+                    "description": "駅の座標（ODPT の geo:lat / geo:long）。データに無い駅では 0",
+                    "type": "number"
+                },
+                "lon": {
+                    "type": "number"
+                },
                 "name": {
                     "type": "string"
                 },

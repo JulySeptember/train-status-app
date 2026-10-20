@@ -26,6 +26,7 @@ import SortableList from "@/components/SortableList";
 import RailwayBadge from "@/components/RailwayBadge";
 import JourneyForm from "@/components/JourneyForm";
 import PageTitle from "@/components/PageTitle";
+import NearbyStations from "@/components/NearbyStations";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -577,6 +578,7 @@ export default function Home() {
       <PageTitle />
       <SearchPanel />
       <FavoritesSection />
+      <NearbyStations />
       <StatusSection />
     </div>
   );

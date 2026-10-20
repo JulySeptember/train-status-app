@@ -96,20 +96,44 @@ export const asakusaStations: Station[] = [
   { id: ASAKUSA_DAIMON, name: "大門" },
 ];
 
+// 浅草線の駅の座標（西馬込から路線の順）
+const asakusaCoords: [number, number][] = [
+  [35.5866, 139.7058],
+  [35.5964, 139.7116],
+  [35.6057, 139.7128],
+  [35.6146, 139.7163],
+  [35.6261, 139.7234],
+  [35.6317, 139.7301],
+  [35.6389, 139.7398],
+  [35.6481, 139.7486],
+  [35.6566, 139.7548],
+];
+
 // 全駅の一覧。浅草線と大江戸線の大門は、経路検索では1つの駅（代表は浅草線の大門）
 export const allStations: StationSummary[] = [
-  ...asakusaStations.map((s) => ({
+  ...asakusaStations.map((s, i) => ({
     ...s,
     railwayId: ASAKUSA,
     journeyStation: s.id,
+    lat: asakusaCoords[i][0],
+    lon: asakusaCoords[i][1],
   })),
   {
     id: OEDO_DAIMON,
     name: "大門",
     railwayId: OEDO,
     journeyStation: ASAKUSA_DAIMON,
+    lat: 35.6565,
+    lon: 139.7559,
   },
-  { id: ROPPONGI, name: "六本木", railwayId: OEDO, journeyStation: ROPPONGI },
+  {
+    id: ROPPONGI,
+    name: "六本木",
+    railwayId: OEDO,
+    journeyStation: ROPPONGI,
+    lat: 35.664,
+    lon: 139.7323,
+  },
 ];
 
 export const RUNNING_TRAIN = "odpt.Train:Toei.Asakusa.803T";
