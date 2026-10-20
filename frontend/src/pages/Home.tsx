@@ -48,7 +48,12 @@ import {
 import { groupByOperator, useRailways } from "@/lib/railways";
 import { useFavorites } from "@/lib/favorites";
 import { stationPath } from "@/lib/station";
-import { nearbyStations, walkMinutes, type Position } from "@/lib/nearby";
+import {
+  LOW_ACCURACY_M,
+  nearbyStations,
+  walkMinutes,
+  type Position,
+} from "@/lib/nearby";
 import { EXAMPLES, MAX_INPUT_CHARS, type ChatLocationState } from "@/lib/chat";
 import { cn } from "@/lib/utils";
 
@@ -382,7 +387,7 @@ const LOCATE_ERRORS: Record<number, string> = {
 type Locate =
   | { state: "idle" }
   | { state: "locating" }
-  | { state: "located"; here: Position }
+  | { state: "located"; here: Position; accuracy: number }
   | { state: "error"; message: string };
 
 // 現在地に近い駅。位置情報はボタンを押したときにだけ取り、サーバーには送らない（全駅の座標から画面で探す）
@@ -408,6 +413,7 @@ function NearbySection() {
         setLocate({
           state: "located",
           here: { lat: pos.coords.latitude, lon: pos.coords.longitude },
+          accuracy: pos.coords.accuracy,
         }),
       (err) =>
         setLocate({
@@ -435,7 +441,7 @@ function NearbySection() {
           <ul className="grid gap-3 md:grid-cols-2">
             {nearby.map((n) => (
               <li
-                key={n.name}
+                key={n.stations[0].id}
                 className="space-y-2 rounded-xl border bg-card px-4 py-3"
               >
                 <p className="flex flex-wrap items-baseline gap-x-3">
@@ -471,6 +477,19 @@ function NearbySection() {
             ))}
           </ul>
         );
+      // PC のブラウザなどでは、Wi-Fi や IP からの推定で数百m〜数kmずれることがある
+      if (locate.accuracy > LOW_ACCURACY_M) {
+        body = (
+          <>
+            <p className="flex items-start gap-1.5 text-sm text-muted-foreground">
+              <Info size={14} className="mt-0.5 shrink-0" />
+              現在地の精度が低いため（誤差 約
+              {Math.round(locate.accuracy / 100) / 10}km）、距離は目安です。
+            </p>
+            {body}
+          </>
+        );
+      }
     }
   } else if (locate.state === "error") {
     body = (

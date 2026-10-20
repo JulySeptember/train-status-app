@@ -4,6 +4,12 @@ import { type StationSummary } from "@/types";
 const MAX_DISTANCE_M = 3000;
 const MAX_STATIONS = 5;
 
+// 同じ名前の駅を1つにまとめる距離（バックエンドの経路検索・乗り換えと同じ600m）
+const SAME_STATION_M = 600;
+
+// 現在地の誤差がこれより大きければ、距離は目安だと知らせる
+export const LOW_ACCURACY_M = 500;
+
 // 徒歩の速さ（不動産の表示と同じ分速80m）
 const WALK_M_PER_MIN = 80;
 
@@ -11,7 +17,7 @@ const EARTH_RADIUS_M = 6_371_000;
 
 export type Position = { lat: number; lon: number };
 
-// 近くの駅。同じ名前の駅（路線ごとに別の駅）は1つにまとめる
+// 近くの駅。近くにある同じ名前の駅（路線ごとに別の駅）は1つにまとめる
 export type NearbyStation = {
   name: string;
   // いちばん近い駅までの距離（m）
@@ -45,19 +51,20 @@ export function nearbyStations(
     .filter((s) => s.distance <= MAX_DISTANCE_M)
     .sort((a, b) => a.distance - b.distance);
 
-  const byName = new Map<string, NearbyStation>();
-  for (const { station, distance } of sorted) {
-    const found = byName.get(station.name);
+  // 同じ名前でも、まとまりのいちばん近い駅から600mより離れていれば別の駅として出す
+  const groups: NearbyStation[] = [];
+  for (const { station, distance: d } of sorted) {
+    const found = groups.find(
+      (g) =>
+        g.name === station.name &&
+        distance(g.stations[0], station) <= SAME_STATION_M,
+    );
     if (found) {
       found.stations.push(station);
     } else {
-      byName.set(station.name, {
-        name: station.name,
-        distance,
-        stations: [station],
-      });
+      groups.push({ name: station.name, distance: d, stations: [station] });
     }
   }
 
-  return [...byName.values()].slice(0, MAX_STATIONS);
+  return groups.slice(0, MAX_STATIONS);
 }
