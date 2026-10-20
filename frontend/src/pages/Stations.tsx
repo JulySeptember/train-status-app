@@ -10,6 +10,7 @@ import Loading from "@/components/Loading";
 import Error from "@/components/Error";
 import RailwayBadge from "@/components/RailwayBadge";
 import PageTitle from "@/components/PageTitle";
+import NearbyStations from "@/components/NearbyStations";
 import DirectionTabs, { selectDirection } from "@/components/DirectionTabs";
 
 import {
@@ -322,6 +323,9 @@ export default function Stations() {
           />
         </div>
       </div>
+
+      {/* 駅名で絞り込んでいるあいだは、検索の結果だけを出す */}
+      {word === "" && <NearbyStations />}
 
       {word === "" ? (
         <OperatorAccordion groups={groups} />

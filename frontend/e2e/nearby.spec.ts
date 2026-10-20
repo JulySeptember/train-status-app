@@ -94,6 +94,29 @@ test("近くの駅: 現在地の精度が低ければ、距離は目安だと知
   ).toContainText("大門");
 });
 
+test("近くの駅: 駅・時刻表の画面でも出し、駅名で絞り込んでいるあいだは隠す", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 35.6555, longitude: 139.7565 });
+
+  await page.goto("/stations");
+  await page.getByRole("button", { name: "現在地から探す" }).click();
+
+  const section = page.locator("section", {
+    has: page.getByRole("heading", { name: "近くの駅" }),
+  });
+  await expect(
+    section.getByRole("listitem").filter({ hasText: /徒歩/ }).first(),
+  ).toContainText("大門");
+
+  await page.getByRole("searchbox", { name: "駅名" }).fill("戸越");
+  await expect(
+    page.getByRole("heading", { name: "近くの駅" }),
+  ).not.toBeVisible();
+});
+
 test("近くの駅: 位置情報が許可されていなければ、その旨を出す", async ({
   page,
 }) => {
