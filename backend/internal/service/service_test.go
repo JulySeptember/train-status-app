@@ -33,11 +33,15 @@ type mockClient struct {
 
 	// GetOperatorTrainLocations で問い合わせた事業者
 	locationOperators []string
+
+	// GetTrainStatus を呼んだ回数
+	statusCalls int
 }
 
 func (m *mockClient) GetTrainStatus(
 	ctx context.Context,
 ) (client.Result[model.TrainStatus], error) {
+	m.statusCalls++
 	if m.statusErr != nil {
 		return client.Result[model.TrainStatus]{}, m.statusErr
 	}

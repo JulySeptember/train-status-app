@@ -21,6 +21,10 @@ const (
 	// realtimeTimeout は運行状況の取得を待つ時間。超えたら時刻表どおりに探す
 	realtimeTimeout = 3 * time.Second
 
+	// realtimeRetryAfter は、運行状況を取得できなかったあと、取り直すまでの間隔。
+	// そのあいだは取りに行かずに失敗を返す（ODPT の障害中に、検索ごとに realtimeTimeout ずつ待たせない）
+	realtimeRetryAfter = 15 * time.Second
+
 	// delayWindowMinutes は、現在から何分後までの時刻に遅れを足すか。
 	// 遅れは現時点の値なので、先の列車には足さない
 	delayWindowMinutes = 60
@@ -66,10 +70,15 @@ type realtimeCache struct {
 	mu    sync.Mutex
 	at    time.Time
 	value *railwayConditions
+
+	// 前回の取得の失敗と、その時刻
+	err      error
+	failedAt time.Time
 }
 
 // railwayConditions は運行状況を返す。取得した結果は realtimeTTL のあいだ使い回す。
 // 同時に呼ばれたときは、先に呼ばれた取得の結果を待つ。
+// 取得に失敗したら、realtimeRetryAfter のあいだは取りに行かずに同じエラーを返す。
 func (s *Service) railwayConditions(ctx context.Context) (*railwayConditions, error) {
 
 	s.realtime.mu.Lock()
@@ -80,7 +89,11 @@ func (s *Service) railwayConditions(ctx context.Context) (*railwayConditions, er
 		return s.realtime.value, nil
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, realtimeTimeout)
+	if s.realtime.err != nil && now.Sub(s.realtime.failedAt) < realtimeRetryAfter {
+		return nil, s.realtime.err
+	}
+
+	fetchCtx, cancel := context.WithTimeout(ctx, realtimeTimeout)
 	defer cancel()
 
 	var (
@@ -90,12 +103,17 @@ func (s *Service) railwayConditions(ctx context.Context) (*railwayConditions, er
 		errs     [2]error
 	)
 
-	wg.Go(func() { statuses, errs[0] = s.client.GetTrainStatus(ctx) })
-	wg.Go(func() { trains, errs[1] = s.client.GetTrainLocations(ctx) })
+	wg.Go(func() { statuses, errs[0] = s.client.GetTrainStatus(fetchCtx) })
+	wg.Go(func() { trains, errs[1] = s.client.GetTrainLocations(fetchCtx) })
 	wg.Wait()
 
 	for _, err := range errs {
 		if err != nil {
+			// 呼び出し側が待てなくなった（期限切れ・キャンセル）だけなら、次の呼び出しですぐ取り直す
+			if ctx.Err() == nil {
+				s.realtime.err = err
+				s.realtime.failedAt = now
+			}
 			return nil, err
 		}
 	}
@@ -127,6 +145,7 @@ func (s *Service) railwayConditions(ctx context.Context) (*railwayConditions, er
 
 	s.realtime.at = now
 	s.realtime.value = value
+	s.realtime.err = nil
 
 	return value, nil
 }

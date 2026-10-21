@@ -88,8 +88,9 @@ func main() {
 
 	var app http.Handler = r
 
-	app = middleware.Logging(app)
+	// Recovery を内側に置き、panic したリクエストも Logging がログに出す
 	app = middleware.Recovery(app)
+	app = middleware.Logging(app)
 
 	// AWS Lambda
 	if onLambda {
