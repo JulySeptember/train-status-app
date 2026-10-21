@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"runtime/debug"
 
 	_ "train-status-app/backend/docs"
 
@@ -38,6 +39,10 @@ import (
 )
 
 func main() {
+	// 起動時に読み込む時刻表などはほとんどが最後まで残るので、読み込み中の GC は回収できるものが少ない。
+	// 読み込みが終わるまで GC を止めて、コールドスタートを短くする（#65）
+	gcPercent := debug.SetGCPercent(-1)
+
 	cfg := config.Load()
 
 	c := client.New(odptSources(cfg.ODPTOperators), odptKeys(cfg, isLambda()))
@@ -54,6 +59,8 @@ func main() {
 	}
 
 	svc := service.New(c, loader)
+
+	debug.SetGCPercent(gcPercent)
 
 	onLambda := isLambda()
 
