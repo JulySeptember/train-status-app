@@ -17,7 +17,7 @@ tools: Bash, Read
   - `make frontend-build`（型チェックも兼ねる）
   - `make frontend-e2e`（Playwright の E2E テスト。ブラウザが無いと言われたら `cd frontend && npx playwright install chromium` を実行してからやり直す）
   - 単一テスト: `cd backend && go test ./internal/<パッケージ> -run <テスト名> -v`
-- AI 評価セット（`TestEval`）は、頼まれたときだけ CLAUDE.md のコマンドどおりに実行する。約7分かかるので timeout を 600000 にし、足りなければ `run_in_background` で実行する
+- AI 評価セット（`TestEval`）は、頼まれたときだけ backend/CLAUDE.md のコマンドどおりに実行する。約7分かかるので timeout を 600000 にし、足りなければ `run_in_background` で実行する
 
 ## やらないこと
 

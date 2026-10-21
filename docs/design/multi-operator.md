@@ -114,7 +114,7 @@ deploy.yml（CD）
 ```
 
 - 都内に絞る処理（駅の座標と区市町村の境界の照合）は `cmd/gen-assets` に持たせる。境界のデータ（国土数値情報の行政区域。都内53区市町村）は変わらないので、絞った結果の駅の一覧（駅ID）をリポジトリに置き、取得のたびには照合しない。駅の一覧は駅IDだけなので、ODPT のデータの再配布にはあたらない。
-- ライセンスの第4条2項(4)は、データが更新されたら成果物を直ちに更新することを求めている。取り直しは自動化せず、月に1回と各事業者のダイヤ改正の後（3月が多い）に手動で行う（2026-10-09 に決定）。手順は CLAUDE.md の「静的データの更新」（`update_assets.sh` → `make backend-generate` → テスト → `make backend-extra-upload` → 都営の assets・`tokyo_stations.txt`・`extra.version` をコミットして PR）。
+- ライセンスの第4条2項(4)は、データが更新されたら成果物を直ちに更新することを求めている。取り直しは自動化せず、月に1回と各事業者のダイヤ改正の後（3月が多い）に手動で行う（2026-10-09 に決定）。手順は backend/CLAUDE.md の「静的データの更新」（`update_assets.sh` → `make backend-generate` → テスト → `make backend-extra-upload` → 都営の assets・`tokyo_stations.txt`・`extra.version` をコミットして PR）。
 
 ### 4.3 キー
 
@@ -125,7 +125,7 @@ deploy.yml（CD）
 
 - Gemini のキーと同じく、Terraform・tfvars・Lambda の環境変数・ログ・レスポンスにキーを出さない。リクエストの URL にキーが入るので、ODPT の取得に失敗したときのログやエラーに URL をそのまま出さない（今の `client` はエラーに URL を含めていないが、テストで確かめる）。
 - Lambda は、他社のリアルタイムの情報を初めて取るときに SSM から読み、プロセスが続く間は持ち続ける（AI のキーと同じ）。SSM を読めないあいだは、都営だけを返す。
-- SSM を読む権限は、`infra/bootstrap` にポリシーを作り、Lambda の実行ロール（`infra/bootstrap/lambda_role.tf`）に付ける（CLAUDE.md の手順）。
+- SSM を読む権限は、`infra/bootstrap` にポリシーを作り、Lambda の実行ロール（`infra/bootstrap/lambda_role.tf`）に付ける（infra/CLAUDE.md の手順）。
 
 ---
 
