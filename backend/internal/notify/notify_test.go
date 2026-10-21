@@ -575,3 +575,48 @@ func TestNotifierAfterNightWithUnavailableRailway(t *testing.T) {
 		t.Fatalf("change during the night should not be sent: %v", sender.sent)
 	}
 }
+
+// 遅れていた路線が終電を迎えても「平常運転に戻りました」と送らない。始発のあとも、夜の変化として記録だけする
+func TestNotifierOutOfHours(t *testing.T) {
+
+	ctx := context.Background()
+	jst := time.FixedZone("JST", 9*60*60)
+	now := time.Date(2026, 10, 20, 0, 20, 0, 0, jst) // 火曜（運行日は月曜）
+
+	store := newStore(t, "u1")
+	sender := &fakeSender{}
+	conds := &conditions{}
+	n := notify.NewNotifier(store, conds, catalog{}, newKeys(t), "")
+	notify.SetNotifierSender(n, sender)
+	notify.SetNotifierClock(n, func() time.Time { return now })
+
+	s := notify.NewService(store, catalog{}, newKeys(t), "")
+	if err := s.SetAlert(ctx, "u1", notify.Alert{RailwayID: mita, Days: []notify.Day{notify.Weekday}, Start: "00:00", End: "06:00"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Subscribe(ctx, "u1", subscription("https://fcm.googleapis.com/fcm/send/u1")); err != nil {
+		t.Fatal(err)
+	}
+
+	run := func(c service.RailwayCondition) {
+		t.Helper()
+		conds.items = []service.RailwayCondition{c}
+		if err := n.Run(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	run(cond(mita, service.RailwayDelayed, 0, "三田線は遅れています。"))
+
+	now = now.Add(5 * time.Minute)
+	run(cond(mita, service.RailwayNormal, 0, "ただいまの時間は運行を終了しております。"))
+	if len(sender.sent) != 0 {
+		t.Fatalf("end of service should not be sent as recovery: %v", sender.sent)
+	}
+
+	now = time.Date(2026, 10, 20, 5, 0, 0, 0, jst)
+	run(cond(mita, service.RailwayNormal, 0, normalText))
+	if len(sender.sent) != 0 {
+		t.Fatalf("first check after the night should only record: %v", sender.sent)
+	}
+}

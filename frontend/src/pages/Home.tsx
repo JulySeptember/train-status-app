@@ -55,12 +55,13 @@ import { cn } from "@/lib/utils";
 // 「１５分以上の遅延はありません」のように全角の数字でも配信されるので、数字を含めずに判定する
 const NORMAL_WORDS = ["遅延はありません", "平常"];
 
-// 終電のあとの文章（メトロ・つくばエクスプレス）に含まれる言葉。遅れではないが「平常運転」とも出さず、文章をそのまま出す。
-// 「運行を終了」だけにしないのは、計画運休の「本日の運行を終了します」を遅れとして出すため
-const OUT_OF_HOURS_WORDS = ["ただいまの時間は運行を終了", "情報提供時間は"];
+// 終電のあとの文章（メトロ・つくばエクスプレス）の書き出し（バックエンドの outOfHoursPrefixes と揃える）。
+// 遅れではないが「平常運転」とも出さず、文章をそのまま出す。遅れの文章の末尾に添えられたときは遅れとするため、文頭だけで判定する
+const OUT_OF_HOURS_PREFIXES = ["ただいまの時間は運行を終了", "情報提供時間は"];
 
 function isOutOfHours(status: string) {
-  return OUT_OF_HOURS_WORDS.some((w) => status.includes(w));
+  const text = status.trim();
+  return OUT_OF_HOURS_PREFIXES.some((p) => text.startsWith(p));
 }
 
 function isNormal(status: string) {
