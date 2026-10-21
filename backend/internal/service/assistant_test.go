@@ -232,3 +232,25 @@ func TestGetRailwayConditionsAvailability(t *testing.T) {
 		})
 	}
 }
+
+func TestIsNormalText(t *testing.T) {
+	tests := []struct {
+		text string
+		want bool
+	}{
+		{"", true},
+		{"現在、１５分以上の遅延はありません。", true},
+		{"平常通り運転しています。", true},
+		// 終電のあと（メトロ・つくばエクスプレス）
+		{"ただいまの時間は運行を終了しております。", true},
+		{"情報提供時間は4:00～翌2:00となっています。", true},
+		{"新宿線は、車両故障の影響で、遅れが出ています。", false},
+		{"台風の影響により、本日の運行を終了します。", false},
+	}
+
+	for _, tt := range tests {
+		if got := IsNormalText(tt.text); got != tt.want {
+			t.Errorf("IsNormalText(%q) = %v, want %v", tt.text, got, tt.want)
+		}
+	}
+}

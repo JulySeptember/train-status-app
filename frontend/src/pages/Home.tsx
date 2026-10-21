@@ -55,8 +55,16 @@ import { cn } from "@/lib/utils";
 // 「１５分以上の遅延はありません」のように全角の数字でも配信されるので、数字を含めずに判定する
 const NORMAL_WORDS = ["遅延はありません", "平常"];
 
+// 終電のあとの文章（メトロ・つくばエクスプレス）に含まれる言葉。遅れではないが「平常運転」とも出さず、文章をそのまま出す。
+// 「運行を終了」だけにしないのは、計画運休の「本日の運行を終了します」を遅れとして出すため
+const OUT_OF_HOURS_WORDS = ["ただいまの時間は運行を終了", "情報提供時間は"];
+
+function isOutOfHours(status: string) {
+  return OUT_OF_HOURS_WORDS.some((w) => status.includes(w));
+}
+
 function isNormal(status: string) {
-  return NORMAL_WORDS.some((w) => status.includes(w));
+  return NORMAL_WORDS.some((w) => status.includes(w)) || isOutOfHours(status);
 }
 
 // 質問を「AI 乗換相談」の画面に渡して開く。送るのは向こうの画面で行う
@@ -203,7 +211,7 @@ function StatusCard({
       <div className="min-w-0 flex-1">
         <p className="font-semibold">{railway.name}</p>
 
-        {status.unavailable ? (
+        {status.unavailable || isOutOfHours(status.status) ? (
           <p className="text-sm text-muted-foreground">{status.status}</p>
         ) : normal ? (
           <p className="flex items-center gap-1 text-sm text-brand">
@@ -247,6 +255,8 @@ function OperatorSummary({
     summary = (
       <span className="text-muted-foreground">取得できませんでした</span>
     );
+  } else if (statuses.every((s) => isOutOfHours(s.status))) {
+    summary = <span className="text-muted-foreground">運行時間外</span>;
   } else {
     summary = (
       <span className="flex items-center gap-1 text-brand">

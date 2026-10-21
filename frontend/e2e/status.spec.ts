@@ -93,6 +93,51 @@ test("運行情報: 事業者が複数なら、遅れのある事業者だけを
   await expect(page.getByRole("link", { name: /^浅草線/ })).toBeVisible();
 });
 
+test("運行情報: 終電のあとの路線は、遅れとも平常運転とも出さない", async ({
+  page,
+  api,
+}) => {
+  const ginza = "odpt.Railway:TokyoMetro.Ginza";
+  const ended = "ただいまの時間は運行を終了しております。";
+  api.set("/routes", {
+    body: [
+      ...railways,
+      {
+        id: ginza,
+        name: "銀座線",
+        lineCode: "G",
+        color: "#F39700",
+        operator: "odpt.Operator:TokyoMetro",
+        operatorName: "東京メトロ",
+      },
+    ],
+  });
+  api.set("/status", {
+    body: [
+      ...statuses.map((s) => ({
+        ...s,
+        status: "現在、平常どおり運転しています。",
+      })),
+      { railwayId: ginza, railway: "銀座線", status: ended },
+    ],
+  });
+
+  await page.goto("/");
+
+  await expect(
+    page.getByText("すべての路線で、15分以上の遅れはありません。"),
+  ).toBeVisible();
+
+  const metro = page.getByRole("button", { name: /^東京メトロ/ });
+  await expect(metro).toContainText("運行時間外");
+  await expect(metro).toHaveAttribute("aria-expanded", "false");
+
+  await metro.click();
+  const line = page.getByRole("link", { name: /^銀座線/ });
+  await expect(line).toContainText(ended);
+  await expect(line).not.toContainText("平常運転");
+});
+
 test("運行情報: 事業者の運行情報を取れなかった路線は、遅れとも平常とも出さない", async ({
   page,
   api,
