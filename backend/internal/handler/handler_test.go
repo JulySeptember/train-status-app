@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -26,6 +27,39 @@ func (nopClient) GetTrainLocations(ctx context.Context) (client.Result[model.Tra
 
 func (nopClient) GetOperatorTrainLocations(ctx context.Context, operator string) ([]model.TrainLocation, error) {
 	return nil, nil
+}
+
+// errClient は、運行情報の取得で想定していないエラーを返す
+type errClient struct{ nopClient }
+
+func (errClient) GetTrainStatus(ctx context.Context) (client.Result[model.TrainStatus], error) {
+	return client.Result[model.TrainStatus]{}, errors.New("internal detail")
+}
+
+// 想定していないエラーの中身は、レスポンスに出さない
+func TestInternalError(t *testing.T) {
+
+	loader, err := assets.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h := New(service.New(errClient{}, loader), nil)
+
+	rec := httptest.NewRecorder()
+	h.TrainStatus(rec, httptest.NewRequest(http.MethodGet, "/api/status", nil))
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", rec.Code)
+	}
+
+	var body map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["error"] != "internal server error" {
+		t.Errorf("error = %q", body["error"])
+	}
 }
 
 func TestJourneys(t *testing.T) {

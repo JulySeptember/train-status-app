@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -49,15 +50,18 @@ func writeJSON(
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// writeError は、想定していないエラーを 500 で返す。エラーの中身はログにだけ出し、レスポンスには出さない
 func writeError(
 	w http.ResponseWriter,
 	err error,
 ) {
+	log.Printf("internal error: %v", err)
+
 	writeJSON(
 		w,
 		http.StatusInternalServerError,
 		map[string]string{
-			"error": err.Error(),
+			"error": "internal server error",
 		},
 	)
 }

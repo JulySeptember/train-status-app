@@ -576,6 +576,55 @@ func TestRailwayConditionsCache(t *testing.T) {
 	}
 }
 
+// 運行状況を取得できなかったら、realtimeRetryAfter のあいだは取りに行かずに失敗を返す
+func TestRailwayConditionsErrorCache(t *testing.T) {
+
+	c := &mockClient{trainLocations: mitaDelayed(300), statusErr: errors.New("timeout")}
+	s := newJourneyServiceWith(t, c)
+
+	now := journeyNow
+	s.now = func() time.Time { return now }
+
+	if _, err := s.railwayConditions(context.Background()); err == nil {
+		t.Fatal("expected error")
+	}
+
+	c.statusErr = nil
+
+	now = journeyNow.Add(realtimeRetryAfter - time.Second)
+	if _, err := s.railwayConditions(context.Background()); err == nil {
+		t.Error("within retry interval: expected cached error")
+	}
+	if c.statusCalls != 1 {
+		t.Errorf("within retry interval: statusCalls = %d, want 1", c.statusCalls)
+	}
+
+	now = journeyNow.Add(realtimeRetryAfter)
+	if _, err := s.railwayConditions(context.Background()); err != nil {
+		t.Errorf("after retry interval: %v", err)
+	}
+}
+
+// 呼び出し側が待てなくなっただけの失敗は覚えず、次の呼び出しですぐ取り直す
+func TestRailwayConditionsCanceled(t *testing.T) {
+
+	c := &mockClient{trainLocations: mitaDelayed(300), statusErr: context.Canceled}
+	s := newJourneyServiceWith(t, c)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if _, err := s.railwayConditions(ctx); err == nil {
+		t.Fatal("expected error")
+	}
+
+	c.statusErr = nil
+
+	if _, err := s.railwayConditions(context.Background()); err != nil {
+		t.Errorf("after cancel: %v", err)
+	}
+}
+
 func TestIsSuspended(t *testing.T) {
 
 	tests := []struct {
