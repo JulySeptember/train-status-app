@@ -150,7 +150,7 @@ type StationTimetable struct {
 }
 
 // StationTimetableEntry は駅時刻表の1列車分。
-// 約12万件をメモリに常駐させるため、アプリで使う項目だけを持つ
+// 約64万件（都営と他社）をメモリに常駐させるため、アプリで使う項目だけを持つ
 // （番線・始発/終着フラグ・備考などは持たない）。
 type StationTimetableEntry struct {
 	ArrivalTime   string `json:"odpt:arrivalTime,omitempty"`
