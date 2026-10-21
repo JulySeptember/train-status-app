@@ -35,6 +35,12 @@ const (
 // 運行情報の文章に含まれていたら平常とみなす言葉
 var normalWords = []string{"遅延はありません", "平常"}
 
+// 運行情報の文章がこれで始まっていたら、終電のあと（運行時間外）とみなす言葉。
+// メトロ「ただいまの時間は運行を終了しております。」・つくばエクスプレス「情報提供時間は4:00～翌2:00となっています。」。
+// 文頭に限るのは、遅れの文章の末尾に添えられたときに平常にしないため。
+// 「運行を終了」だけにしないのは、計画運休の「本日の運行を終了します」を時間外にしないため
+var outOfHoursPrefixes = []string{"ただいまの時間は運行を終了", "情報提供時間は"}
+
 type RailwayCondition struct {
 	Railway     string `json:"railway"`
 	RailwayName string `json:"railwayName"`
@@ -355,9 +361,17 @@ func (s *Service) HasRailway(id string) bool {
 	return ok
 }
 
-// IsNormalText は、運行情報の文章が平常を表すか（文章が無いときも平常とする）を返す
+// IsNormalText は、運行情報の文章が平常を表すか（文章が無いとき・運行時間外も平常とする）を返す
 func IsNormalText(text string) bool {
-	return text == "" || slices.ContainsFunc(normalWords, func(w string) bool {
+	return text == "" || IsOutOfHoursText(text) || slices.ContainsFunc(normalWords, func(w string) bool {
 		return strings.Contains(text, w)
+	})
+}
+
+// IsOutOfHoursText は、運行情報の文章が終電のあと（運行時間外）を表すかを返す
+func IsOutOfHoursText(text string) bool {
+	text = strings.TrimSpace(text)
+	return slices.ContainsFunc(outOfHoursPrefixes, func(p string) bool {
+		return strings.HasPrefix(text, p)
 	})
 }

@@ -67,11 +67,11 @@ func NewNotifier(store Store, conditions Conditions, catalog Catalog, keys Keys,
 }
 
 // level は、運行状況を通知の状態にする。prev は前回の状態（無ければ空）。
-// 運行情報（文章）か列車位置（遅れ）を今回取れなかった路線は ok が false（前回の状態のままにする。
-// 取れないだけで「平常に戻った」と送らないため）
+// 運行情報（文章）か列車位置（遅れ）を今回取れなかった路線と、運行時間外の路線は ok が false（前回の状態のままにする。
+// 取れないだけ・終電を迎えただけで「平常に戻った」と送らないため）
 func level(c service.RailwayCondition, prev Level) (Level, bool) {
 
-	if !c.StatusAvailable || !c.LocationAvailable {
+	if !c.StatusAvailable || !c.LocationAvailable || service.IsOutOfHoursText(c.Text) {
 		return "", false
 	}
 
