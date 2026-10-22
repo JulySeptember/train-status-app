@@ -22,12 +22,16 @@ LAMBDA_ARTIFACT_KEY := lambda/bootstrap.zip
 EXTRA_FILES := railway.json station.json train_type.json station_timetable.gob train_timetable.gob destination_station.json
 EXTRA_PREFIX := assets-extra
 
+# 手元で運行情報・列車位置を取る他社の事業者。本番と同じく infra/env/dev.tfvars の odpt_operators から読む。
+# キー（backend/.env）が無ければ空にし、都営だけで動かす
+LOCAL_ODPT_OPERATORS := $(if $(wildcard $(BACKEND_DIR)/.env),$(shell sed -n '/^odpt_operators/,/]/p' infra/env/dev.tfvars | grep -o '"[^"]*"' | tr -d '"' | paste -sd, -))
+
 # ============================
 # Docker
 # ============================
 
 up:
-	docker compose up --build
+	ODPT_OPERATORS="$${ODPT_OPERATORS-$(LOCAL_ODPT_OPERATORS)}" docker compose up --build
 
 down:
 	docker compose down
@@ -99,8 +103,10 @@ frontend-deploy:
 # Backend
 # ============================
 
+# backend/.env（ODPT のキー）があれば読み込む。docker compose の env_file と同じ扱い
 backend-run:
-	cd $(BACKEND_DIR) && go run ./cmd/api
+	cd $(BACKEND_DIR) && set -a && { [ ! -f .env ] || . ./.env; } && set +a && \
+		ODPT_OPERATORS="$${ODPT_OPERATORS-$(LOCAL_ODPT_OPERATORS)}" go run ./cmd/api
 
 backend-test:
 	cd $(BACKEND_DIR) && go test ./...
