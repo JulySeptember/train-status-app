@@ -32,9 +32,10 @@ services:
         required: false
     # Google でのログイン。クライアント ID は秘密の値ではない（infra/env/dev.tfvars と同じ）
     environment:
-      # 他社の事業者の一覧は make up が infra/env/dev.tfvars から渡す（backend/.env が無ければ空）
-      ODPT_OPERATORS: ${ODPT_OPERATORS:-}
+      # 他社の事業者の既定の一覧。make up が infra/env/dev.tfvars から渡す（backend/.env が無ければ空）。
+      # ODPT_OPERATORS として渡すと env_file より優先されるので、別の名前で渡して command で既定にする
+      LOCAL_ODPT_OPERATORS: ${LOCAL_ODPT_OPERATORS:-}
       GOOGLE_CLIENT_ID: 401009185515-et7htndp1m7733fq2itm5muptg0it6uq.apps.googleusercontent.com
-    command: go run ./cmd/api
+    command: sh -c 'ODPT_OPERATORS="$${ODPT_OPERATORS-$$LOCAL_ODPT_OPERATORS}" exec go run ./cmd/api'
     stdin_open: true
     tty: true

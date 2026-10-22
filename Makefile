@@ -24,14 +24,14 @@ EXTRA_PREFIX := assets-extra
 
 # 手元で運行情報・列車位置を取る他社の事業者。本番と同じく infra/env/dev.tfvars の odpt_operators から読む。
 # キー（backend/.env）が無ければ空にし、都営だけで動かす
-LOCAL_ODPT_OPERATORS := $(if $(wildcard $(BACKEND_DIR)/.env),$(shell sed -n '/^odpt_operators/,/]/p' infra/env/dev.tfvars | grep -o '"[^"]*"' | tr -d '"' | paste -sd, -))
+LOCAL_ODPT_OPERATORS := $(if $(wildcard $(BACKEND_DIR)/.env),$(shell sed 's/\#.*//' infra/env/dev.tfvars | tr -d '\n' | grep -o 'odpt_operators *= *\[[^]]*\]' | grep -o '"[^"]*"' | tr -d '"' | paste -sd, -))
 
 # ============================
 # Docker
 # ============================
 
 up:
-	ODPT_OPERATORS="$${ODPT_OPERATORS-$(LOCAL_ODPT_OPERATORS)}" docker compose up --build
+	LOCAL_ODPT_OPERATORS="$${ODPT_OPERATORS-$(LOCAL_ODPT_OPERATORS)}" docker compose up --build
 
 down:
 	docker compose down
