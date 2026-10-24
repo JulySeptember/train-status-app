@@ -93,6 +93,55 @@ test("運行情報: 事業者が複数なら、遅れのある事業者だけを
   await expect(page.getByRole("link", { name: /^浅草線/ })).toBeVisible();
 });
 
+test("運行情報: 開いた事業者は、路線を選んで戻っても開いたままにする", async ({
+  page,
+  api,
+}) => {
+  const ginza = "odpt.Railway:TokyoMetro.Ginza";
+  api.set("/routes", {
+    body: [
+      ...railways,
+      {
+        id: ginza,
+        name: "銀座線",
+        lineCode: "G",
+        color: "#F39700",
+        operator: "odpt.Operator:TokyoMetro",
+        operatorName: "東京メトロ",
+      },
+    ],
+  });
+  api.set("/status", {
+    body: [
+      ...statuses.map((s) => ({
+        ...s,
+        status: "現在、平常どおり運転しています。",
+      })),
+      {
+        railwayId: ginza,
+        railway: "銀座線",
+        status: "車両点検の影響で、遅れが出ています。",
+      },
+    ],
+  });
+  api.set(`/routes/${ASAKUSA}/stations`, { body: asakusaStations });
+
+  await page.goto("/");
+
+  const metro = page.getByRole("button", { name: /^東京メトロ/ });
+  const toei = page.getByRole("button", { name: /^都営交通/ });
+
+  // 遅れのある事業者を閉じ、平常の事業者を開いてから路線を選ぶ
+  await metro.click();
+  await toei.click();
+  await page.getByRole("link", { name: /^浅草線/ }).click();
+  await expect(page).toHaveURL(`/routes/${encodeURIComponent(ASAKUSA)}`);
+
+  await page.goBack();
+  await expect(toei).toHaveAttribute("aria-expanded", "true");
+  await expect(metro).toHaveAttribute("aria-expanded", "false");
+});
+
 test("運行情報: 終電のあとの路線は、遅れとも平常運転とも出さない", async ({
   page,
   api,
