@@ -382,6 +382,32 @@ function FavoritesSection() {
   );
 }
 
+// 開いている事業者は sessionStorage に置き、路線のページなどへ移動して戻っても開いたままにする
+const OPENED_OPERATORS_KEY = "openedOperators";
+
+// 開け閉めしていないときや、読めないときは null
+function loadOpenedOperators(): string[] | null {
+  try {
+    const raw = sessionStorage.getItem(OPENED_OPERATORS_KEY);
+    const value: unknown = raw === null ? null : JSON.parse(raw);
+    if (Array.isArray(value) && value.every((v) => typeof v === "string")) {
+      return value;
+    }
+  } catch {
+    // 読めないときは、遅れのある事業者だけを開く
+  }
+
+  return null;
+}
+
+function saveOpenedOperators(opened: string[]) {
+  try {
+    sessionStorage.setItem(OPENED_OPERATORS_KEY, JSON.stringify(opened));
+  } catch {
+    // 保存できなくても、このページを開いている間は開け閉めした状態で表示する
+  }
+}
+
 function StatusSection() {
   const status = useQuery({
     queryKey: ["status"],
@@ -392,7 +418,7 @@ function StatusSection() {
   const operatorOrder = useOperatorOrder();
 
   // 開いている事業者。開け閉めするまでは、遅れのある事業者だけを開く
-  const [opened, setOpened] = useState<string[] | null>(null);
+  const [opened, setOpened] = useState<string[] | null>(loadOpenedOperators);
   // 事業者の並び替えは、アコーディオンの代わりに事業者の名前だけを並べて行う。
   // アコーディオンのまま動かすと、開いた事業者の高さで矢印キーやドラッグの位置がずれ、路線のつまみとも入れ子になる
   const [sortingOperators, setSortingOperators] = useState(false);
@@ -552,7 +578,10 @@ function StatusSection() {
         <Accordion
           multiple
           value={open}
-          onValueChange={(value) => setOpened(value as string[])}
+          onValueChange={(value) => {
+            setOpened(value as string[]);
+            saveOpenedOperators(value as string[]);
+          }}
           className="gap-3"
         >
           {groups.map((g) => (
