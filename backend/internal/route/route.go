@@ -60,6 +60,10 @@ type Query struct {
 	From []string
 	To   []string
 
+	// Walk は、From・To の駅のうち、指定した場所から離れている駅まで歩く時間（分）。出発駅ではその駅から乗る前に、
+	// 到着駅ではその駅に着いた後に足す（同じ名前でまとめた駅のうち、ほかの駅から離れている駅など）。無い駅は 0
+	Walk map[string]int
+
 	// その日に適用されるダイヤ種別（calendar.Calendars の結果）
 	Calendars []string
 
@@ -423,6 +427,9 @@ type conditions struct {
 	delays map[[2]int32]int32
 	until  int32
 
+	// walk は Query.Walk を駅の番号で持つ
+	walk map[int32]int32
+
 	// shifts の結果を入れる領域（パターンを調べるたびに割り当てないよう使い回す）
 	buf []shift
 }
@@ -433,6 +440,13 @@ func (e *Engine) conditions(q Query) *conditions {
 		avoid:  make(map[int32]bool),
 		delays: make(map[[2]int32]int32),
 		until:  int32(q.DelayUntil),
+		walk:   make(map[int32]int32),
+	}
+
+	for id, m := range q.Walk {
+		if s, ok := e.stations[id]; ok && m > 0 {
+			c.walk[s] = int32(m)
+		}
 	}
 
 	index := make(map[string]int32, len(e.tt.Strings))

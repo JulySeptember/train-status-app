@@ -60,6 +60,9 @@ type Service struct {
 	// 駅ID → 経路検索の出発駅・到着駅としてまとめる駅の ID（stationGroups）
 	stationGroups map[string][]string
 
+	// 駅ID → その駅のグループのうち、ほかの駅から離れている駅まで歩く時間（groupWalks）
+	groupWalks map[string]map[string]int
+
 	// 全駅の一覧（GET /api/stations）。起動後に変わらないので、起動時に作る
 	allStations []StationSummary
 
@@ -105,6 +108,8 @@ func New(
 		stationIndex:     station.New(a.Stations()),
 		now:              time.Now,
 	}
+
+	s.groupWalks = groupWalks(a.Stations(), s.stationGroups)
 
 	s.allStations = s.indexAllStations()
 	s.operators = s.indexOperators()
@@ -1047,9 +1052,16 @@ func (s *Service) SearchJourneys(
 
 	now := s.now()
 
+	walk := maps.Clone(s.groupWalks[q.From])
+	if walk == nil {
+		walk = make(map[string]int)
+	}
+	maps.Copy(walk, s.groupWalks[q.To])
+
 	rq := route.Query{
 		From:         from,
 		To:           to,
+		Walk:         walk,
 		Calendars:    calendar.Calendars(now),
 		MaxTransfers: q.MaxTransfers,
 		Avoid:        slices.Clone(q.Avoid),

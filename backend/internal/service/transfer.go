@@ -115,6 +115,55 @@ func journeyStations(groups map[string][]string) map[string]string {
 	return result
 }
 
+// groupWalks は、駅ID → その駅のグループ（stationGroups）のうち、ほかの駅から離れている駅まで歩く時間（分）を返す。
+// グループは駅ごとに 600m 以内を見るので、グループの駅どうしが 600m より離れていることがある
+// （浅草: 東武のグループに TX・都営・メトロが入るが、TX は都営・メトロから離れている）。グループの駅のうち、
+// 自分のグループにグループの駅の半分以下しか入らない駅は、ほかの駅に着く経路と同じには扱わず、
+// 最も近い残りの駅まで歩く時間（transferMinutes）を足す。足す駅の無いグループは入れない。
+func groupWalks(stations []model.Station, groups map[string][]string) map[string]map[string]int {
+
+	byID := make(map[string]model.Station, len(stations))
+	for _, st := range stations {
+		byID[st.SameAs] = st
+	}
+
+	result := make(map[string]map[string]int)
+
+	for id, group := range groups {
+
+		var near, far []string
+		for _, s := range group {
+			n := 0
+			for _, other := range groups[s] {
+				if slices.Contains(group, other) {
+					n++
+				}
+			}
+			if n*2 <= len(group) {
+				far = append(far, s)
+			} else {
+				near = append(near, s)
+			}
+		}
+
+		if len(far) == 0 || len(near) == 0 {
+			continue
+		}
+
+		walks := make(map[string]int, len(far))
+		for _, s := range far {
+			m := math.MaxInt
+			for _, c := range near {
+				m = min(m, transferMinutes(byID[s], byID[c]))
+			}
+			walks[s] = m
+		}
+		result[id] = walks
+	}
+
+	return result
+}
+
 // sameStation は、同じ名前の2つの駅を1つの駅として扱うかを返す。座標の無い駅はまとめる。
 func sameStation(a, b model.Station) bool {
 	d, ok := distance(a, b)

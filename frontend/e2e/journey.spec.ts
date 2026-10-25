@@ -290,6 +290,44 @@ test("経路検索: 0時をまたぐ経路の所要時間", async ({ page, api }
   await expect(page.getByText("20分乗車")).toBeVisible();
 });
 
+test("経路検索: 同じ名前の離れた駅で乗り降りするなら、路線名で見分けて徒歩の区間を出す", async ({
+  page,
+  api,
+}) => {
+  const [leg] = journeySearch.journeys[0].legs;
+  api.set("/journeys", {
+    body: {
+      ...journeySearch,
+      journeys: [
+        {
+          departureTime: "10:00",
+          arrivalTime: "10:20",
+          transfers: 0,
+          walkBeforeMinutes: 0,
+          walkAfterMinutes: 11,
+          legs: [
+            {
+              ...leg,
+              departureTime: "10:00",
+              arrivalTime: "10:09",
+              delayMinutes: 0,
+            },
+          ],
+        },
+      ],
+    },
+  });
+
+  // 到着駅に、降りる駅（浅草線の大門）と同じ名前の大江戸線の大門を指定する
+  await page.goto(
+    `/journeys?from=${encodeURIComponent(GOTANDA)}&to=${encodeURIComponent(OEDO_DAIMON)}`,
+  );
+
+  await expect(
+    page.getByText("浅草線の大門からほかの路線の大門まで徒歩11分"),
+  ).toBeVisible();
+});
+
 test("経路検索: 運転見合わせの路線と、経路が無いことを知らせる", async ({
   page,
   api,

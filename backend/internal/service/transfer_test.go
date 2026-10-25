@@ -2,6 +2,7 @@ package service
 
 import (
 	"cmp"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -92,6 +93,33 @@ func TestJourneyStations(t *testing.T) {
 	for id, w := range want {
 		if got[id] != w {
 			t.Errorf("%s: expected %q, got %q", id, w, got[id])
+		}
+	}
+}
+
+func TestGroupWalks(t *testing.T) {
+
+	stations := []model.Station{
+		// 浅草のように、B のグループに A・C・D が入るが、D は A・C から離れている
+		testStation("A.Asakusa", "浅草", 35.7110, 139.7960),
+		testStation("B.Asakusa", "浅草", 35.7110, 139.7940), // A から約180m
+		testStation("C.Asakusa", "浅草", 35.7120, 139.7960), // A から約110m
+		testStation("D.Asakusa", "浅草", 35.7110, 139.7890), // B から約450m、A から約630m
+		testStation("E.Shibuya", "渋谷", 35.658, 139.701),
+		testStation("F.Shibuya", "渋谷", 35.659, 139.701),
+	}
+
+	walks := groupWalks(stations, stationGroups(stations, func(string) bool { return true }))
+
+	// D から最も近い B まで: 3分 + 約450m ÷ 80m/分（切り上げ）
+	if got := walks["B.Asakusa"]; !maps.Equal(got, map[string]int{"D.Asakusa": 9}) {
+		t.Errorf("B.Asakusa: got %v", got)
+	}
+
+	// D を含まないグループと、D と B だけのグループには足さない。2駅だけのグループにも足さない
+	for _, id := range []string{"A.Asakusa", "C.Asakusa", "D.Asakusa", "E.Shibuya", "F.Shibuya"} {
+		if got, ok := walks[id]; ok {
+			t.Errorf("%s: expected no walks, got %v", id, got)
 		}
 	}
 }

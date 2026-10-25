@@ -156,7 +156,8 @@ function Transfer({ prev, next }: { prev: JourneyLeg; next: JourneyLeg }) {
   );
 }
 
-// 出発駅から最初に乗る駅まで・最後に降りる駅から到着駅まで歩く区間（例: 東京を指定して大手町から乗る）
+// 出発駅から最初に乗る駅まで・最後に降りる駅から到着駅まで歩く区間（例: 東京を指定して大手町から乗る）。
+// 同じ名前でまとめた駅のうち、離れている駅（浅草のつくばエクスプレス）で乗り降りするときも出る
 function Walk({ label }: { label: string }) {
   return (
     <div className="ml-6 flex items-center gap-2 border-l-2 border-dotted border-border py-3 pl-12 text-sm text-muted-foreground">
@@ -171,6 +172,26 @@ type Names = {
   origin?: string;
   destination?: string;
 };
+
+// 徒歩の区間の案内。指定した駅と乗り降りする駅の名前が同じなら、路線名で見分ける
+function walkLabel(
+  leg: JourneyLeg,
+  side: "before" | "after",
+  name: string,
+  minutes: number,
+) {
+  const station = side === "before" ? leg.fromName : leg.toName;
+
+  if (station !== name) {
+    return side === "before"
+      ? `${name}から${station}まで徒歩${minutes}分`
+      : `${station}から${name}まで徒歩${minutes}分`;
+  }
+
+  return side === "before"
+    ? `ほかの路線の${name}から${leg.railwayName}の${station}まで徒歩${minutes}分`
+    : `${leg.railwayName}の${station}からほかの路線の${name}まで徒歩${minutes}分`;
+}
 
 function JourneyCard({
   journey,
@@ -203,7 +224,12 @@ function JourneyCard({
       <div className="px-5 py-4">
         {journey.walkBeforeMinutes > 0 && (
           <Walk
-            label={`${origin}から${first.fromName}まで徒歩${journey.walkBeforeMinutes}分`}
+            label={walkLabel(
+              first,
+              "before",
+              origin,
+              journey.walkBeforeMinutes,
+            )}
           />
         )}
 
@@ -221,7 +247,12 @@ function JourneyCard({
 
         {journey.walkAfterMinutes > 0 && (
           <Walk
-            label={`${last.toName}から${destination}まで徒歩${journey.walkAfterMinutes}分`}
+            label={walkLabel(
+              last,
+              "after",
+              destination,
+              journey.walkAfterMinutes,
+            )}
           />
         )}
       </div>

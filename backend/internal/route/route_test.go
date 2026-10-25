@@ -446,6 +446,74 @@ func TestSearchWalkAtEnds(t *testing.T) {
 	}
 }
 
+// Query.Walk の駅は、その駅から乗る前・着いた後に歩く時間を足して比べる
+func TestSearchWalkInGroup(t *testing.T) {
+
+	e := newTestEngine(t)
+
+	tests := []struct {
+		name     string
+		from, to []string
+		walk     map[string]int
+		time     string
+		arriveBy bool
+
+		want               [][]string
+		departure, arrival []string
+	}{
+		{
+			"no walk", []string{"A1"}, []string{"A3", "B3"}, nil, "10:00", false,
+			[][]string{{"A.local1000@A1>A3"}, {"A.local1000@A1>A2", "A.express1012@A2>A3"}},
+			[]string{"10:00", "10:00"}, []string{"10:30", "10:18"},
+		},
+		// A3 に着いてから20分歩くので、乗り換えて B3 に着くほうが早い
+		{
+			"walk to destination", []string{"A1"}, []string{"A3", "B3"}, map[string]int{"A3": 20}, "10:00", false,
+			[][]string{{"A.local1000@A1>A3"}, {"A.local1005@A1>A2", "B.1020@B2>B3"}},
+			[]string{"10:00", "10:05"}, []string{"10:50", "10:30"},
+		},
+		{
+			"walk to destination, arrive by", []string{"A1"}, []string{"A3", "B3"}, map[string]int{"A3": 20}, "10:40", true,
+			[][]string{{"A.local1005@A1>A2", "B.1020@B2>B3"}},
+			[]string{"10:05"}, []string{"10:30"},
+		},
+		// B2 まで20分歩くより、A2 から乗り換えの5分で B2 に行くほうが早い
+		{
+			"walk from origin", []string{"A2", "B2"}, []string{"B3"}, map[string]int{"B2": 20}, "10:00", false,
+			[][]string{{"B.1014@B2>B3"}},
+			[]string{"10:09"}, []string{"10:24"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+
+			got, err := e.Search(Query{
+				From:         tt.from,
+				To:           tt.to,
+				Walk:         tt.walk,
+				Calendars:    []string{weekday},
+				Time:         hm(tt.time),
+				ArriveBy:     tt.arriveBy,
+				MaxTransfers: DefaultMaxTransfers,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if s := summary(got); !reflect.DeepEqual(s, tt.want) {
+				t.Fatalf("got %v, want %v", s, tt.want)
+			}
+
+			for i, j := range got {
+				if j.Departure != hm(tt.departure[i]) || j.Arrival != hm(tt.arrival[i]) {
+					t.Errorf("journey %d: %d-%d, want %s-%s", i, j.Departure, j.Arrival, tt.departure[i], tt.arrival[i])
+				}
+			}
+		})
+	}
+}
+
 // 同じ駅での乗り継ぎ時間が足りなければ、急行に乗り継がない
 func TestSearchSameStationMinutes(t *testing.T) {
 
