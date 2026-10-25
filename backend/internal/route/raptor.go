@@ -73,7 +73,7 @@ func (n *network) search(
 	stations := len(e.stationIDs)
 	sameStation := int32(e.cfg.SameStationMinutes)
 
-	// toTarget[s] は、駅 s から到着駅のいずれかまで歩く時間（到着駅なら 0。歩けなければ unreachable）。
+	// toTarget[s] は、駅 s から到着駅のいずれかまで歩く時間（到着駅なら Query.Walk の時間。歩けなければ unreachable）。
 	// 到着駅の近くの別の駅（東京に対する大手町など）で降りて歩く経路も探す
 	toTarget := make([]int32, stations)
 	for i := range toTarget {
@@ -82,12 +82,12 @@ func (n *network) search(
 	isTarget := make([]bool, stations)
 	for _, s := range to {
 		isTarget[s] = true
-		toTarget[s] = 0
+		toTarget[s] = c.walk[s]
 	}
 	for s, paths := range n.transfers {
 		for _, f := range paths {
-			if isTarget[f.to] && f.minutes < toTarget[s] {
-				toTarget[s] = f.minutes
+			if isTarget[f.to] && f.minutes+c.walk[f.to] < toTarget[s] {
+				toTarget[s] = f.minutes + c.walk[f.to]
 			}
 		}
 	}
@@ -95,7 +95,7 @@ func (n *network) search(
 	rounds := make([]round, 1, maxTransfers+2)
 	rounds[0] = newRound(stations)
 	for _, s := range from {
-		rounds[0].ready[s] = int32(t)
+		rounds[0].ready[s] = int32(t) + c.walk[s]
 		rounds[0].readyFrom[s] = readyByOrigin
 	}
 
@@ -104,7 +104,7 @@ func (n *network) search(
 	// 出発駅から乗り換えの対応表で歩いて、近くの別の駅（大手町に対する東京など）から乗る経路も探す
 	for _, s := range from {
 		for _, f := range n.transfers[s] {
-			if r := int32(t) + f.minutes; r < rounds[0].ready[f.to] {
+			if r := int32(t) + c.walk[s] + f.minutes; r < rounds[0].ready[f.to] {
 				rounds[0].ready[f.to] = r
 				rounds[0].readyFrom[f.to] = readyByOrigin
 				marked = append(marked, f.to)
