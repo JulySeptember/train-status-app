@@ -90,23 +90,25 @@ function toRomaji(text: string): string | null {
 }
 
 // ローマ字を比べる形にそろえる。長音の記号（ō）と長音の書き方（ou・oo・uu）を除き、
-// b・p・m の前と末尾の m を n にする（Jimbocho と「じんぼうちょう」を同じにし、打っている途中の
-// 「shim」でも Shimbashi に当てる）。英数字以外は除く
+// b・p・m の前の m を n にする（Jimbocho と「じんぼうちょう」を同じにする）。英数字以外は除く
 export function romajiKey(romaji: string): string {
   return romaji
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]/g, "")
-    .replace(/m(?=[bpm]|$)/g, "n")
+    .replace(/m(?=[bpm])/g, "n")
     .replace(/o[ou]+/g, "o")
     .replace(/uu+/g, "u");
 }
 
-// 検索語を駅の英語名と比べる形にする。漢字を含むとき・比べる文字が無いときは null
-export function searchKey(keyword: string): string | null {
+// 検索語を駅の英語名と比べる形にする。漢字を含むとき・比べる文字が無いときは空。
+// 末尾の m は、次に b・p が来れば n になる（Shimbashi → shinbashi）ので、打っている途中の
+// 「shim」は m のまま（志村 Shimura）と n にしたもの（新橋）の両方で比べる
+export function searchKeys(keyword: string): string[] {
   const romaji = toRomaji(keyword);
-  if (romaji === null) return null;
+  if (romaji === null) return [];
   const key = romajiKey(romaji);
-  return key === "" ? null : key;
+  if (key === "") return [];
+  return key.endsWith("m") ? [key, key.slice(0, -1) + "n"] : [key];
 }

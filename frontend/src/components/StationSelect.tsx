@@ -18,7 +18,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 
-import { foldKana, romajiKey, searchKey } from "@/lib/romaji";
+import { foldKana, romajiKey, searchKeys } from "@/lib/romaji";
 import { cn } from "@/lib/utils";
 
 export type StationOption = {
@@ -70,7 +70,7 @@ export default function StationSelect({
     // 駅名とは、ひらがなとカタカナを区別せずに比べる（「てれこむ」でテレコムセンター）。
     // 漢字を含む検索語は駅名だけと比べる
     const word = foldKana(keyword);
-    const key = searchKey(keyword);
+    const enKeys = searchKeys(keyword);
 
     // 検索語と同じ名前の駅、検索語で始まる駅、それ以外の順に並べる。合わない駅は -1
     const rankOf = (target: string, word: string) =>
@@ -86,7 +86,7 @@ export default function StationSelect({
       const k = keys.get(s.id);
       if (!k) return -1;
       const ranks = [rankOf(k.name, word)];
-      if (key && k.en) ranks.push(rankOf(k.en, key));
+      if (k.en) ranks.push(...enKeys.map((key) => rankOf(k.en, key)));
       const matched = ranks.filter((r) => r >= 0);
       return matched.length > 0 ? Math.min(...matched) : -1;
     };

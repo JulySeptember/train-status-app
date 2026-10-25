@@ -171,6 +171,7 @@ test("経路検索: 拗音・長音・b の前の m・英単語の駅名も、�
       extra("ShakujiiKoen", "石神井公園", "Shakujii-kōen"),
       extra("Hatchobori", "八丁堀", "Hatchobori"),
       extra("TelecomCenter", "テレコムセンター", "Telecom Center"),
+      extra("ShimuraSakaue", "志村坂上", "Shimura-sakaue"),
     ],
   });
 
@@ -198,13 +199,27 @@ test("経路検索: 拗音・長音・b の前の m・英単語の駅名も、�
     await expect(page.getByRole("option", { name, exact: true })).toBeVisible();
   }
 
-  // 打っている途中の「shim」でも新橋（Shimbashi）を出す
-  for (const keyword of ["shi", "shim", "shimb"]) {
+  // 打っている途中の「shim」は、m のままの志村坂上（Shimura）と、b の前で n になる新橋（Shimbashi）の両方を出す
+  for (const keyword of ["shim", "しm"]) {
     await input.fill(keyword);
     await expect(
       page.getByRole("option", { name: "新橋", exact: true }),
     ).toBeVisible();
+    await expect(
+      page.getByRole("option", { name: "志村坂上", exact: true }),
+    ).toBeVisible();
   }
+  await input.fill("shimb");
+  await expect(page.getByRole("option")).toHaveCount(1);
+  await expect(
+    page.getByRole("option", { name: "新橋", exact: true }),
+  ).toBeVisible();
+
+  // 「m」だけでも、n を含まない三田（Mita）を出す
+  await input.fill("m");
+  await expect(
+    page.getByRole("option", { name: "三田", exact: true }),
+  ).toBeVisible();
 });
 
 test("経路検索: 出発駅と到着駅が同じなら検索できない", async ({ page }) => {
