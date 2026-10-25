@@ -328,6 +328,48 @@ test("経路検索: 同じ名前の離れた駅で乗り降りするなら、路
   ).toBeVisible();
 });
 
+test("経路検索: 同じ名前の離れた駅から乗るなら、路線名で見分けて徒歩の区間を出す", async ({
+  page,
+  api,
+}) => {
+  const [leg] = journeySearch.journeys[0].legs;
+  api.set("/journeys", {
+    body: {
+      ...journeySearch,
+      journeys: [
+        {
+          departureTime: "09:49",
+          arrivalTime: "10:09",
+          transfers: 0,
+          walkBeforeMinutes: 11,
+          walkAfterMinutes: 0,
+          legs: [
+            {
+              ...leg,
+              from: ASAKUSA_DAIMON,
+              fromName: "大門",
+              to: GOTANDA,
+              toName: "五反田",
+              departureTime: "10:00",
+              arrivalTime: "10:09",
+              delayMinutes: 0,
+            },
+          ],
+        },
+      ],
+    },
+  });
+
+  // 出発駅に、乗る駅（浅草線の大門）と同じ名前の大江戸線の大門を指定する
+  await page.goto(
+    `/journeys?from=${encodeURIComponent(OEDO_DAIMON)}&to=${encodeURIComponent(GOTANDA)}`,
+  );
+
+  await expect(
+    page.getByText("ほかの路線の大門から浅草線の大門まで徒歩11分"),
+  ).toBeVisible();
+});
+
 test("経路検索: 運転見合わせの路線と、経路が無いことを知らせる", async ({
   page,
   api,

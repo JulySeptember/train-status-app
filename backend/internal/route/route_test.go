@@ -483,6 +483,11 @@ func TestSearchWalkInGroup(t *testing.T) {
 			[][]string{{"B.1014@B2>B3"}},
 			[]string{"10:09"}, []string{"10:24"},
 		},
+		{
+			"walk from origin, arrive by", []string{"A2", "B2"}, []string{"B3"}, map[string]int{"B2": 20}, "10:30", true,
+			[][]string{{"B.1020@B2>B3"}},
+			[]string{"10:15"}, []string{"10:30"},
+		},
 	}
 
 	for _, tt := range tests {
