@@ -18,11 +18,14 @@ import {
   CommandList,
 } from "@/components/ui/command";
 
+import { foldKana, romajiKey, searchKeys } from "@/lib/romaji";
 import { cn } from "@/lib/utils";
 
 export type StationOption = {
   id: string;
   name: string;
+  // 駅の英語名。ひらがな・カタカナ・ローマ字の検索語と比べる
+  nameEn?: string;
 
   // 駅名の横に出す補足（路線の記号など）。同じ名前の選択肢を見分けるのに使う
   detail?: ReactNode;
@@ -51,14 +54,49 @@ export default function StationSelect({
   const [open, setOpen] = useState(false);
   const [keyword, setKeyword] = useState("");
 
+  // 駅名（カタカナをひらがなにしたもの）と英語名を比べる形にしたもの。駅ごとに1回だけ作る
+  const keys = useMemo(
+    () =>
+      new Map(
+        stations.map((s) => [
+          s.id,
+          { name: foldKana(s.name), en: romajiKey(s.nameEn ?? "") },
+        ]),
+      ),
+    [stations],
+  );
+
   const filtered = useMemo(() => {
-    // 検索語と同じ名前の駅、検索語で始まる駅、それ以外の順に並べる
-    const rank = (name: string) =>
-      name === keyword ? 0 : name.startsWith(keyword) ? 1 : 2;
+    // 駅名とは、ひらがなとカタカナを区別せずに比べる（「てれこむ」でテレコムセンター）。
+    // 漢字を含む検索語は駅名だけと比べる
+    const word = foldKana(keyword);
+    const enKeys = searchKeys(keyword);
+
+    // 検索語と同じ名前の駅、検索語で始まる駅、それ以外の順に並べる。合わない駅は -1
+    const rankOf = (target: string, word: string) =>
+      target === word
+        ? 0
+        : target.startsWith(word)
+          ? 1
+          : target.includes(word)
+            ? 2
+            : -1;
+
+    const rank = (s: StationOption) => {
+      const k = keys.get(s.id);
+      if (!k) return -1;
+      const ranks = [rankOf(k.name, word)];
+      if (k.en) ranks.push(...enKeys.map((key) => rankOf(k.en, key)));
+      const matched = ranks.filter((r) => r >= 0);
+      return matched.length > 0 ? Math.min(...matched) : -1;
+    };
+
     return stations
-      .filter((s) => s.name.includes(keyword))
-      .sort((a, b) => rank(a.name) - rank(b.name));
-  }, [stations, keyword]);
+      .map((s) => ({ s, r: rank(s) }))
+      .filter(({ r }) => r >= 0)
+      .sort((a, b) => a.r - b.r)
+      .map(({ s }) => s);
+  }, [stations, keys, keyword]);
 
   const current = stations.find((s) => s.id === value);
 
@@ -83,7 +121,7 @@ export default function StationSelect({
       </PopoverTrigger>
 
       <PopoverContent className="w-87.5 p-0">
-        {/* 絞り込みは駅名で行う（cmdk の絞り込みは value に入れた ID にも当たるので使わない） */}
+        {/* 絞り込みは駅名・英語名で行う（cmdk の絞り込みは value に入れた ID にも当たるので使わない） */}
         <Command shouldFilter={false}>
           <CommandInput
             placeholder={`${label}を検索...`}

@@ -434,6 +434,10 @@ type StationSummary struct {
 	Name      string `json:"name"`
 	RailwayID string `json:"railwayId"`
 
+	// 駅の英語名（ODPT の odpt:stationTitle の en）。駅の選択で、ローマ字・かなで探すのに使う。
+	// 他社の駅では長音を記号で書く（Keiō など）
+	NameEn string `json:"nameEn"`
+
 	// 経路検索の選択肢として、この駅とまとめる駅の代表（journeyStations）。
 	// 同じ名前で近くにある駅をつないだまとまりの中で、ID 順に最初の経路検索に使える駅。
 	// 経路検索に使えない駅（列車時刻表の無い事業者の駅で、近くに同じ名前の駅も無いもの）では空になる
@@ -488,6 +492,7 @@ func (s *Service) indexAllStations() []StationSummary {
 				ID:             st.ID,
 				Name:           st.Name,
 				RailwayID:      r.SameAs,
+				NameEn:         coords[st.ID].StationTitle.En,
 				JourneyStation: journey[st.ID],
 				Lat:            coords[st.ID].Latitude,
 				Lon:            coords[st.ID].Longitude,

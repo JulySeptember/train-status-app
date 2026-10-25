@@ -65,6 +65,7 @@ function journeyOptions(
     return {
       id,
       name: items[0].name,
+      nameEn: items[0].nameEn,
       // 同じ名前でも離れた駅（早稲田の東西線と荒川線など）は別の選択肢になるので、路線の記号で見分ける
       detail: (
         <span className="flex flex-wrap gap-1">

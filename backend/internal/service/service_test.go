@@ -360,6 +360,10 @@ func TestGetAllStations(t *testing.T) {
 		}
 	}
 
+	if got := byID["odpt.Station:Toei.Shinjuku.Shinjuku"].NameEn; got != "Shinjuku" {
+		t.Errorf("Shinjuku NameEn = %q", got)
+	}
+
 	// 同じ名前の駅（三田線と大江戸線の春日）は、経路検索の代表の駅が同じになる
 	mita := byID["odpt.Station:Toei.Mita.Kasuga"]
 	oedo := byID["odpt.Station:Toei.Oedo.Kasuga"]
