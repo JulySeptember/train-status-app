@@ -1751,6 +1751,10 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
+                "nameEn": {
+                    "description": "駅の英語名（ODPT の odpt:stationTitle の en）。駅の選択で、ローマ字・かなで探すのに使う。\n他社の駅では長音を記号で書く（Keiō など）",
+                    "type": "string"
+                },
                 "railwayId": {
                     "type": "string"
                 }

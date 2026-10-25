@@ -109,11 +109,25 @@ const asakusaCoords: [number, number][] = [
   [35.6566, 139.7548],
 ];
 
+// 浅草線の駅の英語名（西馬込から路線の順）
+const asakusaNamesEn = [
+  "Nishi-magome",
+  "Magome",
+  "Nakanobu",
+  "Togoshi",
+  "Gotanda",
+  "Takanawadai",
+  "Sengakuji",
+  "Mita",
+  "Daimon",
+];
+
 // 全駅の一覧。浅草線と大江戸線の大門は、経路検索では1つの駅（代表は浅草線の大門）
 export const allStations: StationSummary[] = [
   ...asakusaStations.map((s, i) => ({
     ...s,
     railwayId: ASAKUSA,
+    nameEn: asakusaNamesEn[i],
     journeyStation: s.id,
     lat: asakusaCoords[i][0],
     lon: asakusaCoords[i][1],
@@ -122,6 +136,7 @@ export const allStations: StationSummary[] = [
     id: OEDO_DAIMON,
     name: "大門",
     railwayId: OEDO,
+    nameEn: "Daimon",
     journeyStation: ASAKUSA_DAIMON,
     lat: 35.6565,
     lon: 139.7559,
@@ -130,6 +145,7 @@ export const allStations: StationSummary[] = [
     id: ROPPONGI,
     name: "六本木",
     railwayId: OEDO,
+    nameEn: "Roppongi",
     journeyStation: ROPPONGI,
     lat: 35.664,
     lon: 139.7323,

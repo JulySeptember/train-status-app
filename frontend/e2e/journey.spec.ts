@@ -115,6 +115,37 @@ test("経路検索: 遅延を反映しない・到着時刻を指定した条件
   await expect(page.getByLabel("遅延・運転見合わせを反映")).not.toBeChecked();
 });
 
+test("経路検索: ひらがな・カタカナ・ローマ字でも駅を探せる", async ({
+  page,
+}) => {
+  await page.goto("/journeys");
+  await page.getByRole("combobox").first().click();
+  const input = page.getByPlaceholder("出発駅を検索...");
+  const option = (name: string) =>
+    page.getByRole("option", { name, exact: true });
+
+  // 促音（ろっぽんぎ の っ）・カタカナ・大文字・英語名の前方の一致
+  for (const keyword of ["ろっぽんぎ", "ロッポンギ", "Roppongi", "ropp"]) {
+    await input.fill(keyword);
+    await expect(page.getByRole("option")).toHaveCount(1);
+    await expect(option("六本木")).toBeVisible();
+  }
+
+  // 「ま」は馬込（Magome）・西馬込（Nishi-magome）に当たり、名前が検索語で始まる馬込を先に出す
+  await input.fill("まごめ");
+  await expect(page.getByRole("option")).toHaveCount(2);
+  await expect(page.getByRole("option").nth(0)).toHaveAccessibleName("馬込");
+  await expect(page.getByRole("option").nth(1)).toHaveAccessibleName("西馬込");
+
+  // 漢字を含む検索語は駅名だけと比べる
+  await input.fill("五反だ");
+  await expect(page.getByText("駅が見つかりません")).toBeVisible();
+
+  await input.fill("ごたんだ");
+  await option("五反田").click();
+  await expect(page.getByRole("combobox").first()).toContainText("五反田");
+});
+
 test("経路検索: 出発駅と到着駅が同じなら検索できない", async ({ page }) => {
   await page.goto("/journeys");
 

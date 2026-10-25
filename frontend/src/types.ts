@@ -35,6 +35,8 @@ export interface Station {
 // 全駅の一覧（GET /api/stations）の1駅
 export interface StationSummary extends Station {
   railwayId: string;
+  // 駅の英語名（ODPT の odpt:stationTitle の en）。駅の選択で、ローマ字・かなで探すのに使う
+  nameEn: string;
   // 経路検索で1つの駅として扱う駅の代表。同じ値の駅は経路検索で同じ結果になる。
   // 経路検索に使えない駅（列車時刻表の無い事業者の駅で、近くに同じ名前の駅も無いもの）では空
   journeyStation: string;
