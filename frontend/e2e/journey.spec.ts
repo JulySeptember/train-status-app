@@ -1,11 +1,14 @@
 import { type Page } from "@playwright/test";
 
+import { type StationSummary } from "../src/types.ts";
+
 import {
   ASAKUSA_DAIMON,
   GOTANDA,
   MITA,
   OEDO_DAIMON,
   ROPPONGI,
+  allStations,
   journeySearch,
 } from "./data.ts";
 import { expect, test } from "./mock.ts";
@@ -131,7 +134,7 @@ test("経路検索: ひらがな・カタカナ・ローマ字でも駅を探せ
     await expect(option("六本木")).toBeVisible();
   }
 
-  // 「ま」は馬込（Magome）・西馬込（Nishi-magome）に当たり、名前が検索語で始まる馬込を先に出す
+  // 「まごめ」は馬込（Magome）・西馬込（Nishi-magome）に当たり、名前が検索語で始まる馬込を先に出す
   await input.fill("まごめ");
   await expect(page.getByRole("option")).toHaveCount(2);
   await expect(page.getByRole("option").nth(0)).toHaveAccessibleName("馬込");
@@ -144,6 +147,64 @@ test("経路検索: ひらがな・カタカナ・ローマ字でも駅を探せ
   await input.fill("ごたんだ");
   await option("五反田").click();
   await expect(page.getByRole("combobox").first()).toContainText("五反田");
+});
+
+test("経路検索: 拗音・長音・b の前の m・英単語の駅名も、かなとローマ字で探せる", async ({
+  page,
+  api,
+}) => {
+  // 英語名に長音の記号（他社の駅データの書き方）や mb を含む駅、英語名が英単語の駅を足す
+  const extra = (id: string, name: string, nameEn: string): StationSummary => ({
+    id: `odpt.Station:Toei.Mita.${id}`,
+    name,
+    railwayId: MITA,
+    nameEn,
+    journeyStation: `odpt.Station:Toei.Mita.${id}`,
+    lat: 0,
+    lon: 0,
+  });
+  api.set("/stations", {
+    body: [
+      ...allStations,
+      extra("Jimbocho", "神保町", "Jimbocho"),
+      extra("Shimbashi", "新橋", "Shimbashi"),
+      extra("ShakujiiKoen", "石神井公園", "Shakujii-kōen"),
+      extra("Hatchobori", "八丁堀", "Hatchobori"),
+      extra("TelecomCenter", "テレコムセンター", "Telecom Center"),
+    ],
+  });
+
+  await page.goto("/journeys");
+  await page.getByRole("combobox").first().click();
+  const input = page.getByPlaceholder("出発駅を検索...");
+
+  const cases: [string, string][] = [
+    // ちょう（拗音と ou の長音）と、Jimbocho の m
+    ["じんぼうちょう", "神保町"],
+    // 半角カナ・全角英字
+    ["ｼﾞﾝﾎﾞｳﾁｮｳ", "神保町"],
+    ["Ｊｉｍｂｏ", "神保町"],
+    // しゃ と、英語名の長音の記号（ō）
+    ["しゃくじいこうえん", "石神井公園"],
+    ["shakujiikoen", "石神井公園"],
+    // っち → tch
+    ["はっちょうぼり", "八丁堀"],
+    // カタカナの駅名は、ひらがなでも駅名と比べる（英語名とは合わない）
+    ["てれこむせんたー", "テレコムセンター"],
+  ];
+  for (const [keyword, name] of cases) {
+    await input.fill(keyword);
+    await expect(page.getByRole("option")).toHaveCount(1);
+    await expect(page.getByRole("option", { name, exact: true })).toBeVisible();
+  }
+
+  // 打っている途中の「shim」でも新橋（Shimbashi）を出す
+  for (const keyword of ["shi", "shim", "shimb"]) {
+    await input.fill(keyword);
+    await expect(
+      page.getByRole("option", { name: "新橋", exact: true }),
+    ).toBeVisible();
+  }
 });
 
 test("経路検索: 出発駅と到着駅が同じなら検索できない", async ({ page }) => {

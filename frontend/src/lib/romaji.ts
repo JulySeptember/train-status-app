@@ -26,15 +26,22 @@ const KANA: Record<string, string> = {
 const SMALL_Y = new Set(["ゃ", "ゅ", "ょ"]);
 const SMALL_VOWEL = new Set(["ぁ", "ぃ", "ぅ", "ぇ", "ぉ"]);
 
+// 半角カナを全角に、全角英数字を半角にしてから、カタカナをひらがなにする。
+// 「ヶ」「ヵ」は駅名（市ヶ谷など）の表記どおりに比べるので、ひらがなにしない
+export function foldKana(text: string): string {
+  return [...text.normalize("NFKC")]
+    .map((c) => {
+      const code = c.charCodeAt(0);
+      return code >= 0x30a1 && code <= 0x30f4
+        ? String.fromCharCode(code - 0x60)
+        : c;
+    })
+    .join("");
+}
+
 // かなをヘボン式のローマ字にする。かなでも英数字でもない文字（漢字など）があれば null
 function toRomaji(text: string): string | null {
-  // 半角カナを全角に、全角英数字を半角にしてから、カタカナをひらがなにする
-  const hira = [...text.normalize("NFKC")].map((c) => {
-    const code = c.charCodeAt(0);
-    return code >= 0x30a1 && code <= 0x30f6
-      ? String.fromCharCode(code - 0x60)
-      : c;
-  });
+  const hira = [...foldKana(text)];
 
   let result = "";
   for (let i = 0; i < hira.length; i++) {
@@ -68,8 +75,9 @@ function toRomaji(text: string): string | null {
     }
 
     if (next && SMALL_VOWEL.has(next)) {
-      // ふぁ → fa、てぃ → ti、うぃ → wi
-      const head = base.length > 1 ? base.slice(0, -1) : "w";
+      // ふぁ → fa、てぃ → ti、うぃ → wi、いぇ → ye
+      const head =
+        base.length > 1 ? base.slice(0, -1) : base === "i" ? "y" : "w";
       result += head + KANA[next];
       i++;
       continue;
@@ -82,14 +90,15 @@ function toRomaji(text: string): string | null {
 }
 
 // ローマ字を比べる形にそろえる。長音の記号（ō）と長音の書き方（ou・oo・uu）を除き、
-// b・p・m の前の m を n にする（Jimbocho と「じんぼうちょう」を同じにする）。英数字以外は除く
+// b・p・m の前と末尾の m を n にする（Jimbocho と「じんぼうちょう」を同じにし、打っている途中の
+// 「shim」でも Shimbashi に当てる）。英数字以外は除く
 export function romajiKey(romaji: string): string {
   return romaji
     .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]/g, "")
-    .replace(/m(?=[bpm])/g, "n")
+    .replace(/m(?=[bpm]|$)/g, "n")
     .replace(/o[ou]+/g, "o")
     .replace(/uu+/g, "u");
 }

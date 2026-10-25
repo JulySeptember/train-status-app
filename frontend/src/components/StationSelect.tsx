@@ -18,7 +18,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 
-import { romajiKey, searchKey } from "@/lib/romaji";
+import { foldKana, romajiKey, searchKey } from "@/lib/romaji";
 import { cn } from "@/lib/utils";
 
 export type StationOption = {
@@ -54,14 +54,22 @@ export default function StationSelect({
   const [open, setOpen] = useState(false);
   const [keyword, setKeyword] = useState("");
 
-  // 駅の英語名を比べる形にしたもの。駅ごとに1回だけ作る
+  // 駅名（カタカナをひらがなにしたもの）と英語名を比べる形にしたもの。駅ごとに1回だけ作る
   const keys = useMemo(
-    () => new Map(stations.map((s) => [s.id, romajiKey(s.nameEn ?? "")])),
+    () =>
+      new Map(
+        stations.map((s) => [
+          s.id,
+          { name: foldKana(s.name), en: romajiKey(s.nameEn ?? "") },
+        ]),
+      ),
     [stations],
   );
 
   const filtered = useMemo(() => {
+    // 駅名とは、ひらがなとカタカナを区別せずに比べる（「てれこむ」でテレコムセンター）。
     // 漢字を含む検索語は駅名だけと比べる
+    const word = foldKana(keyword);
     const key = searchKey(keyword);
 
     // 検索語と同じ名前の駅、検索語で始まる駅、それ以外の順に並べる。合わない駅は -1
@@ -75,9 +83,10 @@ export default function StationSelect({
             : -1;
 
     const rank = (s: StationOption) => {
-      const ranks = [rankOf(s.name, keyword)];
-      const en = keys.get(s.id);
-      if (key && en) ranks.push(rankOf(en, key));
+      const k = keys.get(s.id);
+      if (!k) return -1;
+      const ranks = [rankOf(k.name, word)];
+      if (key && k.en) ranks.push(rankOf(k.en, key));
       const matched = ranks.filter((r) => r >= 0);
       return matched.length > 0 ? Math.min(...matched) : -1;
     };
