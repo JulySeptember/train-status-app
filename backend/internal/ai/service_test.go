@@ -190,6 +190,27 @@ func TestChatFinalReask(t *testing.T) {
 	}
 }
 
+// 頼み直しが失敗したら、エラーにせず決まった文言で答える
+func TestChatFinalReaskError(t *testing.T) {
+
+	cfg := ai.DefaultConfig()
+	cfg.MaxRounds = 1
+
+	p := fake.New(
+		fake.Calls(fake.Call("get_train_status", nil)),
+		fake.Calls(fake.Call("get_train_status", nil)),
+		fake.Reply{Err: ai.ErrRateLimited},
+	)
+
+	res, err := newService(p, &stubTools{}, nil, cfg).Chat(t.Context(), "ip", ask("遅延は？"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Reply == "" || len(p.Requests()) != 3 {
+		t.Fatalf("expected the fallback reply after a failed re-ask, got %q after %d calls", res.Reply, len(p.Requests()))
+	}
+}
+
 // 残り時間が少なければ頼み直さず、決まった文言で答える
 func TestChatFinalNoReaskWhenLate(t *testing.T) {
 
