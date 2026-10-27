@@ -71,13 +71,18 @@ func TestEval(t *testing.T) {
 		interval = time.Duration(v) * time.Second
 	}
 
-	passed := 0
-	for i, c := range cases {
-		if i > 0 {
-			time.Sleep(interval)
-		}
+	// -run で飛ばした質問は、t.Run が中身を実行せずに true を返す。待たず、数にも入れない
+	passed, ran := 0, 0
+	for _, c := range cases {
+		started := false
 
 		ok := t.Run(c.Name, func(t *testing.T) {
+			if ran > 0 {
+				time.Sleep(interval)
+			}
+			started = true
+			ran++
+
 			tools := &recordingTools{Tools: ai.NewTools(service.New(fixedClient(loader, c.Status), loader))}
 			limiter := ai.NewMemoryLimiter(ai.Limits{PerIPPerMinute: 100, PerIPPerDay: 1000, CallsPerDay: 1000})
 			svc := ai.NewService(provider, modelID, tools, limiter, ai.DefaultConfig())
@@ -95,12 +100,12 @@ func TestEval(t *testing.T) {
 
 			checkEval(t, c, tools.calls, res.Reply)
 		})
-		if ok {
+		if ok && started {
 			passed++
 		}
 	}
 
-	t.Logf("model %s: %d / %d passed", modelID, passed, len(cases))
+	t.Logf("model %s: %d / %d passed", modelID, passed, ran)
 }
 
 func loadEvalCases(t *testing.T) []evalCase {
