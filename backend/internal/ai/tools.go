@@ -87,7 +87,7 @@ func (t *Tools) Definitions() []Tool {
 	return []Tool{
 		{
 			Name: "find_station",
-			Description: "駅名から駅を探す。同じ名前の駅は路線ごとに返す。" +
+			Description: "駅名から駅を探す。駅でない地名は、最寄りの駅名に読み替えてから渡す。同じ名前の駅は路線ごとに返す。" +
 				"見つからなければ candidates は空で、このアプリが扱う駅ではない。駅の id は必ずこの結果から使う。",
 			Parameters: json.RawMessage(`{
 				"type": "object",

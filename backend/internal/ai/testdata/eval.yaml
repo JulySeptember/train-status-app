@@ -87,6 +87,13 @@
   expect_tools: [get_train_status]
   expect_reply_any: [見合わせ]
 
+# 駅でない地名は、最寄りの駅に読み替えて探す（issue #112）
+- name: 地名を目的地にする
+  input: 今新宿にいて、雷門に行きたいです。一番早く着くのは？
+  expect_tools: [find_station, search_route]
+  expect_args: { find_station: { name: 浅草 } }
+  expect_reply_any: [浅草]
+
 # 都外の駅（他社のデータを読み込んでも対象外）
 - name: 対象外の駅
   input: 横浜から大宮まで

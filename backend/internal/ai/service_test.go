@@ -150,6 +150,7 @@ func TestChatMaxRoundsWithoutAnswer(t *testing.T) {
 	p := fake.New(
 		fake.Calls(fake.Call("get_train_status", nil)),
 		fake.Calls(fake.Call("get_train_status", nil)),
+		fake.Calls(fake.Call("get_train_status", nil)),
 	)
 
 	res, err := newService(p, &stubTools{}, nil, cfg).Chat(t.Context(), "ip", ask("遅延は？"))
@@ -158,6 +159,57 @@ func TestChatMaxRoundsWithoutAnswer(t *testing.T) {
 	}
 	if res.Reply == "" || len(res.Steps) != 1 {
 		t.Fatalf("unexpected response %+v", res)
+	}
+	if n := len(p.Requests()); n != 3 {
+		t.Fatalf("expected 3 calls (one re-ask), got %d", n)
+	}
+}
+
+// 最後の呼び出しで AI が道具を呼ぼうとしたら、1回だけ文章で答えるよう頼み直す
+func TestChatFinalReask(t *testing.T) {
+
+	cfg := ai.DefaultConfig()
+	cfg.MaxRounds = 1
+
+	p := fake.New(
+		fake.Calls(fake.Call("get_train_status", nil)),
+		fake.Calls(fake.Call("get_train_status", nil)),
+		fake.Text("今ある情報で答えます。"),
+	)
+
+	res, err := newService(p, &stubTools{}, nil, cfg).Chat(t.Context(), "ip", ask("遅延は？"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Reply != "今ある情報で答えます。" {
+		t.Fatalf("unexpected reply %q", res.Reply)
+	}
+	reqs := p.Requests()
+	if last := reqs[len(reqs)-1]; last.ToolChoice != ai.ToolChoiceNone || !strings.Contains(last.System, "文章だけで答えて") {
+		t.Fatalf("the re-ask must not allow tools: %+v", last.ToolChoice)
+	}
+}
+
+// 残り時間が少なければ頼み直さず、決まった文言で答える
+func TestChatFinalNoReaskWhenLate(t *testing.T) {
+
+	cfg := ai.DefaultConfig()
+	cfg.TotalTimeout = 300 * time.Millisecond
+	cfg.AnswerReserve = 200 * time.Millisecond
+	cfg.RetryMinRemaining = 100 * time.Millisecond
+
+	p := fake.New(
+		fake.Calls(fake.Call("get_train_status", nil)),
+		fake.Calls(fake.Call("get_train_status", nil)),
+		fake.Text("届かない"),
+	)
+
+	res, err := newService(p, &stubTools{delay: 250 * time.Millisecond}, nil, cfg).Chat(t.Context(), "ip", ask("遅延は？"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Reply == "届かない" || len(p.Requests()) != 2 {
+		t.Fatalf("expected no re-ask, got %q after %d calls", res.Reply, len(p.Requests()))
 	}
 }
 
