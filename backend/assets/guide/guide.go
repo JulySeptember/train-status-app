@@ -104,6 +104,11 @@ func Decode(data []byte) (*Table, error) {
 			if platform == gate {
 				return nil, fmt.Errorf("%s %s: target must be either a platform or a gate: %+v", e.Railway, e.Direction, e.Target)
 			}
+			switch e.Via {
+			case "", ViaStairs, ViaEscalator, ViaElevator, ViaSlope:
+			default:
+				return nil, fmt.Errorf("%s %s: unknown via %s", e.Railway, e.Direction, e.Via)
+			}
 		}
 	}
 

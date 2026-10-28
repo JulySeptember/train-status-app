@@ -19,8 +19,8 @@ type guideIndex struct {
 	// 駅ID → その駅の案内
 	stations map[string]*guideStation
 
-	// 駅ID → 駅（対応表に無い乗り換え先の駅に近い改札を選ぶ）
-	stationByID map[string]model.Station
+	// 駅ID → 緯度・経度だけの駅（対応表に無い乗り換え先の駅に近い改札を選ぶ）
+	coords map[string]model.Station
 
 	// 路線ID → 路線名（行き先のホームの名前）
 	railwayNames map[string]string
@@ -43,7 +43,7 @@ func newGuideIndex(t *guide.Table, stations []model.Station, railwayNames map[st
 
 	idx := guideIndex{
 		stations:     map[string]*guideStation{},
-		stationByID:  map[string]model.Station{},
+		coords:       map[string]model.Station{},
 		railwayNames: railwayNames,
 	}
 
@@ -52,7 +52,7 @@ func newGuideIndex(t *guide.Table, stations []model.Station, railwayNames map[st
 	}
 
 	for _, st := range stations {
-		idx.stationByID[st.SameAs] = st
+		idx.coords[st.SameAs] = model.Station{Latitude: st.Latitude, Longitude: st.Longitude}
 	}
 
 	for i := range t.Stations {
@@ -135,7 +135,7 @@ func (idx guideIndex) transferGate(g *guideStation, to string) string {
 		return gate
 	}
 
-	st, ok := idx.stationByID[to]
+	st, ok := idx.coords[to]
 	if !ok {
 		return ""
 	}

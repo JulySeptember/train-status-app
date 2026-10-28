@@ -309,6 +309,26 @@ func TestLoadStationGuide(t *testing.T) {
 		}
 	})
 
+	t.Run("unknown target gate", func(t *testing.T) {
+		files := extraTestFiles(t)
+		files[stationGuideFile] = []byte(`{"stations":[{"stationIds":["x"],"gates":[{"name":"北口"}],"entries":[{"railway":"r","direction":"d","target":{"gate":"南口"}}]}]}`)
+
+		_, err := newFromFS(testFS(t, files), WithExtra())
+		if err == nil || !strings.Contains(err.Error(), "南口") {
+			t.Fatalf("expected an error about the unknown gate, got %v", err)
+		}
+	})
+
+	t.Run("unknown via", func(t *testing.T) {
+		files := extraTestFiles(t)
+		files[stationGuideFile] = []byte(`{"stations":[{"stationIds":["x"],"gates":[{"name":"北口"}],"entries":[{"railway":"r","direction":"d","target":{"gate":"北口"},"via":"ladder"}]}]}`)
+
+		_, err := newFromFS(testFS(t, files), WithExtra())
+		if err == nil || !strings.Contains(err.Error(), "ladder") {
+			t.Fatalf("expected an error about the unknown via, got %v", err)
+		}
+	})
+
 	t.Run("invalid target", func(t *testing.T) {
 		files := extraTestFiles(t)
 		files[stationGuideFile] = []byte(`{"stations":[{"stationIds":["x"],"entries":[{"railway":"r","direction":"d","target":{}}]}]}`)
