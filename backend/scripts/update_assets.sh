@@ -155,6 +155,24 @@ update_extra() {
         -area "${ASSETS_DIR}/tokyo_stations.txt" \
         -out "${ASSETS_DIR}/extra"
 
+    # 駅の中の案内（docs/design/station-guide.md）。assets/guide の対応表がある駅の
+    # 歩行空間ネットワーク・構内地図（JR東日本、チャレンジ限定）を取り、案内の表を作る
+    mkdir -p "${CACHE_DIR}/station-guide"
+    for labels in "${ASSETS_DIR}"/guide/*.yaml; do
+        station="$(sed -n 's/^name: *//p' "${labels}")"
+        for kind in nwd stationmap; do
+            file="jrc_${kind}_${station}_geojson.zip"
+            echo "Downloading ${file}..."
+            fetch_keyed "https://api-challenge.odpt.org/api/v4/files/JR-East/data/${file}" "${ODPT_CHALLENGE_CONSUMER_KEY}" \
+                "${CACHE_DIR}/station-guide/${file}"
+        done
+    done
+
+    go run ./cmd/gen-assets -kind guide \
+        -raw "${CACHE_DIR}" \
+        -labels "${ASSETS_DIR}/guide" \
+        -out "${ASSETS_DIR}/extra/station_guide.json"
+
     echo
     echo "Other operators' assets updated in assets/extra (do not commit them)."
 }

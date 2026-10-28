@@ -254,3 +254,58 @@ func TestLoadExtra(t *testing.T) {
 		}
 	})
 }
+
+func TestLoadStationGuide(t *testing.T) {
+
+	table := []byte(`{"stations":[{"stationIds":["odpt.Station:Test.Line.A"],"transfers":{},"entries":[
+		{"railway":"odpt.Railway:Test.Line","direction":"odpt.RailDirection:Test.Up","target":{"gate":"北口"},"carFromFront":3,"cars":10,"via":"stairs","walkMeters":120,"walkMinutes":2}
+	]}]}`)
+
+	t.Run("loaded", func(t *testing.T) {
+		files := extraTestFiles(t)
+		files[stationGuideFile] = table
+
+		l, err := newFromFS(testFS(t, files), WithExtra())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		g := l.StationGuide()
+		if g == nil || len(g.Stations) != 1 || g.Stations[0].Entries[0].CarFromFront != 3 {
+			t.Fatalf("unexpected station guide: %+v", g)
+		}
+	})
+
+	t.Run("optional", func(t *testing.T) {
+		l, err := newFromFS(testFS(t, extraTestFiles(t)), WithExtra())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if l.StationGuide() != nil {
+			t.Fatal("expected no station guide")
+		}
+	})
+
+	t.Run("not loaded without option", func(t *testing.T) {
+		files := extraTestFiles(t)
+		files[stationGuideFile] = table
+
+		l, err := newFromFS(testFS(t, files))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if l.StationGuide() != nil {
+			t.Fatal("station guide should not be loaded without WithExtra")
+		}
+	})
+
+	t.Run("invalid target", func(t *testing.T) {
+		files := extraTestFiles(t)
+		files[stationGuideFile] = []byte(`{"stations":[{"stationIds":["x"],"entries":[{"railway":"r","direction":"d","target":{}}]}]}`)
+
+		_, err := newFromFS(testFS(t, files), WithExtra())
+		if err == nil || !strings.Contains(err.Error(), stationGuideFile) {
+			t.Fatalf("expected an error about %s, got %v", stationGuideFile, err)
+		}
+	})
+}
