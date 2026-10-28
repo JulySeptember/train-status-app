@@ -45,8 +45,8 @@ const (
 	floorPenaltyMeters = 20
 	// エレベーター1回に足す距離（m）。待ち時間を含めて60秒相当
 	elevatorPenaltyMeters = 80
-	// 改札の位置から、ネットワークの点までの距離の上限（m）
-	maxGateSnapMeters = 30
+	// ホームの軸と、隣の駅への向きのなす角の cos がこれより小さいと、前の端を決められないとする（約60°）
+	minFrontCos = 0.5
 )
 
 // guideLabels は手で作る対応表（assets/guide/<駅>.yaml）。
@@ -69,13 +69,25 @@ type labelSide struct {
 	Track     string `yaml:"track"`
 	Railway   string `yaml:"railway"`
 	Direction string `yaml:"direction"`
+
+	// 前の端の向き（north・south・east・west）。隣の駅への向きがホームの軸と直角に近く、
+	// 前の端を決められないときに書く（線路が駅を出てすぐ曲がる路線）
+	Front string `yaml:"front"`
 }
 
+// labelGate は改札。位置は歩行空間ネットワークの点の ID（node_id）で指す
+// （コミットするファイルに、データの座標を書かないため）。
 type labelGate struct {
-	Name  string  `yaml:"name"`
-	Floor float64 `yaml:"floor"`
-	Lat   float64 `yaml:"lat"`
-	Lon   float64 `yaml:"lon"`
+	Name string `yaml:"name"`
+	Node int    `yaml:"node"`
+}
+
+// compassXY は、front の向きを東・北の単位ベクトルで表す。
+var compassXY = map[string][2]float64{
+	"north": {0, 1},
+	"south": {0, -1},
+	"east":  {1, 0},
+	"west":  {-1, 0},
 }
 
 // genGuide は、labelsDir の対応表ごとに案内を作り、out に書く。previewDir が空でなければ、確認用の SVG も書く。
@@ -167,7 +179,46 @@ func readLabels(path string) (*guideLabels, error) {
 		return nil, fmt.Errorf("%s: name, stations and platforms are required", path)
 	}
 
+	if err := l.validate(); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+
 	return &l, nil
+}
+
+// validate は、対応表の中の重なりと書き方の誤りを確かめる。
+func (l *guideLabels) validate() error {
+
+	sides := map[[2]string]bool{}
+	for _, p := range l.Platforms {
+		for _, s := range p.Sides {
+			key := [2]string{s.Railway, s.Direction}
+			if sides[key] {
+				return fmt.Errorf("%s %s: listed on two platforms", s.Railway, s.Direction)
+			}
+			sides[key] = true
+
+			if _, ok := compassXY[s.Front]; s.Front != "" && !ok {
+				return fmt.Errorf("track %s: unknown front %q", s.Track, s.Front)
+			}
+		}
+	}
+
+	gates := map[string]bool{}
+	for _, g := range l.Gates {
+		if gates[g.Name] {
+			return fmt.Errorf("gate %s: listed twice", g.Name)
+		}
+		gates[g.Name] = true
+	}
+
+	for station, gate := range l.Transfers {
+		if !gates[gate] {
+			return fmt.Errorf("transfer %s: unknown gate %s", station, gate)
+		}
+	}
+
+	return nil
 }
 
 // =========================
@@ -330,7 +381,7 @@ func readPlatformSpaces(zipPath string) (map[string]ring, error) {
 				continue
 			}
 
-			var outer ring
+			var pgs []polygon
 
 			switch f.Geometry.Type {
 			case "Polygon":
@@ -338,19 +389,21 @@ func readPlatformSpaces(zipPath string) (map[string]ring, error) {
 				if err := json.Unmarshal(f.Geometry.Coordinates, &pg); err != nil {
 					return nil, fmt.Errorf("%s/%s: %w", zipPath, name, err)
 				}
-				outer = pg[0]
+				pgs = []polygon{pg}
 			case "MultiPolygon":
-				var pgs []polygon
 				if err := json.Unmarshal(f.Geometry.Coordinates, &pgs); err != nil {
 					return nil, fmt.Errorf("%s/%s: %w", zipPath, name, err)
 				}
-				// ホームは1つの多角形のはずなので、最初のものを使う
-				outer = pgs[0][0]
 			default:
 				return nil, fmt.Errorf("%s/%s: unsupported geometry %s", zipPath, name, f.Geometry.Type)
 			}
 
-			spaces[p.ID] = outer
+			// ホームは1つの多角形のはず。分かれていると軸も内外の判定も変わるので、使わない
+			if len(pgs) != 1 || len(pgs[0]) == 0 || len(pgs[0][0]) < 4 {
+				return nil, fmt.Errorf("%s/%s: platform space %s: expected a single polygon", zipPath, name, p.ID)
+			}
+
+			spaces[p.ID] = pgs[0][0]
 		}
 	}
 
@@ -537,11 +590,16 @@ type adjEdge struct {
 	routeType int
 }
 
-func (nw *network) adjacency() [][]adjEdge {
+// adjacency は、点ごとの隣の点への線を返す。excluded の点を通る線は入れない。
+func (nw *network) adjacency(excluded map[int]bool) [][]adjEdge {
 
 	adj := make([][]adjEdge, len(nw.nodes))
 
 	for _, l := range nw.links {
+
+		if excluded[l.from] || excluded[l.to] {
+			continue
+		}
 
 		cost := l.meters
 		floors := math.Abs(nw.nodes[l.from].floor - nw.nodes[l.to].floor)
@@ -705,33 +763,32 @@ func buildStationGuide(labels *guideLabels, nw *network, spaces map[string]ring,
 
 		for _, s := range lp.Sides {
 
-			c, ahead, err := lines.neighborStation(s.Railway, s.Direction, stationName)
+			frontHigh, err := g.frontHigh(p, s, lines, stationName)
 			if err != nil {
 				return nil, fmt.Errorf("track %s: %w", s.Track, err)
 			}
 
-			nx, ny := g.proj.xy(c[0], c[1])
-
 			g.sides = append(g.sides, guideSide{
 				labelSide: s,
 				platform:  p,
-				frontHigh: (p.axis.project(nx, ny) > 0) == ahead,
+				frontHigh: frontHigh,
 			})
 		}
 	}
 
-	for _, gate := range labels.Gates {
-		n, d := g.nearestNode(gate.Lon, gate.Lat, gate.Floor)
-		if n < 0 || d > maxGateSnapMeters {
-			return nil, fmt.Errorf("gate %s: no network node within %dm on floor %v", gate.Name, maxGateSnapMeters, gate.Floor)
-		}
-		g.gateNodes[gate.Name] = n
+	index := map[int]int{}
+	for i, n := range nw.nodes {
+		index[n.id] = i
 	}
 
-	for station, gate := range labels.Transfers {
-		if _, ok := g.gateNodes[gate]; !ok {
-			return nil, fmt.Errorf("transfer %s: unknown gate %s", station, gate)
+	gateSet := map[int]bool{}
+	for _, gate := range labels.Gates {
+		n, ok := index[gate.Node]
+		if !ok {
+			return nil, fmt.Errorf("gate %s: no network node %d", gate.Name, gate.Node)
 		}
+		g.gateNodes[gate.Name] = n
+		gateSet[n] = true
 	}
 
 	g.station = guide.Station{
@@ -742,12 +799,15 @@ func buildStationGuide(labels *guideLabels, nw *network, spaces map[string]ring,
 		g.station.Transfers = map[string]string{}
 	}
 
-	adj := nw.adjacency()
+	// ホームからホームへは、改札の点を通らない（改札を出て別の改札から入り直す経路にしない）。
+	// ネットワークには改札の内外の区別が無いので、改札の点を通る線を除いて探す
+	inside := nw.adjacency(gateSet)
+	adj := nw.adjacency(nil)
 
 	// 行き先: 別のホームの番線（ホームごとに1回計算する）
 	for _, to := range g.platforms {
 
-		r := shortestTo(adj, to.nodes)
+		r := shortestTo(inside, to.nodes)
 
 		for _, from := range g.sides {
 			if from.platform == to {
@@ -846,22 +906,34 @@ func (g *stationGuide) entry(from guideSide, r route) (guide.Entry, bool) {
 	return e, true
 }
 
-func (g *stationGuide) nearestNode(lon, lat, floor float64) (int, float64) {
+// frontHigh は、s の列車が進む方向の前の端が、ホームの軸の hi の側かを返す。
+// 対応表に front があればその向き、無ければ隣の駅への向きで決める。隣の駅への向きがホームの軸と
+// 直角に近いと、軸の少しの傾きで前後が逆になるので、エラーにして front を書いてもらう。
+func (g *stationGuide) frontHigh(p *guidePlatform, s labelSide, lines *jrLines, stationName string) (bool, error) {
 
-	x0, y0 := g.proj.xy(lon, lat)
-
-	best, bestD := -1, math.Inf(1)
-	for i, n := range g.nw.nodes {
-		if n.floor != floor {
-			continue
+	if s.Front != "" {
+		v := compassXY[s.Front]
+		cos := v[0]*p.axis.ux + v[1]*p.axis.uy
+		if math.Abs(cos) < minFrontCos {
+			return false, fmt.Errorf("front %s is nearly perpendicular to the platform", s.Front)
 		}
-		x, y := g.proj.xy(n.lon, n.lat)
-		if d := math.Hypot(x-x0, y-y0); d < bestD {
-			best, bestD = i, d
-		}
+		return cos > 0, nil
 	}
 
-	return best, bestD
+	c, ahead, err := lines.neighborStation(s.Railway, s.Direction, stationName)
+	if err != nil {
+		return false, err
+	}
+
+	nx, ny := g.proj.xy(c[0], c[1])
+	u := p.axis.project(nx, ny)
+	dist := math.Hypot(nx-p.axis.cx, ny-p.axis.cy)
+
+	if dist == 0 || math.Abs(u)/dist < minFrontCos {
+		return false, fmt.Errorf("the neighbor station is nearly perpendicular to the platform (cos %.2f): set front", math.Abs(u)/max(dist, 1))
+	}
+
+	return (u > 0) == ahead, nil
 }
 
 // =========================
@@ -932,7 +1004,7 @@ func (g *stationGuide) preview() []byte {
 		n := g.nw.nodes[g.gateNodes[gate.Name]]
 		x, y := g.proj.xy(n.lon, n.lat)
 		fmt.Fprintf(&b, `<circle cx="%.1f" cy="%.1f" r="5" fill="#e74c3c"/>`+"\n", sx(x), sy(y))
-		fmt.Fprintf(&b, `<text x="%.1f" y="%.1f" font-size="13" font-weight="bold" fill="#922b21">%s（%v階）</text>`+"\n", sx(x)+7, sy(y)-6, gate.Name, gate.Floor)
+		fmt.Fprintf(&b, `<text x="%.1f" y="%.1f" font-size="13" font-weight="bold" fill="#922b21">%s（%v階）</text>`+"\n", sx(x)+7, sy(y)-6, gate.Name, n.floor)
 	}
 
 	b.WriteString("</svg>\n")

@@ -2,7 +2,8 @@
 #
 # 番線と路線・方向は、Wikipedia「新宿駅」ののりばの表（JR東日本の駅構内図が出典）による。
 # 区画と番線の対応は、OpenStreetMap のホームの位置と番線（ref）で照らした（13〜16番線は OSM に番線が無く、並びから決めた）。
-# 改札の位置は、構内地図の改札機（造作 C202）の固まりの中心で、名前は OpenStreetMap の改札と照らした。
+# 改札は、構内地図の改札機（造作 C202）の固まりに最も近い歩行空間ネットワークの点の ID（node_id）で指す
+# （データの座標をこのファイルに書かないため）。名前は OpenStreetMap の改札の位置と照らした。
 # 階（floor）は歩行空間ネットワークの階（構内地図の階の番号とは合っていない）。
 # 2026-10-28 に作成。
 
@@ -43,6 +44,8 @@ platforms:
       - track: "7・8"
         railway: odpt.Railway:JR-East.ChuoRapid
         direction: odpt.RailDirection:Inbound
+        # 次の四ツ谷は東にあるが、線路は代々木へ南に出てから東へ曲がる（ホームの軸と約75°で決められない）
+        front: south
   - space: 3e51fb01ce5a41baac012ead61b6d7e2
     floor: 1
     sides:
@@ -78,45 +81,25 @@ cars:
 
 gates:
   - name: 東改札
-    floor: -1
-    lat: 35.69125
-    lon: 139.70083
+    node: 4056
   - name: 中央東改札
-    floor: -1
-    lat: 35.69077
-    lon: 139.70102
+    node: 4305
   - name: 西改札
-    floor: -1
-    lat: 35.69119
-    lon: 139.70015
+    node: 3379
   - name: 中央西改札
-    floor: -1
-    lat: 35.69035
-    lon: 139.69978
+    node: 3113
   - name: 南改札
-    floor: 2
-    lat: 35.68942
-    lon: 139.70024
+    node: 3439
   - name: 小田急線乗換改札
-    floor: 2
-    lat: 35.68963
-    lon: 139.70004
+    node: 3243
   - name: 東南改札
-    floor: 2
-    lat: 35.68966
-    lon: 139.70132
+    node: 4987
   - name: 甲州街道改札
-    floor: 2
-    lat: 35.68880
-    lon: 139.70078
+    node: 4023
   - name: 新南改札
-    floor: 2
-    lat: 35.68840
-    lon: 139.70091
+    node: 4119
   - name: ミライナタワー改札
-    floor: 2
-    lat: 35.68869
-    lon: 139.70143
+    node: 5098
 
 # 乗り換え先の他社の駅 → 使う改札。書いていない駅は、駅の座標に最も近い改札にする
 transfers:

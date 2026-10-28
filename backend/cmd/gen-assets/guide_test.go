@@ -137,8 +137,9 @@ func testLabels() *guideLabels {
 				},
 			},
 		},
-		Cars:      map[string]int{"odpt.Railway:Test.Line": 10},
-		Gates:     []labelGate{{Name: "北改札", Floor: 2, Lat: testLat0 + 196/110540.0, Lon: testLon0}},
+		Cars: map[string]int{"odpt.Railway:Test.Line": 10},
+		// testNetwork の G（点の ID は作った順の番号）
+		Gates:     []labelGate{{Name: "北改札", Node: 22}},
 		Transfers: map[string]string{"odpt.Station:Other.Here": "北改札"},
 	}
 }
@@ -265,9 +266,11 @@ func TestBuildStationGuideErrors(t *testing.T) {
 	for name, edit := range map[string]func(*guideLabels){
 		"unknown space":         func(l *guideLabels) { l.Platforms[0].Space = "X" },
 		"no nodes on the floor": func(l *guideLabels) { l.Platforms[0].Floor = 3 },
-		"gate too far":          func(l *guideLabels) { l.Gates[0].Lat += 100 / 110540.0 },
-		"unknown transfer gate": func(l *guideLabels) { l.Transfers["odpt.Station:Other.Here"] = "南改札" },
+		"unknown gate node":     func(l *guideLabels) { l.Gates[0].Node = 999 },
 		"unknown direction":     func(l *guideLabels) { l.Platforms[0].Sides[0].Direction = "odpt.RailDirection:Test.Left" },
+		// ホーム A と B は、2階の S を通ってしかつながっていない。S を改札にすると、ホームの間を行けない
+		"platforms only through a gate": func(l *guideLabels) { l.Gates = append(l.Gates, labelGate{Name: "中改札", Node: 20}) },
+		"front perpendicular":           func(l *guideLabels) { l.Platforms[0].Sides[0].Front = "east" },
 	} {
 		t.Run(name, func(t *testing.T) {
 			labels := testLabels()
@@ -361,7 +364,7 @@ func TestReadNetworkSkipsDanglingLinks(t *testing.T) {
 	}
 }
 
-// コミットしている対応表が読めて、乗り換え先の改札が改札の一覧にあること（データが無くても確かめられる範囲）。
+// コミットしている対応表が読めること（データが無くても確かめられる範囲）。
 func TestGuideLabelFiles(t *testing.T) {
 
 	files, err := filepath.Glob(filepath.Join("..", "..", "assets", "guide", "*.yaml"))
@@ -370,19 +373,10 @@ func TestGuideLabelFiles(t *testing.T) {
 	}
 
 	for _, f := range files {
+		// readLabels は重なりと乗り換え先の改札も確かめる
 		l, err := readLabels(f)
 		if err != nil {
 			t.Fatal(err)
-		}
-
-		gates := map[string]bool{}
-		for _, g := range l.Gates {
-			gates[g.Name] = true
-		}
-		for station, gate := range l.Transfers {
-			if !gates[gate] {
-				t.Errorf("%s: transfer %s: unknown gate %s", f, station, gate)
-			}
 		}
 
 		for _, p := range l.Platforms {
@@ -392,5 +386,53 @@ func TestGuideLabelFiles(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func TestBuildStationGuideFront(t *testing.T) {
+
+	// 隣の駅が真東にある路線（ホームは南北）。前の端を決められない
+	lines := testLines()
+	lon, lat := testLonLat(1000, 100)
+	lines.stations["odpt.Station:Test.Line.North"] = [2]float64{lon, lat}
+
+	if _, err := buildStationGuide(testLabels(), testNetwork(), testSpaces(), lines); err == nil {
+		t.Fatal("expected an error when the neighbor station is perpendicular to the platform")
+	}
+
+	// 対応表で前の端の向きを書けば決まる
+	labels := testLabels()
+	labels.Platforms[0].Sides[0].Front = "north"
+
+	g, err := buildStationGuide(labels, testNetwork(), testSpaces(), lines)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e := findEntry(t, g.station, "1", guide.Target{Gate: "北改札"}); e.CarFromFront != 1 {
+		t.Errorf("expected car 1 with front north, got %d", e.CarFromFront)
+	}
+}
+
+func TestGuideLabelsValidate(t *testing.T) {
+
+	for name, edit := range map[string]func(*guideLabels){
+		"duplicate gate": func(l *guideLabels) { l.Gates = append(l.Gates, labelGate{Name: "北改札", Node: 20}) },
+		"duplicate side": func(l *guideLabels) {
+			l.Platforms[1].Sides = append(l.Platforms[1].Sides, l.Platforms[0].Sides[0])
+		},
+		"unknown front":         func(l *guideLabels) { l.Platforms[0].Sides[0].Front = "up" },
+		"unknown transfer gate": func(l *guideLabels) { l.Transfers["odpt.Station:Other.Here"] = "南改札" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			labels := testLabels()
+			edit(labels)
+			if err := labels.validate(); err == nil {
+				t.Fatal("expected an error")
+			}
+		})
+	}
+
+	if err := testLabels().validate(); err != nil {
+		t.Fatal(err)
 	}
 }
