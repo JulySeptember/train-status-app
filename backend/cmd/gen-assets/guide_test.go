@@ -523,14 +523,35 @@ func TestBuildStationGuideToward(t *testing.T) {
 		t.Error("expected an error for a side parallel to the platform")
 	}
 
-	// 止まる位置が無ければ、ホームを出る場所を出す（北の端の階段は前寄り）
+	// 2番線（南へ進む）を3両にすると、先頭が南の端に止まって3両目の中ほど（前の端から 50m）から、
+	// 北の端の階段（前の端から 190m）へ進行方向と逆（北）に 140m 歩く。西の側なら東を向くので北は左、東の側なら右
+	for side, want := range map[string]string{"west": guide.TurnLeft, "east": guide.TurnRight} {
+		labels := testLabels()
+		labels.Cars["odpt.Railway:Test.Line"] = 3
+		labels.Platforms[0].Sides[1].Side = side
+
+		g, err := buildStationGuide(labels, testNetwork(), testSpaces(), testLines())
+		if err != nil {
+			t.Fatal(err)
+		}
+		e := findEntry(t, g.station, "2", gate)
+		if e.CarFromFront != 3 || e.Toward != guide.TowardBack || e.TowardMeters != 140 || e.Turn != want {
+			t.Errorf("side %s: expected car 3, back 140m to the %s, got %+v", side, want, e)
+		}
+	}
+
+	// 止まる位置が無ければ、ホームを出る場所を出す。北へ進む1番線では北の端の階段は前寄り、南へ進む2番線では後ろ寄り
 	labels = testLabels()
 	labels.Platforms[0].Sides[0].Stop = nil
+	labels.Platforms[0].Sides[1].Stop = nil
 	g, err = buildStationGuide(labels, testNetwork(), testSpaces(), testLines())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if e := findEntry(t, g.station, "1", gate); e.ExitAt != guide.ExitFront || e.Toward != "" {
 		t.Errorf("expected exit at the front, got %+v", e)
+	}
+	if e := findEntry(t, g.station, "2", gate); e.ExitAt != guide.ExitBack {
+		t.Errorf("expected exit at the back, got %+v", e)
 	}
 }
