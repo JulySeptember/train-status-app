@@ -12,7 +12,7 @@ Go の REST API（AWS Lambda）と React + TypeScript の SPA（S3 + CloudFront�
 - `backend/CLAUDE.md`: Go の層構成、静的データの更新、Swagger、AI の評価セット、ODPT データの注意点
 - `frontend/CLAUDE.md`: React の構成、E2E テスト
 - `infra/CLAUDE.md`: AWS の構成、CD・bootstrap の詳細、SSM、本番 Lambda の調査、Ruleset
-- 設計: `docs/design/`（`route-search.md`・`ai-api.md`・`login.md`・`multi-operator.md`）
+- 設計: `docs/design/`（`route-search.md`・`ai-api.md`・`login.md`・`multi-operator.md`・`station-guide.md`）
 
 ## 守ること
 
