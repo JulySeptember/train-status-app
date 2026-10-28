@@ -349,7 +349,7 @@ func TestReadNetwork(t *testing.T) {
 		feature(map[string]any{"node_id": "2", "lat": "35.6901", "lon": "139.7", "floor": "2"}),
 	}})
 	write("link.geojson", map[string]any{"features": []any{
-		feature(map[string]any{"start_id": 1, "end_id": 2, "distance": 11.1, "route_type": "6"}),
+		feature(map[string]any{"start_id": "1", "end_id": 2, "distance": 11.1, "route_type": "6"}),
 		feature(map[string]any{"start_id": 2, "end_id": 99, "distance": 5, "route_type": 1}),
 	}})
 
@@ -373,6 +373,27 @@ func TestReadNetwork(t *testing.T) {
 	}
 	if nw.links[0].routeType != routeStairs {
 		t.Errorf("unexpected route type %d", nw.links[0].routeType)
+	}
+}
+
+func TestFlexNumber(t *testing.T) {
+
+	for _, in := range []string{`"abc"`, `""`, `"NaN"`, `"Inf"`} {
+		var n flexNumber
+		if err := json.Unmarshal([]byte(in), &n); err == nil {
+			t.Errorf("%s: expected error, got %v", in, n)
+		}
+	}
+	// ID は、別の点と取り違えないよう、null と整数でない値もエラーにする
+	for _, in := range []string{`null`, `"12.5"`, `12.5`, `"abc"`} {
+		var id flexID
+		if err := json.Unmarshal([]byte(in), &id); err == nil {
+			t.Errorf("%s: expected error, got %v", in, id)
+		}
+	}
+	var id flexID
+	if err := json.Unmarshal([]byte(`"756"`), &id); err != nil || id != 756 {
+		t.Errorf("expected 756, got %v (%v)", id, err)
 	}
 }
 

@@ -310,10 +310,29 @@ func (n *flexNumber) UnmarshalJSON(data []byte) error {
 	}
 	s := strings.Trim(string(data), `"`)
 	v, err := strconv.ParseFloat(s, 64)
-	if err != nil {
+	if err != nil || math.IsNaN(v) || math.IsInf(v, 0) {
 		return fmt.Errorf("not a number: %s", data)
 	}
 	*n = flexNumber(v)
+	return nil
+}
+
+// flexID は、点の ID。flexNumber と同じく文字列も読むが、別の点と取り違えないよう、null と整数でない値はエラーにする
+type flexID int
+
+func (id *flexID) UnmarshalJSON(data []byte) error {
+
+	var n flexNumber
+	if string(data) == "null" {
+		return fmt.Errorf("no id")
+	}
+	if err := n.UnmarshalJSON(data); err != nil {
+		return err
+	}
+	if v := float64(n); v != math.Trunc(v) || math.Abs(v) > 1<<53 {
+		return fmt.Errorf("not an integer id: %s", data)
+	}
+	*id = flexID(n)
 	return nil
 }
 
@@ -341,7 +360,7 @@ func readNetwork(zipPath string) (*network, error) {
 
 	for _, f := range nodeFC.Features {
 		var p struct {
-			NodeID flexNumber `json:"node_id"`
+			NodeID flexID     `json:"node_id"`
 			Lat    flexNumber `json:"lat"`
 			Lon    flexNumber `json:"lon"`
 			Floor  flexNumber `json:"floor"`
@@ -358,8 +377,8 @@ func readNetwork(zipPath string) (*network, error) {
 
 	for _, f := range linkFC.Features {
 		var p struct {
-			StartID   flexNumber `json:"start_id"`
-			EndID     flexNumber `json:"end_id"`
+			StartID   flexID     `json:"start_id"`
+			EndID     flexID     `json:"end_id"`
 			Distance  flexNumber `json:"distance"`
 			RouteType flexNumber `json:"route_type"`
 		}

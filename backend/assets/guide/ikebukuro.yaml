@@ -50,6 +50,7 @@ platforms:
         railway: odpt.Railway:JR-East.Yamanote
         direction: odpt.RailDirection:InnerLoop
         stop: 6
+        front: south
   - space: 849a88dd3f654498bfa4ed293f008b6d
     floor: 1
     sides:
@@ -57,6 +58,8 @@ platforms:
         railway: odpt.Railway:JR-East.Yamanote
         direction: odpt.RailDirection:OuterLoop
         stop: 4
+        # 隣の大塚は池袋からほぼ東にあり、ホームの軸（南北）との角が大きいので、前の向きを書く
+        front: north
 
 cars:
   odpt.Railway:JR-East.Yamanote: 11
