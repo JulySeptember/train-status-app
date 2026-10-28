@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 
+	"train-status-app/backend/assets/guide"
 	"train-status-app/backend/assets/slim"
 	"train-status-app/backend/internal/model"
 )
@@ -38,6 +39,9 @@ var extraFiles = []string{
 	"destination_station.json",
 }
 
+// stationGuideFile は駅の中の案内の表（docs/design/station-guide.md）。extraFiles とは別に、無くても動く。
+const stationGuideFile = "station_guide.json"
+
 type Loader struct {
 	railways          []model.Railway
 	stations          []model.Station
@@ -47,6 +51,9 @@ type Loader struct {
 
 	// 都外の行先駅（駅ID と駅名だけ）。extra/ を読み込んだときだけ
 	destinationStations []model.Station
+
+	// 駅の中の案内の表。extra/ に無ければ nil
+	stationGuide *guide.Table
 
 	hasExtra bool
 }
@@ -99,6 +106,10 @@ func newFromFS(fsys fs.FS, opts ...Option) (*Loader, error) {
 
 	if o.extra {
 		if err := l.loadExtra(fsys); err != nil {
+			return nil, err
+		}
+
+		if err := l.loadStationGuide(fsys); err != nil {
 			return nil, err
 		}
 	}
@@ -168,6 +179,29 @@ func (l *Loader) loadExtra(fsys fs.FS) error {
 	l.trainTimetables = slim.MergeTrainTimetables(l.trainTimetables, trainTimetables)
 	l.destinationStations = destinations
 	l.hasExtra = true
+
+	return nil
+}
+
+// loadStationGuide は extra/ の駅の中の案内の表を読み込む。無ければ何もしない。
+func (l *Loader) loadStationGuide(fsys fs.FS) error {
+
+	name := extraDir + "/" + stationGuideFile
+
+	data, err := fs.ReadFile(fsys, name)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("%s: %w", name, err)
+	}
+
+	t, err := guide.Decode(data)
+	if err != nil {
+		return fmt.Errorf("%s: %w", name, err)
+	}
+
+	l.stationGuide = t
 
 	return nil
 }
@@ -243,6 +277,11 @@ func (l *Loader) TrainTimetables() *slim.TrainTimetables {
 // Stations には含まれず、出発駅・到着駅にはできない。
 func (l *Loader) DestinationStations() []model.Station {
 	return l.destinationStations
+}
+
+// StationGuide は駅の中の案内の表を返す。読み込んでいなければ nil。呼び出し側で書き換えてはいけない。
+func (l *Loader) StationGuide() *guide.Table {
+	return l.stationGuide
 }
 
 func (l *Loader) TrainTypes() []model.TrainType {

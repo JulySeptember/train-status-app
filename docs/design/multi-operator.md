@@ -310,6 +310,7 @@ deploy.yml（CD）
   2. `assets/extra` から7社（小田急を含む）のデータを除いた版を作り（`cmd/gen-assets` で事業者を絞る仕組みが要る）、`make backend-extra-upload` で `extra.version` を差し替える（埋め込んだ駅・時刻表の配信をやめる）
   3. ライセンスの画面・README からチャレンジ限定ライセンスの表示を外す
   4. 反映したら、S3 の古い版、手元の `backend/.odpt-cache/`・`backend/assets/extra/` の該当データ、SSM の `/train-status-app/dev/odpt-challenge-consumer-key` を消す
+  5. 駅の中の案内（[station-guide.md](station-guide.md)）は JR東日本のチャレンジ限定のデータだけで作っているので、`assets/extra/station_guide.json` を版から外し、`backend/assets/guide/*.yaml` と画面の案内を外す
 
 ### 10.3 アプリでの表示
 
