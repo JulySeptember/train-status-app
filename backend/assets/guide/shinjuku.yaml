@@ -5,6 +5,9 @@
 # 改札は、構内地図の改札機（造作 C202）の固まりに最も近い歩行空間ネットワークの点の ID（node_id）で指す
 # （データの座標をこのファイルに書かないため）。名前は OpenStreetMap の改札の位置と照らした。
 # 階（floor）は歩行空間ネットワークの階（構内地図の階の番号とは合っていない）。
+# 止まる位置（stop、区画の前の端から列車の先頭まで何 m）は、乗車位置の案内サイト（wadattsu261.com の新宿駅の
+# 各ホームのページ）の「設備 → 号車・ドア」と、区画の上の設備の位置を照らして決めた（どの設備も ±10m に収まる）。
+# 分からない番線は書かない（前から何両目を出さない）。
 # 2026-10-28 に作成。
 
 # ZIP のファイル名の <駅>（jrc_nwd_<駅>_geojson.zip）
@@ -23,15 +26,19 @@ platforms:
   - space: f65ae2622bf04af08c73c16120bdb7bc
     floor: 1
     sides:
+      # 10両は 1番線で先頭が南の端から約122m、2番線はさらに 20m 前（間をとる）
       - track: "1・2"
         railway: odpt.Railway:JR-East.SaikyoKawagoe
         direction: odpt.RailDirection:Southbound
+        stop: 130
+      # 15両の止まる位置は分からない
       - track: "1"
         railway: odpt.Railway:JR-East.ShonanShinjuku
         direction: odpt.RailDirection:Southbound
   - space: 691de804e1f74235b491baa17c188888
     floor: 1
     sides:
+      # 止まる位置は分からない
       - track: "3・4"
         railway: odpt.Railway:JR-East.SaikyoKawagoe
         direction: odpt.RailDirection:Northbound
@@ -46,30 +53,36 @@ platforms:
         direction: odpt.RailDirection:Inbound
         # 次の四ツ谷は東にあるが、線路は代々木へ南に出てから東へ曲がる（ホームの軸と約75°で決められない）
         front: south
+        stop: 20
   - space: 3e51fb01ce5a41baac012ead61b6d7e2
     floor: 1
     sides:
       - track: "11・12"
         railway: odpt.Railway:JR-East.ChuoRapid
         direction: odpt.RailDirection:Outbound
+        stop: 15
   - space: 4d294ae877154ef4979533a99631e9fd
     floor: 1
     sides:
       - track: "13"
         railway: odpt.Railway:JR-East.ChuoSobuLocal
         direction: odpt.RailDirection:Eastbound
+        stop: 100
       - track: "14"
         railway: odpt.Railway:JR-East.Yamanote
         direction: odpt.RailDirection:InnerLoop
+        stop: 100
   - space: 7b350fafc6364bedacadcd684f3b43e1
     floor: 1
     sides:
       - track: "15"
         railway: odpt.Railway:JR-East.Yamanote
         direction: odpt.RailDirection:OuterLoop
+        stop: 17
       - track: "16"
         railway: odpt.Railway:JR-East.ChuoSobuLocal
         direction: odpt.RailDirection:Westbound
+        stop: 37
 
 # 路線ごとの編成の両数（混ざる路線は長いほう）
 cars:

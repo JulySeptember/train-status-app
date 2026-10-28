@@ -117,6 +117,7 @@ func testLines() *jrLines {
 }
 
 func testLabels() *guideLabels {
+	stop := 0.0
 	return &guideLabels{
 		Name:     "test",
 		Stations: []string{"odpt.Station:Test.Line.Here", "odpt.Station:Test.Branch.Here"},
@@ -125,8 +126,8 @@ func testLabels() *guideLabels {
 				Space: "A",
 				Floor: 1,
 				Sides: []labelSide{
-					{Track: "1", Railway: "odpt.Railway:Test.Line", Direction: "odpt.RailDirection:Test.Up"},
-					{Track: "2", Railway: "odpt.Railway:Test.Line", Direction: "odpt.RailDirection:Test.Down"},
+					{Track: "1", Railway: "odpt.Railway:Test.Line", Direction: "odpt.RailDirection:Test.Up", Stop: &stop},
+					{Track: "2", Railway: "odpt.Railway:Test.Line", Direction: "odpt.RailDirection:Test.Down", Stop: &stop},
 				},
 			},
 			{
@@ -421,6 +422,8 @@ func TestGuideLabelsValidate(t *testing.T) {
 			l.Platforms[1].Sides = append(l.Platforms[1].Sides, l.Platforms[0].Sides[0])
 		},
 		"unknown front":         func(l *guideLabels) { l.Platforms[0].Sides[0].Front = "up" },
+		"negative stop":         func(l *guideLabels) { v := -1.0; l.Platforms[0].Sides[0].Stop = &v },
+		"stop without cars":     func(l *guideLabels) { v := 0.0; l.Platforms[1].Sides[0].Stop = &v },
 		"unknown transfer gate": func(l *guideLabels) { l.Transfers["odpt.Station:Other.Here"] = "南改札" },
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -434,5 +437,42 @@ func TestGuideLabelsValidate(t *testing.T) {
 
 	if err := testLabels().validate(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestBuildStationGuideStop(t *testing.T) {
+
+	gate := guide.Target{Gate: "北改札"}
+
+	// 先頭が前の端から 100m に止まると、北の端（前）の階段は先頭より 90m 先にある。最も近いのは1両目で、
+	// 1両目の中ほど（前の端から 110m）から階段（10m）まで 100m と、階段・2階の 10m
+	labels := testLabels()
+	stop := 100.0
+	labels.Platforms[0].Sides[0].Stop = &stop
+	labels.Platforms[0].Sides[1].Stop = &stop
+
+	g, err := buildStationGuide(labels, testNetwork(), testSpaces(), testLines())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e := findEntry(t, g.station, "1", gate); e.CarFromFront != 1 || e.WalkMeters != 110 {
+		t.Errorf("expected car 1 and 110m, got %+v", e)
+	}
+
+	// 南へ進む列車は、南の端から 100m〜300m（区画は 200m なので外まで）。北の端の階段に近いのは5両目
+	if e := findEntry(t, g.station, "2", gate); e.CarFromFront != 5 {
+		t.Errorf("expected car 5, got %d", e.CarFromFront)
+	}
+
+	// 止まる位置が無い番線は、何両目を出さない
+	labels = testLabels()
+	labels.Platforms[0].Sides[0].Stop = nil
+
+	g, err = buildStationGuide(labels, testNetwork(), testSpaces(), testLines())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e := findEntry(t, g.station, "1", gate); e.CarFromFront != 0 || e.Cars != 0 {
+		t.Errorf("expected no car without stop, got %d of %d", e.CarFromFront, e.Cars)
 	}
 }

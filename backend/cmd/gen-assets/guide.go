@@ -73,6 +73,10 @@ type labelSide struct {
 	// 前の端の向き（north・south・east・west）。隣の駅への向きがホームの軸と直角に近く、
 	// 前の端を決められないときに書く（線路が駅を出てすぐ曲がる路線）
 	Front string `yaml:"front"`
+
+	// 列車の先頭が止まる位置（区画の前の端から何 m）。区画は編成より長く、端にそろって止まるとは限らない。
+	// 書いた番線だけ、前から何両目かを出す（分からない番線で、間違った車両を案内しないため）
+	Stop *float64 `yaml:"stop"`
 }
 
 // labelGate は改札。位置は歩行空間ネットワークの点の ID（node_id）で指す
@@ -200,6 +204,10 @@ func (l *guideLabels) validate() error {
 
 			if _, ok := compassXY[s.Front]; s.Front != "" && !ok {
 				return fmt.Errorf("track %s: unknown front %q", s.Track, s.Front)
+			}
+
+			if s.Stop != nil && (*s.Stop < 0 || l.Cars[s.Railway] == 0) {
+				return fmt.Errorf("track %s: stop needs a non-negative value and the number of cars", s.Track)
 			}
 		}
 	}
@@ -847,6 +855,9 @@ func buildStationGuide(labels *guideLabels, nw *network, spaces map[string]ring,
 func (g *stationGuide) entry(from guideSide, r route) (guide.Entry, bool) {
 
 	cars := g.labels.Cars[from.Railway]
+	if from.Stop == nil {
+		cars = 0
+	}
 	p := from.platform
 
 	// 前の端から何 m かを、ホームの点ごとに
@@ -880,10 +891,10 @@ func (g *stationGuide) entry(from guideSide, r route) (guide.Entry, bool) {
 
 	if cars > 0 {
 		for k := 1; k <= cars; k++ {
-			consider(k, (float64(k)-0.5)*guide.CarMeters)
+			consider(k, *from.Stop+(float64(k)-0.5)*guide.CarMeters)
 		}
 	} else {
-		// 両数が分からなければ、ホームの上の最も近い点から歩くとする
+		// 止まる位置か両数が分からなければ、ホームの上の最も近い点から歩くとする
 		consider(0, 0)
 	}
 
