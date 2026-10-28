@@ -318,7 +318,7 @@ func TestNeighborStation(t *testing.T) {
 	}
 }
 
-func TestReadNetworkSkipsDanglingLinks(t *testing.T) {
+func TestReadNetwork(t *testing.T) {
 
 	p := filepath.Join(t.TempDir(), "nwd.zip")
 
@@ -343,11 +343,13 @@ func TestReadNetworkSkipsDanglingLinks(t *testing.T) {
 	}
 
 	write("node.geojson", map[string]any{"features": []any{
-		feature(map[string]any{"node_id": 1, "lat": 35.69, "lon": 139.7, "floor": 1}),
-		feature(map[string]any{"node_id": 2, "lat": 35.6901, "lon": 139.7, "floor": 1}),
+		// null は 0 のまま
+		feature(map[string]any{"node_id": 1, "lat": 35.69, "lon": 139.7, "floor": nil}),
+		// 駅によっては数が文字列になっている
+		feature(map[string]any{"node_id": "2", "lat": "35.6901", "lon": "139.7", "floor": "2"}),
 	}})
 	write("link.geojson", map[string]any{"features": []any{
-		feature(map[string]any{"start_id": 1, "end_id": 2, "distance": 11.1, "route_type": 1}),
+		feature(map[string]any{"start_id": 1, "end_id": 2, "distance": 11.1, "route_type": "6"}),
 		feature(map[string]any{"start_id": 2, "end_id": 99, "distance": 5, "route_type": 1}),
 	}})
 
@@ -362,6 +364,15 @@ func TestReadNetworkSkipsDanglingLinks(t *testing.T) {
 	}
 	if len(nw.nodes) != 2 || len(nw.links) != 1 {
 		t.Fatalf("expected 2 nodes and 1 link, got %d and %d", len(nw.nodes), len(nw.links))
+	}
+	if n := nw.nodes[0]; n.floor != 0 {
+		t.Errorf("unexpected floor from null: %+v", n)
+	}
+	if n := nw.nodes[1]; n.id != 2 || n.lat != 35.6901 || n.floor != 2 {
+		t.Errorf("unexpected node from strings: %+v", n)
+	}
+	if nw.links[0].routeType != routeStairs {
+		t.Errorf("unexpected route type %d", nw.links[0].routeType)
 	}
 }
 

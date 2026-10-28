@@ -12,6 +12,7 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -297,6 +298,25 @@ func readZipFiles(p string) (map[string][]byte, error) {
 	return files, nil
 }
 
+// flexNumber は、数値か、数値を書いた文字列のどちらでも読める数。
+// 駅によって、点の ID・緯度・経度・階・線の種類が文字列になっている（品川・高輪ゲートウェイ、2026-10-28）
+type flexNumber float64
+
+func (n *flexNumber) UnmarshalJSON(data []byte) error {
+
+	// null は、数値の型と同じく何もしない（0 のまま）
+	if string(data) == "null" {
+		return nil
+	}
+	s := strings.Trim(string(data), `"`)
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return fmt.Errorf("not a number: %s", data)
+	}
+	*n = flexNumber(v)
+	return nil
+}
+
 func readNetwork(zipPath string) (*network, error) {
 
 	files, err := readZipFiles(zipPath)
@@ -321,38 +341,39 @@ func readNetwork(zipPath string) (*network, error) {
 
 	for _, f := range nodeFC.Features {
 		var p struct {
-			NodeID int     `json:"node_id"`
-			Lat    float64 `json:"lat"`
-			Lon    float64 `json:"lon"`
-			Floor  float64 `json:"floor"`
+			NodeID flexNumber `json:"node_id"`
+			Lat    flexNumber `json:"lat"`
+			Lon    flexNumber `json:"lon"`
+			Floor  flexNumber `json:"floor"`
 		}
 		if err := json.Unmarshal(f.Properties, &p); err != nil {
 			return nil, fmt.Errorf("%s: node: %w", zipPath, err)
 		}
-		index[p.NodeID] = len(nw.nodes)
-		nw.nodes = append(nw.nodes, gNode{id: p.NodeID, lon: p.Lon, lat: p.Lat, floor: p.Floor})
+		id := int(p.NodeID)
+		index[id] = len(nw.nodes)
+		nw.nodes = append(nw.nodes, gNode{id: id, lon: float64(p.Lon), lat: float64(p.Lat), floor: float64(p.Floor)})
 	}
 
 	var dangling int
 
 	for _, f := range linkFC.Features {
 		var p struct {
-			StartID   int     `json:"start_id"`
-			EndID     int     `json:"end_id"`
-			Distance  float64 `json:"distance"`
-			RouteType int     `json:"route_type"`
+			StartID   flexNumber `json:"start_id"`
+			EndID     flexNumber `json:"end_id"`
+			Distance  flexNumber `json:"distance"`
+			RouteType flexNumber `json:"route_type"`
 		}
 		if err := json.Unmarshal(f.Properties, &p); err != nil {
 			return nil, fmt.Errorf("%s: link: %w", zipPath, err)
 		}
-		from, ok1 := index[p.StartID]
-		to, ok2 := index[p.EndID]
+		from, ok1 := index[int(p.StartID)]
+		to, ok2 := index[int(p.EndID)]
 		if !ok1 || !ok2 {
 			// 点の無い線がある（新宿で 1,062本中2本、2026-10-28）。つなげないので捨てる
 			dangling++
 			continue
 		}
-		nw.links = append(nw.links, gLink{from: from, to: to, meters: p.Distance, routeType: p.RouteType})
+		nw.links = append(nw.links, gLink{from: from, to: to, meters: float64(p.Distance), routeType: int(p.RouteType)})
 	}
 
 	if dangling > 0 {

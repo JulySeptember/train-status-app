@@ -1,0 +1,79 @@
+# JR 池袋駅の対応表（docs/design/station-guide.md 5章）。作り方は shinjuku.yaml と同じ。
+#
+# 番線と路線・方向は Wikipedia「池袋駅」ののりばの表による。区画と番線は OpenStreetMap のホーム（ref）と照らした。
+# 東から 1・2、3・4、5・6、7・8番線。番線は東から西へ大きくなる（南へ進む線路が東の側）。
+# 山手線は、内回りが 5・6番線、外回りが 7・8番線のどちらにも着くので、番線の側（side）を書かない。
+# 止まる位置（stop）は、乗車位置の案内サイト（wadattsu261.com）の「設備 → 号車・ドア」と、区画の上の設備の位置を
+# 照らして決めた（区画の外の端の階段を除いて、どの設備も ±9m に収まる）。埼京線の 1番線は、照らす設備によって
+# 位置が大きく変わって決められないので書かない。湘南新宿ラインは 15両のときの位置。
+# 改札は、構内地図の改札機（造作 C202）の固まりに最も近い点。名前は Wikipedia の改札の説明（「エスカレーターと
+# エレベーターは中央1〜南改札内にある」）と位置で決めた。中央1改札・南改札は改札機の固まりが2つあり、大きいほうを使う。
+# 2026-10-28 に作成。
+
+name: ikebukuro
+
+stations:
+  - odpt.Station:JR-East.Yamanote.Ikebukuro
+  - odpt.Station:JR-East.SaikyoKawagoe.Ikebukuro
+  - odpt.Station:JR-East.ShonanShinjuku.Ikebukuro
+
+platforms:
+  - space: 347205e8820a4b9da8ba6fec9ca1ccb5
+    floor: 1
+    sides:
+      - track: "1"
+        railway: odpt.Railway:JR-East.SaikyoKawagoe
+        direction: odpt.RailDirection:Southbound
+        side: east
+      - track: "2"
+        railway: odpt.Railway:JR-East.ShonanShinjuku
+        direction: odpt.RailDirection:Southbound
+        stop: 8
+        side: west
+  - space: 12da5b4860924a1a9f18af1d876e3131
+    floor: 1
+    sides:
+      - track: "3"
+        railway: odpt.Railway:JR-East.ShonanShinjuku
+        direction: odpt.RailDirection:Northbound
+        stop: 19
+        side: east
+      - track: "4"
+        railway: odpt.Railway:JR-East.SaikyoKawagoe
+        direction: odpt.RailDirection:Northbound
+        stop: 40
+        side: west
+  - space: d4e6b246087249c789a4471b22ba4799
+    floor: 1
+    sides:
+      - track: "5・6"
+        railway: odpt.Railway:JR-East.Yamanote
+        direction: odpt.RailDirection:InnerLoop
+        stop: 6
+  - space: 849a88dd3f654498bfa4ed293f008b6d
+    floor: 1
+    sides:
+      - track: "7・8"
+        railway: odpt.Railway:JR-East.Yamanote
+        direction: odpt.RailDirection:OuterLoop
+        stop: 4
+
+cars:
+  odpt.Railway:JR-East.Yamanote: 11
+  odpt.Railway:JR-East.SaikyoKawagoe: 10
+  odpt.Railway:JR-East.ShonanShinjuku: 15
+
+gates:
+  - name: 北改札
+    node: 1524
+  - name: 中央2改札
+    node: 1435
+  - name: 中央1改札
+    node: 1232
+  - name: 南改札
+    node: 1084
+  - name: メトロポリタン改札
+    node: 1018
+
+# 他社の駅は、駅の座標に最も近い改札にする（乗車位置の案内サイトに乗り換えの改札の案内が無い）
+transfers: {}

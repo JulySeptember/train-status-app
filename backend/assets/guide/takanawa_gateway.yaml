@@ -1,0 +1,56 @@
+# JR 高輪ゲートウェイ駅の対応表（docs/design/station-guide.md 5章）。作り方は shinjuku.yaml と同じ。
+#
+# 番線と路線・方向は Wikipedia「高輪ゲートウェイ駅」ののりばの表による。区画と番線は OpenStreetMap のホーム（ref）と照らした。
+# 西のホームが 1・2番線（山手線）、東が 3・4番線（京浜東北線）。番線は西から東へ大きくなる（北へ進む線路が西の側）。
+# 止まる位置（stop）は、乗車位置の案内サイト（wadattsu261.com）の「設備 → 号車・ドア」と、区画の上の設備の位置を
+# 照らして決めた（どの設備も ±4m に収まる）。改札は、構内地図の改札機（造作 C104）の固まりに最も近い点。
+# 2026-10-28 に作成。
+
+name: takanawa_gateway
+
+stations:
+  - odpt.Station:JR-East.Yamanote.TakanawaGateway
+  - odpt.Station:JR-East.KeihinTohokuNegishi.TakanawaGateway
+
+platforms:
+  - space: 38d84b5a10d945318eebbe763d2827c8
+    floor: 1
+    sides:
+      - track: "1"
+        railway: odpt.Railway:JR-East.Yamanote
+        direction: odpt.RailDirection:InnerLoop
+        stop: 5
+        side: west
+      - track: "2"
+        railway: odpt.Railway:JR-East.Yamanote
+        direction: odpt.RailDirection:OuterLoop
+        stop: 4
+        side: east
+  - space: 1306e2969ec84536a339d15c4bccfc7b
+    floor: 1
+    sides:
+      - track: "3"
+        railway: odpt.Railway:JR-East.KeihinTohokuNegishi
+        direction: odpt.RailDirection:Northbound
+        stop: 5
+        side: west
+      - track: "4"
+        railway: odpt.Railway:JR-East.KeihinTohokuNegishi
+        direction: odpt.RailDirection:Southbound
+        stop: 4
+        side: east
+
+cars:
+  odpt.Railway:JR-East.Yamanote: 11
+  odpt.Railway:JR-East.KeihinTohokuNegishi: 10
+
+gates:
+  - name: 北改札
+    node: 756
+  - name: 南改札
+    node: 640
+
+transfers:
+  # 浅草線・京急線（泉岳寺）へは北改札から（乗車位置の案内サイトによる）
+  odpt.Station:Toei.Asakusa.Sengakuji: 北改札
+  odpt.Station:Keikyu.Main.Sengakuji: 北改札

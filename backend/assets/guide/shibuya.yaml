@@ -1,0 +1,78 @@
+# JR 渋谷駅の対応表（docs/design/station-guide.md 5章）。作り方は shinjuku.yaml と同じ。
+#
+# 番線と路線・方向は Wikipedia「渋谷駅」ののりばの表による。OpenStreetMap のホームは 2023年の移設前のままだったので、
+# 区画の長さ（山手線 240m、埼京線・湘南新宿ラインは 15両の 312m）と並びで決めた。西のホームが 1・2番線、東が 3・4番線。
+# 番線は西から東へ大きくなる（北へ進む線路が西の側）。
+# 止まる位置（stop）は、乗車位置の案内サイト（wadattsu261.com）の「設備 → 号車・ドア」と、区画の上の設備の位置を
+# 照らして決めた（どの設備も ±7m に収まる）。湘南新宿ラインは 15両のときの位置（10両のときは止まる位置が違う）。
+# 改札は、構内地図の改札機（造作 C104）の固まりに最も近い点。名前は OpenStreetMap と Wikipedia の改札の説明で照らした。
+# 2026-10-28 に作成。
+
+name: shibuya
+
+stations:
+  - odpt.Station:JR-East.Yamanote.Shibuya
+  - odpt.Station:JR-East.SaikyoKawagoe.Shibuya
+  - odpt.Station:JR-East.ShonanShinjuku.Shibuya
+
+platforms:
+  - space: 636235994b694809bf28a891539e0000
+    floor: 2
+    sides:
+      - track: "1"
+        railway: odpt.Railway:JR-East.Yamanote
+        direction: odpt.RailDirection:OuterLoop
+        stop: 9
+        side: west
+      - track: "2"
+        railway: odpt.Railway:JR-East.Yamanote
+        direction: odpt.RailDirection:InnerLoop
+        stop: 15
+        side: east
+  - space: cdd7dc809252407b9571da547d93cdcc
+    floor: 2
+    sides:
+      - track: "3"
+        railway: odpt.Railway:JR-East.SaikyoKawagoe
+        direction: odpt.RailDirection:Northbound
+        stop: 44
+        side: west
+      - track: "3"
+        railway: odpt.Railway:JR-East.ShonanShinjuku
+        direction: odpt.RailDirection:Northbound
+        stop: 7
+        side: west
+      - track: "4"
+        railway: odpt.Railway:JR-East.SaikyoKawagoe
+        direction: odpt.RailDirection:Southbound
+        stop: 46
+        side: east
+      - track: "4"
+        railway: odpt.Railway:JR-East.ShonanShinjuku
+        direction: odpt.RailDirection:Southbound
+        stop: 6
+        side: east
+
+cars:
+  odpt.Railway:JR-East.Yamanote: 11
+  odpt.Railway:JR-East.SaikyoKawagoe: 10
+  odpt.Railway:JR-East.ShonanShinjuku: 15
+
+gates:
+  - name: ハチ公改札
+    node: 1705
+  - name: 南改札
+    node: 1880
+  - name: 中央改札
+    node: 1870
+  - name: 新南改札
+    node: 2264
+
+# 乗車位置の案内サイトの「乗り換えに便利な改札」による（ODPT の駅の座標は、副都心線と銀座線がほぼ同じ点になっていて使えない）
+transfers:
+  odpt.Station:TokyoMetro.Hanzomon.Shibuya: ハチ公改札
+  odpt.Station:Tokyu.DenEnToshi.Shibuya: ハチ公改札
+  odpt.Station:TokyoMetro.Ginza.Shibuya: 中央改札
+  odpt.Station:Keio.Inokashira.Shibuya: 中央改札
+  odpt.Station:TokyoMetro.Fukutoshin.Shibuya: 南改札
+  odpt.Station:Tokyu.Toyoko.Shibuya: 南改札
