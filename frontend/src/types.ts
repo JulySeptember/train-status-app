@@ -129,6 +129,13 @@ export interface AlightGuide {
   cars?: number;
   // ホームを出るときに使う設備。平らな通路だけで行けるときは無い
   via?: "stairs" | "escalator" | "elevator" | "slope";
+  // 降りてから、ホームの上を進行方向（front）か逆（back）へ何 m 歩くか。何両目が分からないか、降りてすぐなら無い
+  toward?: "front" | "back";
+  towardMeters?: number;
+  // toward が、降りて（列車を背にして）右か左か。両側に着く番線では無い
+  turn?: "right" | "left";
+  // 何両目が分からないとき、ホームを出る場所が前寄り・中ほど・後ろ寄りのどれか
+  exitAt?: "front" | "middle" | "back";
   // 行き先（「中央線快速 11・12番線」や「南改札」）
   target: string;
   walkMeters: number;

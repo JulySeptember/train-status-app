@@ -1000,6 +1000,16 @@ type AlightGuide struct {
 	// ホームを出るときに使う設備（stairs・escalator・elevator・slope）。平らな通路だけで行けるときは空
 	Via string `json:"via,omitempty" enums:"stairs,escalator,elevator,slope"`
 
+	// 降りてから、ホームの上を進行方向（front）か逆（back）へ何 m 歩くか。何両目が分からないか、降りてすぐなら返さない
+	Toward       string `json:"toward,omitempty" enums:"front,back"`
+	TowardMeters int    `json:"towardMeters,omitempty"`
+
+	// toward が、降りて（列車を背にして）右か左か。両側に着く番線（中央線快速の 7・8番線など）では返さない
+	Turn string `json:"turn,omitempty" enums:"right,left"`
+
+	// 何両目が分からないとき、ホームを出る場所が前寄り・中ほど・後ろ寄りのどれか
+	ExitAt string `json:"exitAt,omitempty" enums:"front,middle,back"`
+
 	// 行き先。乗り換え先のホーム（「山手線 14番線」）か改札（「南改札」）
 	Target string `json:"target"`
 

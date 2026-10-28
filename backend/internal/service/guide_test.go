@@ -23,10 +23,12 @@ func TestGuideAlight(t *testing.T) {
 				Railway: "JR.Yamanote", Direction: "Inner",
 				Target:       guide.Target{Railway: "JR.Chuo", Direction: "Out", Track: "11・12"},
 				CarFromFront: 3, Cars: 11, Via: guide.ViaStairs, WalkMeters: 120, WalkMinutes: 2,
+				Toward: guide.TowardFront, TowardMeters: 30, Turn: guide.TurnRight,
 			},
 			{
 				Railway: "JR.Yamanote", Direction: "Inner",
 				Target: guide.Target{Gate: "小田急口"}, Via: guide.ViaEscalator, WalkMeters: 90, WalkMinutes: 2,
+				ExitAt: guide.ExitBack,
 			},
 			{
 				Railway: "JR.Yamanote", Direction: "Inner",
@@ -56,11 +58,11 @@ func TestGuideAlight(t *testing.T) {
 	}{
 		"JR の別のホーム": {
 			legs: []route.Leg{yamanote, ride("JR.Chuo", "Out", "JR.Chuo.Shinjuku", "JR.Chuo.Nakano")},
-			want: &AlightGuide{CarFromFront: 3, Cars: 11, Via: guide.ViaStairs, Target: "中央線快速 11・12番線", WalkMeters: 120, WalkMinutes: 2},
+			want: &AlightGuide{CarFromFront: 3, Cars: 11, Via: guide.ViaStairs, Toward: guide.TowardFront, TowardMeters: 30, Turn: guide.TurnRight, Target: "中央線快速 11・12番線", WalkMeters: 120, WalkMinutes: 2},
 		},
 		"対応表にある他社の駅": {
 			legs: []route.Leg{yamanote, ride("Odakyu", "Down", "Odakyu.Shinjuku", "Odakyu.Yoyogi")},
-			want: &AlightGuide{Via: guide.ViaEscalator, Target: "小田急口", WalkMeters: 90, WalkMinutes: 2},
+			want: &AlightGuide{Via: guide.ViaEscalator, ExitAt: guide.ExitBack, Target: "小田急口", WalkMeters: 90, WalkMinutes: 2},
 		},
 		"対応表に無い他社の駅は最も近い改札": {
 			legs: []route.Leg{yamanote, ride("Toei", "East", "Toei.Shinjuku", "Toei.Akebonobashi")},

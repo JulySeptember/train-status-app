@@ -1532,9 +1532,37 @@ const docTemplate = `{
                 "cars": {
                     "type": "integer"
                 },
+                "exitAt": {
+                    "description": "何両目が分からないとき、ホームを出る場所が前寄り・中ほど・後ろ寄りのどれか",
+                    "type": "string",
+                    "enum": [
+                        "front",
+                        "middle",
+                        "back"
+                    ]
+                },
                 "target": {
                     "description": "行き先。乗り換え先のホーム（「山手線 14番線」）か改札（「南改札」）",
                     "type": "string"
+                },
+                "toward": {
+                    "description": "降りてから、ホームの上を進行方向（front）か逆（back）へ何 m 歩くか。何両目が分からないか、降りてすぐなら返さない",
+                    "type": "string",
+                    "enum": [
+                        "front",
+                        "back"
+                    ]
+                },
+                "towardMeters": {
+                    "type": "integer"
+                },
+                "turn": {
+                    "description": "toward が、降りて（列車を背にして）右か左か。両側に着く番線（中央線快速の 7・8番線など）では返さない",
+                    "type": "string",
+                    "enum": [
+                        "right",
+                        "left"
+                    ]
                 },
                 "via": {
                     "description": "ホームを出るときに使う設備（stairs・escalator・elevator・slope）。平らな通路だけで行けるときは空",
