@@ -1,0 +1,97 @@
+# JR 品川駅の対応表（docs/design/station-guide.md 5章）。作り方は shinjuku.yaml と同じ。
+#
+# 番線と路線・方向は Wikipedia「品川駅」ののりばの表による。区画と番線は OpenStreetMap のホーム（ref）と、区画の並びで照らした。
+# 西から 1、3・4、5・6、7・8、9・10、11・12、13・14、15番線（2番線は欠番）。番線の側（side）は、乗車位置の案内サイト
+# （wadattsu261.com）の「ホームの降り口は進行方向右側・左側」と合わせた。15番線は降り口の記載が無いので書かない。
+# 東の端の2つの区画（東海道新幹線の側）は使わない。
+# 止まる位置（stop）は、同じサイトの「設備 → 号車・ドア」と、区画の上の設備の位置を照らして決めた（どの設備も ±9m に収まる）。
+# 東海道線・横須賀線は 15両のときの位置（10両・11両のときは号車が違う）。
+# 常磐線（上野東京ライン）は、品川止まりの列車が 10番線と 11番線（別のホーム）の両方に着き、品川始発も 9〜11番線から出るので、書かない。
+# 東海道線の上りは 6番線（平日の朝の一部は 7番線）、横須賀線の上りは 13番線（品川始発の一部は 14番線）を書く。
+# 改札は、構内地図の改札機（造作 C202）の固まりに最も近い 2階の点。構内地図に名前が無いので、位置で決めた: 南の改札内コンコースの
+# 西の端が京急線の乗換改札、中ほどが中央改札、北のコンコースが北改札（東の端の固まりは新幹線の乗換口なので使わない）。
+# 2026-10-28 に作成。
+
+name: shinagawa
+
+stations:
+  - odpt.Station:JR-East.Yamanote.Shinagawa
+  - odpt.Station:JR-East.KeihinTohokuNegishi.Shinagawa
+  - odpt.Station:JR-East.Tokaido.Shinagawa
+  - odpt.Station:JR-East.Yokosuka.Shinagawa
+
+platforms:
+  - space: feeb87fd-31a4-48b8-a66e-84cbbdcc4f31
+    floor: 1
+    sides:
+      - track: "1"
+        railway: odpt.Railway:JR-East.Yamanote
+        direction: odpt.RailDirection:InnerLoop
+        stop: 7
+        side: west
+  - space: 4ccdb2f0-f0d0-4158-9c14-ac8f2863569d
+    floor: 1
+    sides:
+      - track: "3"
+        railway: odpt.Railway:JR-East.Yamanote
+        direction: odpt.RailDirection:OuterLoop
+        stop: 5
+        side: west
+      - track: "4"
+        railway: odpt.Railway:JR-East.KeihinTohokuNegishi
+        direction: odpt.RailDirection:Northbound
+        stop: 5
+        side: east
+  - space: fc3ac779-b1d4-4d4a-89d5-2884e3979b26
+    floor: 1
+    sides:
+      - track: "5"
+        railway: odpt.Railway:JR-East.KeihinTohokuNegishi
+        direction: odpt.RailDirection:Southbound
+        stop: 15
+        side: west
+      - track: "6"
+        railway: odpt.Railway:JR-East.Tokaido
+        direction: odpt.RailDirection:Inbound
+        stop: 4
+        side: east
+  - space: 8f421df9-fb2e-441f-80ee-7bd45945003f
+    floor: 1
+    sides:
+      - track: "12"
+        railway: odpt.Railway:JR-East.Tokaido
+        direction: odpt.RailDirection:Outbound
+        stop: 55
+        side: east
+  - space: 78343b6a-53d7-4f89-a730-4b841783cde5
+    floor: 1
+    sides:
+      - track: "13"
+        railway: odpt.Railway:JR-East.Yokosuka
+        direction: odpt.RailDirection:Inbound
+        stop: 6
+        side: west
+  - space: 59e4c3f7-f793-4fc7-bddd-6234ee274e5b
+    floor: 1
+    sides:
+      - track: "15"
+        railway: odpt.Railway:JR-East.Yokosuka
+        direction: odpt.RailDirection:Outbound
+        stop: 8
+
+cars:
+  odpt.Railway:JR-East.Yamanote: 11
+  odpt.Railway:JR-East.KeihinTohokuNegishi: 10
+  odpt.Railway:JR-East.Tokaido: 15
+  odpt.Railway:JR-East.Yokosuka: 15
+
+gates:
+  - name: 中央改札
+    node: 114
+  - name: 北改札
+    node: 266
+  - name: 京急線乗換改札
+    node: 12
+
+transfers:
+  odpt.Station:Keikyu.Main.Shinagawa: 京急線乗換改札

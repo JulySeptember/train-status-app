@@ -1,0 +1,202 @@
+# JR 東京駅の対応表（docs/design/station-guide.md 5章）。作り方は shinjuku.yaml と同じ。
+#
+# 番線と路線・方向は、Wikipedia「東京駅」ののりばの表と、乗車位置の案内サイト（wadattsu261.com）の各ホームのページによる。
+# 地上のホームは、区画を西（丸の内側）から並べて 1・2、3・4、5・6、7・8、9・10番線とした（その東の5つの区画は新幹線なので使わない）。
+# 地下は、総武地下の区画を OpenStreetMap のホーム（ref「総武1;総武2」など）と、京葉地下を「京葉1;京葉2」と照らした。
+# 番線の側（side）は、同じサイトの「ホームの降り口は進行方向右側・左側」と合わせた（3〜6番線）。総武地下・京葉地下は
+# ホームが斜め（北東・東西）で、東西南北では側を書けないので書かない。
+# 東京駅で終わる・始まる路線が多く、隣の駅から前の向きを決められないので、前の向き（front）をすべて書く。
+# 上野東京ラインは、ODPT では東京駅で路線が分かれる（東海道線の上りが東京止まり、宇都宮線・高崎線・常磐線の下りが東京始発）。
+# 北へ向かう列車が 7・8番線、南へ向かう列車が 9・10番線に着く。どちらの番線かは列車で違うので、側を書かない。
+# 総武快速線・横須賀線も同じで、東京止まりの総武快速線（上り）と東京始発の横須賀線（下り）が 1・2番線、
+# 東京止まりの横須賀線（上り）と東京始発の総武快速線（下り）が 3・4番線。
+# 京葉線は 1〜4番線のどれに着くかが列車で違うので、1・2番線の区画で代表させる（3・4番線の区画と並んでいて、長さも設備の位置も同じ）。
+# 止まる位置（stop）は、同じサイトの「設備 → 号車・ドア」と、区画の上の設備の位置を照らして決めた（どの設備も ±6m に収まる）。
+# 東海道線・宇都宮線・高崎線・常磐線・横須賀線・総武快速線は 15両のときの位置。
+# 改札は、構内地図の開口部（Opening）に付いた名前と、それに最も近い同じ階の点。日本橋口は近くに点が無いので使わない。
+# 2026-10-28 に作成。
+
+name: tokyo
+
+stations:
+  - odpt.Station:JR-East.ChuoRapid.Tokyo
+  - odpt.Station:JR-East.JobanRapid.Tokyo
+  - odpt.Station:JR-East.KeihinTohokuNegishi.Tokyo
+  - odpt.Station:JR-East.Keiyo.Tokyo
+  - odpt.Station:JR-East.SobuRapid.Tokyo
+  - odpt.Station:JR-East.Takasaki.Tokyo
+  - odpt.Station:JR-East.Tokaido.Tokyo
+  - odpt.Station:JR-East.Utsunomiya.Tokyo
+  - odpt.Station:JR-East.Yamanote.Tokyo
+  - odpt.Station:JR-East.Yokosuka.Tokyo
+
+platforms:
+  - space: f3102ef24aba4f22b4849bd039b2845d
+    floor: 2
+    sides:
+      - track: "1・2"
+        railway: odpt.Railway:JR-East.ChuoRapid
+        direction: odpt.RailDirection:Inbound
+        stop: 6
+        front: south
+      - track: "1・2"
+        railway: odpt.Railway:JR-East.ChuoRapid
+        direction: odpt.RailDirection:Outbound
+        stop: 10
+        front: north
+  - space: fb4de3f87a074e6082cca157691f26ee
+    floor: 2
+    sides:
+      - track: "3"
+        railway: odpt.Railway:JR-East.KeihinTohokuNegishi
+        direction: odpt.RailDirection:Northbound
+        stop: 24
+        side: west
+        front: north
+      - track: "4"
+        railway: odpt.Railway:JR-East.Yamanote
+        direction: odpt.RailDirection:InnerLoop
+        stop: 4
+        side: east
+        front: north
+  - space: 71517c688279433781cc280af75f1208
+    floor: 2
+    sides:
+      - track: "5"
+        railway: odpt.Railway:JR-East.Yamanote
+        direction: odpt.RailDirection:OuterLoop
+        stop: 8
+        side: west
+        front: south
+      - track: "6"
+        railway: odpt.Railway:JR-East.KeihinTohokuNegishi
+        direction: odpt.RailDirection:Southbound
+        stop: 8
+        side: east
+        front: south
+  - space: 4efb492615eb43d89941d2942d28bd2e
+    floor: 2
+    sides:
+      - track: "7・8"
+        railway: odpt.Railway:JR-East.Tokaido
+        direction: odpt.RailDirection:Inbound
+        stop: 13
+        front: north
+      - track: "7・8"
+        railway: odpt.Railway:JR-East.Utsunomiya
+        direction: odpt.RailDirection:Outbound
+        stop: 13
+        front: north
+      - track: "7・8"
+        railway: odpt.Railway:JR-East.Takasaki
+        direction: odpt.RailDirection:Outbound
+        stop: 13
+        front: north
+      - track: "7・8"
+        railway: odpt.Railway:JR-East.JobanRapid
+        direction: odpt.RailDirection:Outbound
+        stop: 13
+        front: north
+  - space: dddf3644edbd45ca94d6cbf425f0a05c
+    floor: 2
+    sides:
+      - track: "9・10"
+        railway: odpt.Railway:JR-East.Tokaido
+        direction: odpt.RailDirection:Outbound
+        stop: 9
+        front: south
+      - track: "9・10"
+        railway: odpt.Railway:JR-East.Utsunomiya
+        direction: odpt.RailDirection:Inbound
+        stop: 9
+        front: south
+      - track: "9・10"
+        railway: odpt.Railway:JR-East.Takasaki
+        direction: odpt.RailDirection:Inbound
+        stop: 9
+        front: south
+      - track: "9・10"
+        railway: odpt.Railway:JR-East.JobanRapid
+        direction: odpt.RailDirection:Inbound
+        stop: 9
+        front: south
+  - space: d918aadecaa84c3ca6ebd7d33e6de238
+    floor: -5
+    sides:
+      - track: "総武地下1・2"
+        railway: odpt.Railway:JR-East.SobuRapid
+        direction: odpt.RailDirection:Inbound
+        stop: 5
+        front: south
+      - track: "総武地下1・2"
+        railway: odpt.Railway:JR-East.Yokosuka
+        direction: odpt.RailDirection:Outbound
+        stop: 5
+        front: south
+  - space: 3adb0b8f32af497f958a9083cdfb4b20
+    floor: -5
+    sides:
+      - track: "総武地下3・4"
+        railway: odpt.Railway:JR-East.Yokosuka
+        direction: odpt.RailDirection:Inbound
+        stop: 8
+        front: north
+      - track: "総武地下3・4"
+        railway: odpt.Railway:JR-East.SobuRapid
+        direction: odpt.RailDirection:Outbound
+        stop: 8
+        front: north
+  - space: 82960d2e-a67c-4b07-a85b-7fa450899f63
+    floor: -4
+    sides:
+      - track: "京葉地下1〜4"
+        railway: odpt.Railway:JR-East.Keiyo
+        direction: odpt.RailDirection:Inbound
+        stop: 0
+        front: west
+      - track: "京葉地下1〜4"
+        railway: odpt.Railway:JR-East.Keiyo
+        direction: odpt.RailDirection:Outbound
+        stop: 8
+        front: east
+
+cars:
+  odpt.Railway:JR-East.ChuoRapid: 12
+  odpt.Railway:JR-East.Yamanote: 11
+  odpt.Railway:JR-East.KeihinTohokuNegishi: 10
+  odpt.Railway:JR-East.Tokaido: 15
+  odpt.Railway:JR-East.Utsunomiya: 15
+  odpt.Railway:JR-East.Takasaki: 15
+  odpt.Railway:JR-East.JobanRapid: 15
+  odpt.Railway:JR-East.Yokosuka: 15
+  odpt.Railway:JR-East.SobuRapid: 15
+  odpt.Railway:JR-East.Keiyo: 10
+
+gates:
+  - name: 丸の内北口
+    node: 5634
+  - name: 丸の内中央口
+    node: 5247
+  - name: 丸の内南口
+    node: 4825
+  - name: 八重洲北口
+    node: 7864
+  - name: 八重洲中央口
+    node: 7417
+  - name: 八重洲南口
+    node: 7133
+  - name: 丸の内地下北口
+    node: 5239
+  - name: 丸の内地下中央口
+    node: 4478
+  - name: 丸の内地下南口
+    node: 4060
+  - name: 八重洲地下中央口
+    node: 7458
+  - name: 京葉地下八重洲口
+    node: 4666
+  - name: 京葉地下丸の内口
+    node: 3174
+
+# 他社の駅（丸ノ内線）は、駅の座標に最も近い改札にする
+transfers: {}
