@@ -77,6 +77,10 @@ type labelSide struct {
 	// 列車の先頭が止まる位置（区画の前の端から何 m）。区画は編成より長く、端にそろって止まるとは限らない。
 	// 書いた番線だけ、前から何両目かを出す（分からない番線で、間違った車両を案内しないため）
 	Stop *float64 `yaml:"stop"`
+
+	// 番線がホームのどちらの側か（north・south・east・west）。降りて右・左のどちらへ歩くかを出すのに使う。
+	// 「7・8」のように両側に着く番線では書かない（右・左を出さない）
+	Side string `yaml:"side"`
 }
 
 // labelGate は改札。位置は歩行空間ネットワークの点の ID（node_id）で指す
@@ -204,6 +208,9 @@ func (l *guideLabels) validate() error {
 
 			if _, ok := compassXY[s.Front]; s.Front != "" && !ok {
 				return fmt.Errorf("track %s: unknown front %q", s.Track, s.Front)
+			}
+			if _, ok := compassXY[s.Side]; s.Side != "" && !ok {
+				return fmt.Errorf("track %s: unknown side %q", s.Track, s.Side)
 			}
 
 			if s.Stop != nil && (*s.Stop < 0 || l.Cars[s.Railway] == 0) {
@@ -776,6 +783,11 @@ func buildStationGuide(labels *guideLabels, nw *network, spaces map[string]ring,
 				return nil, fmt.Errorf("track %s: %w", s.Track, err)
 			}
 
+			// 番線の側は、ホームの軸と直角に近くなければならない
+			if v, ok := compassXY[s.Side]; ok && math.Abs(v[0]*p.axis.ux+v[1]*p.axis.uy) > 1-minFrontCos {
+				return nil, fmt.Errorf("track %s: side %s is nearly parallel to the platform", s.Track, s.Side)
+			}
+
 			g.sides = append(g.sides, guideSide{
 				labelSide: s,
 				platform:  p,
@@ -872,10 +884,12 @@ func (g *stationGuide) entry(from guideSide, r route) (guide.Entry, bool) {
 	}
 
 	best := struct {
-		car   int
-		node  int
-		along float64 // ホームの上を車両から点まで歩く距離
-		cost  float64
+		car    int
+		center float64 // 車両の中ほど（前の端から何 m）
+		i      int     // p.nodes の何番目の点からホームを出るか
+		node   int
+		along  float64 // ホームの上を車両から点まで歩く距離
+		cost   float64
 	}{node: -1, cost: math.Inf(1)}
 
 	consider := func(car int, center float64) {
@@ -888,7 +902,7 @@ func (g *stationGuide) entry(from guideSide, r route) (guide.Entry, bool) {
 				along = math.Abs(center - pos[i])
 			}
 			if c := along + r.cost[n]; c < best.cost {
-				best.car, best.node, best.along, best.cost = car, n, along, c
+				best.car, best.center, best.i, best.node, best.along, best.cost = car, center, i, n, along, c
 			}
 		}
 	}
@@ -913,12 +927,59 @@ func (g *stationGuide) entry(from guideSide, r route) (guide.Entry, bool) {
 		WalkMeters:  int(math.Round(best.along + r.meters[best.node])),
 		WalkMinutes: int(math.Ceil(best.cost / guide.WalkMetersPerMinute)),
 	}
+	exit := pos[best.i]
 	if cars > 0 {
 		e.CarFromFront = best.car
 		e.Cars = cars
+
+		// 降りてから、ホームの上を前後どちらへ歩くか。半両より近ければ、降りてすぐ
+		if d := exit - best.center; math.Abs(d) >= guide.CarMeters/2 {
+			e.Toward = guide.TowardFront
+			if d > 0 {
+				e.Toward = guide.TowardBack
+			}
+			e.TowardMeters = int(math.Round(math.Abs(d)))
+			e.Turn = g.turn(from, e.Toward)
+		}
+	} else {
+		// 降りる位置が分からないので、ホームを出る場所がホームのどのあたりかを出す
+		length := p.axis.hi - p.axis.lo
+		switch {
+		case exit < length/3:
+			e.ExitAt = guide.ExitFront
+		case exit > length*2/3:
+			e.ExitAt = guide.ExitBack
+		default:
+			e.ExitAt = guide.ExitMiddle
+		}
 	}
 
 	return e, true
+}
+
+// turn は、from の番線で降りて（列車を背にして）、toward（前・後ろ）へ歩くのが右か左かを返す。
+// 番線の側が対応表に無ければ空。
+func (g *stationGuide) turn(from guideSide, toward string) string {
+
+	s, ok := compassXY[from.Side]
+	if !ok {
+		return ""
+	}
+
+	// 進む向き（軸の上で前か後ろ）
+	fx, fy := from.platform.axis.ux, from.platform.axis.uy
+	if !from.frontHigh {
+		fx, fy = -fx, -fy
+	}
+	if toward == guide.TowardBack {
+		fx, fy = -fx, -fy
+	}
+
+	// 列車を背にして向く向きは -s。その右は (-s.y, s.x)
+	if fx*(-s[1])+fy*s[0] > 0 {
+		return guide.TurnRight
+	}
+	return guide.TurnLeft
 }
 
 // frontHigh は、s の列車が進む方向の前の端が、ホームの軸の hi の側かを返す。

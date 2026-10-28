@@ -148,8 +148,29 @@ definitions:
         type: integer
       cars:
         type: integer
+      exitAt:
+        description: 何両目が分からないとき、ホームを出る場所が前寄り・中ほど・後ろ寄りのどれか
+        enum:
+        - front
+        - middle
+        - back
+        type: string
       target:
         description: 行き先。乗り換え先のホーム（「山手線 14番線」）か改札（「南改札」）
+        type: string
+      toward:
+        description: 降りてから、ホームの上を進行方向（front）か逆（back）へ何 m 歩くか。何両目が分からないか、降りてすぐなら返さない
+        enum:
+        - front
+        - back
+        type: string
+      towardMeters:
+        type: integer
+      turn:
+        description: toward が、降りて（列車を背にして）右か左か。両側に着く番線（中央線快速の 7・8番線など）では返さない
+        enum:
+        - right
+        - left
         type: string
       via:
         description: ホームを出るときに使う設備（stairs・escalator・elevator・slope）。平らな通路だけで行けるときは空

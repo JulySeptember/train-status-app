@@ -109,7 +109,7 @@ func (t *Tools) Definitions() []Tool {
 				"結果は、指定した時刻の乗り換え回数ごとの候補と、その次の列車（到着時刻の指定では前の列車）の候補。早く着く順（到着時刻の指定では遅く出る順）。時刻は HH:MM、durationMinutes は所要時間（分）。" +
 				"legs の estimated が true の区間は、駅時刻表から推定した列車で、到着時刻は目安。" +
 				"legs の through が true の区間は、前の区間の列車に乗ったまま直通運転で入る（乗り換えではない）。" +
-				"legs の alightGuide は、その区間で降りる駅の中で、次に乗るホームか乗り換えに使う改札まで歩く案内（何両目付近に乗ると近いか・使う設備・距離）。" +
+				"legs の alightGuide は、その区間で降りる駅の中で、次に乗るホームか乗り換えに使う改札まで歩く案内（何両目付近に乗ると近いか・降りて右左どちらへ歩くか・使う設備・距離）。" +
 				"walkBeforeMinutes・walkAfterMinutes は、出発駅から乗る駅まで・降りる駅から到着駅まで歩く時間（分。時刻に含まれる）。" +
 				"10分以上遅れている路線が関わるときは、その路線を使う経路と避けた経路をアプリが比べ、comparison に返す（faster は到着の早い方。到着時刻の指定では出発の遅い方）。",
 			Parameters: json.RawMessage(`{
@@ -599,6 +599,12 @@ var viaNames = map[string]string{
 	"slope":     "スロープ",
 }
 
+var turnNames = map[string]string{"right": "右", "left": "左"}
+
+var towardNames = map[string]string{"front": "進行方向", "back": "進行方向と逆"}
+
+var exitNames = map[string]string{"front": "前寄り", "middle": "中ほど", "back": "後ろ寄り"}
+
 // guideText は、降りる駅の中の案内を、画面（frontend の JourneyList.tsx）と同じ文にする。案内が無ければ空。
 func guideText(g *service.AlightGuide) string {
 
@@ -610,8 +616,23 @@ func guideText(g *service.AlightGuide) string {
 	if g.CarFromFront > 0 && g.Cars > 0 {
 		steps = append(steps, fmt.Sprintf("前から%d両目付近（%d両編成）", g.CarFromFront, g.Cars))
 	}
-	if name, ok := viaNames[g.Via]; ok {
-		steps = append(steps, name)
+	if toward, ok := towardNames[g.Toward]; ok && g.TowardMeters > 0 {
+		if turn, ok := turnNames[g.Turn]; ok {
+			steps = append(steps, fmt.Sprintf("降りて%s（%s）へ約%dm", turn, toward, g.TowardMeters))
+		} else {
+			steps = append(steps, fmt.Sprintf("降りて%sへ約%dm", toward, g.TowardMeters))
+		}
+	}
+
+	via, hasVia := viaNames[g.Via]
+	if exit, ok := exitNames[g.ExitAt]; ok {
+		if hasVia {
+			steps = append(steps, fmt.Sprintf("ホームの%sの%s", exit, via))
+		} else {
+			steps = append(steps, fmt.Sprintf("ホームの%sから", exit))
+		}
+	} else if hasVia {
+		steps = append(steps, via)
 	}
 	steps = append(steps, g.Target)
 

@@ -20,6 +20,18 @@ func TestGuideText(t *testing.T) {
 			guide: &service.AlightGuide{Target: "中央線快速 11・12番線", WalkMeters: 92, WalkMinutes: 2},
 			want:  "中央線快速 11・12番線（約92m・徒歩2分）",
 		},
+		"降りて右へ": {
+			guide: &service.AlightGuide{CarFromFront: 1, Cars: 11, Toward: "front", TowardMeters: 11, Turn: "right", Via: "stairs", Target: "南改札", WalkMeters: 41, WalkMinutes: 1},
+			want:  "前から1両目付近（11両編成） → 降りて右（進行方向）へ約11m → 階段 → 南改札（約41m・徒歩1分）",
+		},
+		"右左が分からない": {
+			guide: &service.AlightGuide{CarFromFront: 4, Cars: 12, Toward: "back", TowardMeters: 20, Via: "escalator", Target: "南改札", WalkMeters: 84, WalkMinutes: 2},
+			want:  "前から4両目付近（12両編成） → 降りて進行方向と逆へ約20m → エスカレーター → 南改札（約84m・徒歩2分）",
+		},
+		"ホームを出る場所": {
+			guide: &service.AlightGuide{ExitAt: "back", Via: "stairs", Target: "南改札", WalkMeters: 117, WalkMinutes: 2},
+			want:  "ホームの後ろ寄りの階段 → 南改札（約117m・徒歩2分）",
+		},
 		"案内なし": {},
 	}
 

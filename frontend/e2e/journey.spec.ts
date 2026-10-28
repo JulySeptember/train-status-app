@@ -307,6 +307,9 @@ test("経路検索: 降りる駅の中の案内（何両目に乗るか・どこ
               alightGuide: {
                 carFromFront: 3,
                 cars: 8,
+                toward: "front",
+                towardMeters: 30,
+                turn: "right",
                 via: "escalator",
                 target: "大江戸線 1番線",
                 walkMeters: 150,
@@ -324,12 +327,12 @@ test("経路検索: 降りる駅の中の案内（何両目に乗るか・どこ
 
   await expect(
     page.getByText(
-      "前から3両目付近（8両編成） → エスカレーター → 大江戸線 1番線（約150m・徒歩2分）",
+      "前から3両目付近（8両編成） → 降りて右（進行方向）へ約30m → エスカレーター → 大江戸線 1番線（約150m・徒歩2分）",
     ),
   ).toBeVisible();
 });
 
-test("経路検索: 何両目か分からない駅では、歩く先だけを出す", async ({
+test("経路検索: 何両目か分からない駅では、ホームを出る場所と歩く先を出す", async ({
   page,
   api,
 }) => {
@@ -343,7 +346,13 @@ test("経路検索: 何両目か分からない駅では、歩く先だけを出
           legs: [
             {
               ...first,
-              alightGuide: { target: "南改札", walkMeters: 60, walkMinutes: 1 },
+              alightGuide: {
+                exitAt: "back",
+                via: "stairs",
+                target: "南改札",
+                walkMeters: 60,
+                walkMinutes: 1,
+              },
             },
             second,
           ],
@@ -354,7 +363,9 @@ test("経路検索: 何両目か分からない駅では、歩く先だけを出
 
   await page.goto(resultUrl);
 
-  await expect(page.getByText("南改札（約60m・徒歩1分）")).toBeVisible();
+  await expect(
+    page.getByText("ホームの後ろ寄りの階段 → 南改札（約60m・徒歩1分）"),
+  ).toBeVisible();
 });
 
 test("経路検索: 同じ名前の離れた駅で乗り降りするなら、路線名で見分けて徒歩の区間を出す", async ({

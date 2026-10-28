@@ -17,6 +17,25 @@ const WalkMetersPerMinute = 80
 const CarMeters = 20
 
 // ホームを出るときに使う設備（Entry.Via）
+// 降りてからホームの上を歩く向き（Entry.Toward）
+const (
+	TowardFront = "front"
+	TowardBack  = "back"
+)
+
+// 降りて（列車を背にして）右・左（Entry.Turn）
+const (
+	TurnRight = "right"
+	TurnLeft  = "left"
+)
+
+// 何両目が分からないとき、ホームを出る場所（Entry.ExitAt）
+const (
+	ExitFront  = "front"
+	ExitMiddle = "middle"
+	ExitBack   = "back"
+)
+
 const (
 	ViaStairs    = "stairs"
 	ViaEscalator = "escalator"
@@ -61,6 +80,16 @@ type Entry struct {
 
 	// ホームを出るときに使う設備。平らな通路だけで行けるときは空
 	Via string `json:"via,omitempty"`
+
+	// 降りてから、ホームの上を前後どちら（進行方向か逆）へ何 m 歩くか。何両目が分からないか、降りてすぐなら空
+	Toward       string `json:"toward,omitempty"`
+	TowardMeters int    `json:"towardMeters,omitempty"`
+
+	// Toward が、降りて（列車を背にして）右か左か。両側に着く番線では空
+	Turn string `json:"turn,omitempty"`
+
+	// 何両目が分からないとき、ホームを出る場所がホームの前寄り・中ほど・後ろ寄りのどれか
+	ExitAt string `json:"exitAt,omitempty"`
 
 	WalkMeters  int `json:"walkMeters"`
 	WalkMinutes int `json:"walkMinutes"`
@@ -108,6 +137,21 @@ func Decode(data []byte) (*Table, error) {
 			case "", ViaStairs, ViaEscalator, ViaElevator, ViaSlope:
 			default:
 				return nil, fmt.Errorf("%s %s: unknown via %s", e.Railway, e.Direction, e.Via)
+			}
+			switch e.Toward {
+			case "", TowardFront, TowardBack:
+			default:
+				return nil, fmt.Errorf("%s %s: unknown toward %s", e.Railway, e.Direction, e.Toward)
+			}
+			switch e.Turn {
+			case "", TurnRight, TurnLeft:
+			default:
+				return nil, fmt.Errorf("%s %s: unknown turn %s", e.Railway, e.Direction, e.Turn)
+			}
+			switch e.ExitAt {
+			case "", ExitFront, ExitMiddle, ExitBack:
+			default:
+				return nil, fmt.Errorf("%s %s: unknown exitAt %s", e.Railway, e.Direction, e.ExitAt)
 			}
 		}
 	}

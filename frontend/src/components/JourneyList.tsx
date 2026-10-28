@@ -149,14 +149,44 @@ const VIA_LABELS: Record<NonNullable<AlightGuide["via"]>, string> = {
   slope: "スロープ",
 };
 
-// 降りる駅の中の案内（例: 前から3両目付近 → 階段 → 中央線快速 11・12番線（約120m・徒歩2分））
+const TURN_LABELS: Record<NonNullable<AlightGuide["turn"]>, string> = {
+  right: "右",
+  left: "左",
+};
+
+const TOWARD_LABELS: Record<NonNullable<AlightGuide["toward"]>, string> = {
+  front: "進行方向",
+  back: "進行方向と逆",
+};
+
+const EXIT_LABELS: Record<NonNullable<AlightGuide["exitAt"]>, string> = {
+  front: "前寄り",
+  middle: "中ほど",
+  back: "後ろ寄り",
+};
+
+// 降りる駅の中の案内（例: 前から1両目付近（11両編成） → 降りて右（進行方向）へ約11m → 階段 → 南改札（約41m・徒歩1分））。
+// AI に渡す文（backend の internal/ai/tools.go の guideText）と同じにする
 function guideLabel(guide: AlightGuide) {
   const steps = [];
   if (guide.carFromFront && guide.cars) {
     steps.push(`前から${guide.carFromFront}両目付近（${guide.cars}両編成）`);
   }
-  if (guide.via) {
-    steps.push(VIA_LABELS[guide.via]);
+  if (guide.toward && guide.towardMeters) {
+    const toward = TOWARD_LABELS[guide.toward];
+    steps.push(
+      guide.turn
+        ? `降りて${TURN_LABELS[guide.turn]}（${toward}）へ約${guide.towardMeters}m`
+        : `降りて${toward}へ約${guide.towardMeters}m`,
+    );
+  }
+
+  const via = guide.via && VIA_LABELS[guide.via];
+  if (guide.exitAt) {
+    const exit = EXIT_LABELS[guide.exitAt];
+    steps.push(via ? `ホームの${exit}の${via}` : `ホームの${exit}から`);
+  } else if (via) {
+    steps.push(via);
   }
   steps.push(guide.target);
 
