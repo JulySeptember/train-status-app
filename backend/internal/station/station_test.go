@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"train-status-app/backend/assets"
+	"train-status-app/backend/internal/model"
 )
 
 func newIndex(t *testing.T) *Index {
@@ -94,6 +95,20 @@ func TestFindNotFound(t *testing.T) {
 	for _, input := range []string{"渋谷", "", "駅", "  "} {
 		if got := idx.Find(input); len(got) != 0 {
 			t.Errorf("Find(%q) = %v, want none", input, names(got))
+		}
+	}
+}
+
+// 京王の駅データの「笹塚」は、「塚」が互換漢字（U+FA10）になっている
+func TestFindCompatibilityIdeograph(t *testing.T) {
+	idx := New([]model.Station{{
+		SameAs:       "odpt.Station:Keio.Keio.Sasazuka",
+		StationTitle: model.LocalizedString{Ja: "笹塚", En: "Sasazuka"},
+	}})
+
+	for _, input := range []string{"笹塚", "笹塚", "笹塚駅"} {
+		if got := idx.Find(input); len(got) != 1 {
+			t.Errorf("Find(%q) = %v, want 1 station", input, names(got))
 		}
 	}
 }

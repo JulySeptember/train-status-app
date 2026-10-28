@@ -11,6 +11,7 @@ require (
 	github.com/awslabs/aws-lambda-go-api-proxy v0.16.2
 	github.com/swaggo/http-swagger v1.3.4
 	github.com/swaggo/swag v1.16.6
+	golang.org/x/text v0.21.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
