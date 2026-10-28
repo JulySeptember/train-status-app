@@ -62,6 +62,6 @@ make backend-generate   # = cd backend && go generate ./assets
 - 大江戸線の環状部（外回り・内回り）は、駅時刻表に行先（`odpt:destinationStation`）が入っていない
 - 大江戸線の環状部を回って光が丘方面へ続ける列車は、都庁前を同じ列車ID で2回発車する（駅時刻表にも2回載る）。駅・列車ID の組で時刻を1つに決めない
 - ODPT の API は1回の取得で最大1,000件しか返さない。列車時刻表・駅時刻表は、各ホストの全件ダウンロード用の URL（`/api/v4/odpt:TrainTimetable.json`・`odpt:StationTimetable.json`、リダイレクトされる）から取る
-- ODPT のデータの一覧は `https://ckan.odpt.org/dataset/?_organization_limit=0&tags=%E9%89%84%E9%81%93-railway`（鉄道）。CKAN の API は使えないので HTML から読む。都営は JSON のほかに GTFS / GTFS-RT もあるが使っていない（理由は `docs/design/route-search.md` 3章）
+- ODPT のデータの一覧は `https://ckan.odpt.org/dataset/?_organization_limit=0&tags=%E9%89%84%E9%81%93-railway`（鉄道）。CKAN の API は使えないので HTML から読む。データセットのページは、ログインしないとファイルのリンクが出ない。チャレンジのファイルは `https://api-challenge.odpt.org/api/v4/files/<事業者>/data/<ファイル名>?acl:consumerKey=<チャレンジのキー>` で取れる（一時的な署名付きの URL にリダイレクトされる）。題名に【公開終了】と付いたデータセットは取れない。都営は JSON のほかに GTFS / GTFS-RT もあるが使っていない（理由は `docs/design/route-search.md` 3章）
 - 都営以外の事業者のデータは、キーの要る `api.odpt.org`（公共交通オープンデータ基本ライセンス）と `api-challenge.odpt.org`（チャレンジ限定ライセンス）から取る。今の `backend/assets` は都営（CC BY 4.0）だけなので置いてよい。他社のデータの置き場所は `docs/design/multi-operator.md` 4章
 - チャレンジ限定ライセンスのデータ（JR東日本・京王・東武・京急・東急・西武・小田急）は、公共交通オープンデータチャレンジへの応募が前提で、2027年3月12日に許諾が終わる
