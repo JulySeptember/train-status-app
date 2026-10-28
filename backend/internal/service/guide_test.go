@@ -109,7 +109,7 @@ func TestGuideAlight(t *testing.T) {
 func TestWithGuideTransfers(t *testing.T) {
 
 	table := &guide.Table{Stations: []guide.Station{{
-		StationIDs: []string{"JR.Yamanote.Shinjuku", "JR.Chuo.Shinjuku"},
+		StationIDs: []string{"JR.Yamanote.Shinjuku", "JR.Chuo.Shinjuku", "JR.Saikyo.Shinjuku", "JR.Sobu.Shinjuku"},
 		Entries: []guide.Entry{
 			// 向きによって歩く時間が違えば、長いほう
 			{Railway: "JR.Yamanote", Direction: "Inner", Target: guide.Target{Railway: "JR.Chuo", Direction: "Out"}, WalkMinutes: 4},
@@ -118,12 +118,17 @@ func TestWithGuideTransfers(t *testing.T) {
 			{Railway: "JR.Yamanote", Direction: "Inner", Target: guide.Target{Railway: "JR.Yamanote", Direction: "Outer"}, WalkMinutes: 3},
 			// 改札への案内は使わない
 			{Railway: "JR.Chuo", Direction: "In", Target: guide.Target{Gate: "南口"}, WalkMinutes: 9},
+			// 駅の一覧に無い路線（埼京線）への案内は使わない
+			{Railway: "JR.Chuo", Direction: "In", Target: guide.Target{Railway: "JR.Saikyo", Direction: "North"}, WalkMinutes: 9},
+			// 対応表に無い組（中央線 → 総武線）は足さない
+			{Railway: "JR.Chuo", Direction: "In", Target: guide.Target{Railway: "JR.Sobu", Direction: "East"}, WalkMinutes: 9},
 		},
 	}}}
 
 	stations := []model.Station{
 		{SameAs: "JR.Yamanote.Shinjuku", Railway: "JR.Yamanote"},
 		{SameAs: "JR.Chuo.Shinjuku", Railway: "JR.Chuo"},
+		{SameAs: "JR.Sobu.Shinjuku", Railway: "JR.Sobu"},
 		{SameAs: "Toei.Shinjuku", Railway: "Toei"},
 	}
 
