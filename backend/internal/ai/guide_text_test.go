@@ -29,3 +29,23 @@ func TestGuideText(t *testing.T) {
 		}
 	}
 }
+
+func TestTrimJourneysGuide(t *testing.T) {
+
+	journeys := trimJourneys([]service.Journey{{
+		DepartureTime: "10:00",
+		ArrivalTime:   "10:20",
+		Legs: []service.JourneyLeg{
+			{DepartureTime: "10:00", ArrivalTime: "10:10", AlightGuide: &service.AlightGuide{Target: "南改札", WalkMeters: 60, WalkMinutes: 1}},
+			{DepartureTime: "10:15", ArrivalTime: "10:20"},
+		},
+	}})
+
+	legs := journeys[0].Legs
+	if legs[0].AlightGuide != "南改札（約60m・徒歩1分）" {
+		t.Errorf("unexpected guide %q", legs[0].AlightGuide)
+	}
+	if legs[1].AlightGuide != "" {
+		t.Errorf("expected no guide, got %q", legs[1].AlightGuide)
+	}
+}
