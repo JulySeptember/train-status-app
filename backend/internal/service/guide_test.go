@@ -1,6 +1,7 @@
 package service
 
 import (
+	"slices"
 	"testing"
 
 	"train-status-app/backend/assets/guide"
@@ -103,4 +104,58 @@ func TestGuideAlight(t *testing.T) {
 			t.Errorf("expected nil, got %+v", got)
 		}
 	})
+}
+
+func TestWithGuideTransfers(t *testing.T) {
+
+	table := &guide.Table{Stations: []guide.Station{{
+		StationIDs: []string{"JR.Yamanote.Shinjuku", "JR.Chuo.Shinjuku", "JR.Saikyo.Shinjuku", "JR.Sobu.Shinjuku"},
+		Entries: []guide.Entry{
+			// 向きによって歩く時間が違えば、長いほう
+			{Railway: "JR.Yamanote", Direction: "Inner", Target: guide.Target{Railway: "JR.Chuo", Direction: "Out"}, WalkMinutes: 4},
+			{Railway: "JR.Yamanote", Direction: "Outer", Target: guide.Target{Railway: "JR.Chuo", Direction: "Out"}, WalkMinutes: 6},
+			// 同じ路線の逆向き（同じ駅の乗り継ぎ）は対応表に無い
+			{Railway: "JR.Yamanote", Direction: "Inner", Target: guide.Target{Railway: "JR.Yamanote", Direction: "Outer"}, WalkMinutes: 3},
+			// 改札への案内は使わない
+			{Railway: "JR.Chuo", Direction: "In", Target: guide.Target{Gate: "南口"}, WalkMinutes: 9},
+			// 駅の一覧に無い路線（埼京線）への案内は使わない
+			{Railway: "JR.Chuo", Direction: "In", Target: guide.Target{Railway: "JR.Saikyo", Direction: "North"}, WalkMinutes: 9},
+			// 対応表に無い組（中央線 → 総武線）は足さない
+			{Railway: "JR.Chuo", Direction: "In", Target: guide.Target{Railway: "JR.Sobu", Direction: "East"}, WalkMinutes: 9},
+		},
+	}}}
+
+	stations := []model.Station{
+		{SameAs: "JR.Yamanote.Shinjuku", Railway: "JR.Yamanote"},
+		{SameAs: "JR.Chuo.Shinjuku", Railway: "JR.Chuo"},
+		{SameAs: "JR.Sobu.Shinjuku", Railway: "JR.Sobu"},
+		{SameAs: "Toei.Shinjuku", Railway: "Toei"},
+	}
+
+	ts := []route.Transfer{
+		{From: "JR.Chuo.Shinjuku", To: "JR.Yamanote.Shinjuku", Minutes: 3},
+		{From: "JR.Chuo.Shinjuku", To: "Toei.Shinjuku", Minutes: 7},
+		{From: "JR.Yamanote.Shinjuku", To: "JR.Chuo.Shinjuku", Minutes: 3},
+	}
+
+	got := withGuideTransfers(ts, table, stations)
+
+	want := []route.Transfer{
+		// 案内に無い向き（中央線 → 山手線）は今のまま
+		{From: "JR.Chuo.Shinjuku", To: "JR.Yamanote.Shinjuku", Minutes: 3},
+		{From: "JR.Chuo.Shinjuku", To: "Toei.Shinjuku", Minutes: 7},
+		{From: "JR.Yamanote.Shinjuku", To: "JR.Chuo.Shinjuku", Minutes: 6 + guideTransferMarginMinutes},
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("expected %+v, got %+v", want, got)
+	}
+
+	// 元の対応表は変えない
+	if ts[2].Minutes != 3 {
+		t.Errorf("input modified: %+v", ts[2])
+	}
+
+	if got := withGuideTransfers(ts, nil, stations); !slices.Equal(got, ts) {
+		t.Errorf("expected %+v without table, got %+v", ts, got)
+	}
 }
