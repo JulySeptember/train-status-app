@@ -257,7 +257,7 @@ func TestLoadExtra(t *testing.T) {
 
 func TestLoadStationGuide(t *testing.T) {
 
-	table := []byte(`{"stations":[{"stationIds":["odpt.Station:Test.Line.A"],"transfers":{},"entries":[
+	table := []byte(`{"stations":[{"stationIds":["odpt.Station:Test.Line.A"],"transfers":{},"gates":[{"name":"北口","lat":35.69,"lon":139.7}],"entries":[
 		{"railway":"odpt.Railway:Test.Line","direction":"odpt.RailDirection:Test.Up","target":{"gate":"北口"},"carFromFront":3,"cars":10,"via":"stairs","walkMeters":120,"walkMinutes":2}
 	]}]}`)
 
@@ -296,6 +296,36 @@ func TestLoadStationGuide(t *testing.T) {
 		}
 		if l.StationGuide() != nil {
 			t.Fatal("station guide should not be loaded without WithExtra")
+		}
+	})
+
+	t.Run("unknown gate", func(t *testing.T) {
+		files := extraTestFiles(t)
+		files[stationGuideFile] = []byte(`{"stations":[{"stationIds":["x"],"transfers":{"odpt.Station:Other.A":"南口"},"gates":[{"name":"北口"}],"entries":[]}]}`)
+
+		_, err := newFromFS(testFS(t, files), WithExtra())
+		if err == nil || !strings.Contains(err.Error(), "南口") {
+			t.Fatalf("expected an error about the unknown gate, got %v", err)
+		}
+	})
+
+	t.Run("unknown target gate", func(t *testing.T) {
+		files := extraTestFiles(t)
+		files[stationGuideFile] = []byte(`{"stations":[{"stationIds":["x"],"gates":[{"name":"北口"}],"entries":[{"railway":"r","direction":"d","target":{"gate":"南口"}}]}]}`)
+
+		_, err := newFromFS(testFS(t, files), WithExtra())
+		if err == nil || !strings.Contains(err.Error(), "南口") {
+			t.Fatalf("expected an error about the unknown gate, got %v", err)
+		}
+	})
+
+	t.Run("unknown via", func(t *testing.T) {
+		files := extraTestFiles(t)
+		files[stationGuideFile] = []byte(`{"stations":[{"stationIds":["x"],"gates":[{"name":"北口"}],"entries":[{"railway":"r","direction":"d","target":{"gate":"北口"},"via":"ladder"}]}]}`)
+
+		_, err := newFromFS(testFS(t, files), WithExtra())
+		if err == nil || !strings.Contains(err.Error(), "ladder") {
+			t.Fatalf("expected an error about the unknown via, got %v", err)
 		}
 	})
 

@@ -19,7 +19,7 @@ LAMBDA_ARTIFACT_BUCKET := train-status-app-dev-lambda-artifacts
 LAMBDA_ARTIFACT_KEY := lambda/bootstrap.zip
 
 # 都営以外の事業者のデータ（backend/assets/loder.go の extraFiles と合わせる）と、S3 での置き場所
-EXTRA_FILES := railway.json station.json train_type.json station_timetable.gob train_timetable.gob destination_station.json
+EXTRA_FILES := railway.json station.json train_type.json station_timetable.gob train_timetable.gob destination_station.json station_guide.json
 EXTRA_PREFIX := assets-extra
 
 # 手元で運行情報・列車位置を取る他社の事業者。本番と同じく infra/env/dev.tfvars の odpt_operators から読む。

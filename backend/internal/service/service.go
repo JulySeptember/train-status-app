@@ -77,6 +77,9 @@ type Service struct {
 	// 経路検索に反映する運行状況のキャッシュ
 	realtime realtimeCache
 
+	// 駅の中の案内の索引。assets/extra に案内の表が無ければ空
+	guides guideIndex
+
 	now func() time.Time
 }
 
@@ -110,6 +113,7 @@ func New(
 	}
 
 	s.groupWalks = groupWalks(a.Stations(), s.stationGroups)
+	s.guides = newGuideIndex(a.StationGuide(), a.Stations(), s.railwayNames)
 
 	s.allStations = s.indexAllStations()
 	s.operators = s.indexOperators()
@@ -982,6 +986,25 @@ type JourneyLeg struct {
 	// 推定したものか（docs/design/multi-operator.md 8章）。発車時刻は駅時刻表のとおりだが、どの発車が同じ列車かと
 	// 終点の到着時刻は推定。trainNumber は空で、列車の位置は引けない
 	Estimated bool `json:"estimated"`
+
+	// 降りる駅の中の案内（乗り換え先のホームか改札まで）。案内のある駅（JR の新宿など）で乗り換えるときだけ
+	AlightGuide *AlightGuide `json:"alightGuide,omitempty"`
+}
+
+// AlightGuide は、降りる駅の中で、乗り換え先のホームか改札まで歩く案内（docs/design/station-guide.md）。
+type AlightGuide struct {
+	// 前から何両目に乗るとよいか（乗る列車の進む向きで数える）。列車の止まる位置が分からない番線では 0 で、返さない
+	CarFromFront int `json:"carFromFront,omitempty"`
+	Cars         int `json:"cars,omitempty"`
+
+	// ホームを出るときに使う設備（stairs・escalator・elevator・slope）。平らな通路だけで行けるときは空
+	Via string `json:"via,omitempty" enums:"stairs,escalator,elevator,slope"`
+
+	// 行き先。乗り換え先のホーム（「山手線 14番線」）か改札（「南改札」）
+	Target string `json:"target"`
+
+	WalkMeters  int `json:"walkMeters"`
+	WalkMinutes int `json:"walkMinutes"`
 }
 
 // JourneyQuery は経路検索の条件。
@@ -1115,7 +1138,7 @@ func (s *Service) SearchJourneys(
 			WalkAfterMinutes:  j.Arrival - j.Legs[len(j.Legs)-1].Arrival,
 		}
 
-		for _, l := range j.Legs {
+		for i, l := range j.Legs {
 
 			destinationName := ""
 			if l.Destination != "" {
@@ -1140,6 +1163,7 @@ func (s *Service) SearchJourneys(
 				DelayMinutes:    l.Delay,
 				Through:         l.Through,
 				Estimated:       infer.IsEstimated(l.Train),
+				AlightGuide:     s.guides.alight(j.Legs, i),
 			})
 		}
 

@@ -1522,6 +1522,38 @@ const docTemplate = `{
                 "Holiday"
             ]
         },
+        "service.AlightGuide": {
+            "type": "object",
+            "properties": {
+                "carFromFront": {
+                    "description": "前から何両目に乗るとよいか（乗る列車の進む向きで数える）。列車の止まる位置が分からない番線では 0 で、返さない",
+                    "type": "integer"
+                },
+                "cars": {
+                    "type": "integer"
+                },
+                "target": {
+                    "description": "行き先。乗り換え先のホーム（「山手線 14番線」）か改札（「南改札」）",
+                    "type": "string"
+                },
+                "via": {
+                    "description": "ホームを出るときに使う設備（stairs・escalator・elevator・slope）。平らな通路だけで行けるときは空",
+                    "type": "string",
+                    "enum": [
+                        "stairs",
+                        "escalator",
+                        "elevator",
+                        "slope"
+                    ]
+                },
+                "walkMeters": {
+                    "type": "integer"
+                },
+                "walkMinutes": {
+                    "type": "integer"
+                }
+            }
+        },
         "service.DirectionTimetable": {
             "type": "object",
             "properties": {
@@ -1574,6 +1606,14 @@ const docTemplate = `{
         "service.JourneyLeg": {
             "type": "object",
             "properties": {
+                "alightGuide": {
+                    "description": "降りる駅の中の案内（乗り換え先のホームか改札まで）。案内のある駅（JR の新宿など）で乗り換えるときだけ",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/service.AlightGuide"
+                        }
+                    ]
+                },
                 "arrivalTime": {
                     "type": "string"
                 },

@@ -136,6 +136,19 @@ export default function License() {
           <li>駅情報</li>
           <li>駅時刻表</li>
           <li>列車時刻表</li>
+          <li>
+            歩行空間ネットワークデータ・構内地図（JR東日本の駅。提供:
+            JR東日本コンサルタンツ、
+            <a
+              href={CHALLENGE.url}
+              target="_blank"
+              rel="noreferrer"
+              className="text-brand hover:underline"
+            >
+              {CHALLENGE.name}
+            </a>
+            ）。経路検索の、降りる駅の中の案内（何両目に乗るか・どこへ歩くか）に使っています
+          </li>
         </ul>
       </Section>
 
