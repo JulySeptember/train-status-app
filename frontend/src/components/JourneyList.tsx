@@ -4,10 +4,11 @@ import {
   ArrowRightLeft,
   Footprints,
   MapPin,
+  Navigation,
   Repeat,
 } from "lucide-react";
 
-import { type Journey, type JourneyLeg } from "@/types";
+import { type AlightGuide, type Journey, type JourneyLeg } from "@/types";
 
 import RailwayBadge from "@/components/RailwayBadge";
 
@@ -141,6 +142,27 @@ function Through({ prev, next }: { prev: JourneyLeg; next: JourneyLeg }) {
   );
 }
 
+const VIA_LABELS: Record<NonNullable<AlightGuide["via"]>, string> = {
+  stairs: "階段",
+  escalator: "エスカレーター",
+  elevator: "エレベーター",
+  slope: "スロープ",
+};
+
+// 降りる駅の中の案内（例: 前から3両目付近 → 階段 → 中央線快速 11・12番線（約120m・徒歩2分））
+function guideLabel(guide: AlightGuide) {
+  const steps = [];
+  if (guide.carFromFront && guide.cars) {
+    steps.push(`前から${guide.carFromFront}両目付近（${guide.cars}両編成）`);
+  }
+  if (guide.via) {
+    steps.push(VIA_LABELS[guide.via]);
+  }
+  steps.push(guide.target);
+
+  return `${steps.join(" → ")}（約${guide.walkMeters}m・徒歩${guide.walkMinutes}分）`;
+}
+
 function Transfer({ prev, next }: { prev: JourneyLeg; next: JourneyLeg }) {
   // 同じ駅（同じ路線）での乗り継ぎか、別の路線の駅への乗り換えか
   const label =
@@ -149,9 +171,18 @@ function Transfer({ prev, next }: { prev: JourneyLeg; next: JourneyLeg }) {
       : `${next.fromName}（${next.railwayName}）へ乗り換え`;
 
   return (
-    <div className="ml-6 flex items-center gap-2 border-l-2 border-dashed border-border py-3 pl-12 text-sm text-muted-foreground">
-      <Repeat size={14} />
-      {label}・待ち {duration(prev.arrivalTime, next.departureTime)}
+    <div className="ml-6 space-y-1 border-l-2 border-dashed border-border py-3 pl-12 text-sm text-muted-foreground">
+      <p className="flex items-center gap-2">
+        <Repeat size={14} />
+        {label}・待ち {duration(prev.arrivalTime, next.departureTime)}
+      </p>
+
+      {prev.alightGuide && (
+        <p className="flex items-start gap-2 text-foreground/80">
+          <Navigation size={14} className="mt-0.5 shrink-0" />
+          {guideLabel(prev.alightGuide)}
+        </p>
+      )}
     </div>
   );
 }

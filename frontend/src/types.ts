@@ -118,6 +118,21 @@ export interface JourneyLeg {
   // 列車時刻表の無い事業者（東急・西武・小田急・京急・ゆりかもめ）の列車で、駅時刻表から推定したもの。
   // 発車時刻は駅時刻表のとおりだが、到着時刻は目安。trainNumber は空で、列車の位置は引けない
   estimated: boolean;
+  // 降りる駅の中の案内（JR 新宿駅など案内のある駅で、次の区間に乗り換えるとき）。案内が無ければ無い
+  alightGuide?: AlightGuide;
+}
+
+// 降りてから、次に乗るホームか乗り換えに使う改札まで歩く案内（JR東日本の歩行空間ネットワークデータから作ったもの）
+export interface AlightGuide {
+  // 前から何両目に乗るとよいか。分からないホームでは無い
+  carFromFront?: number;
+  cars?: number;
+  // ホームを出るときに使う設備。平らな通路だけで行けるときは無い
+  via?: "stairs" | "escalator" | "elevator" | "slope";
+  // 行き先（「中央線快速 11・12番線」や「南改札」）
+  target: string;
+  walkMeters: number;
+  walkMinutes: number;
 }
 
 // 出発・到着の時刻は、出発駅から最初に乗る駅まで・最後に降りる駅から到着駅まで歩く時間を含む

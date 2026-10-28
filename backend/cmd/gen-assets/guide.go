@@ -803,6 +803,10 @@ func buildStationGuide(labels *guideLabels, nw *network, spaces map[string]ring,
 		StationIDs: labels.Stations,
 		Transfers:  labels.Transfers,
 	}
+	for _, gate := range labels.Gates {
+		n := nw.nodes[g.gateNodes[gate.Name]]
+		g.station.Gates = append(g.station.Gates, guide.Gate{Name: gate.Name, Lat: n.lat, Lon: n.lon})
+	}
 	if g.station.Transfers == nil {
 		g.station.Transfers = map[string]string{}
 	}

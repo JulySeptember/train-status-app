@@ -290,6 +290,73 @@ test("経路検索: 0時をまたぐ経路の所要時間", async ({ page, api }
   await expect(page.getByText("20分乗車")).toBeVisible();
 });
 
+test("経路検索: 降りる駅の中の案内（何両目に乗るか・どこへ歩くか）を乗り換えに出す", async ({
+  page,
+  api,
+}) => {
+  const [first, second] = journeySearch.journeys[0].legs;
+  api.set("/journeys", {
+    body: {
+      ...journeySearch,
+      journeys: [
+        {
+          ...journeySearch.journeys[0],
+          legs: [
+            {
+              ...first,
+              alightGuide: {
+                carFromFront: 3,
+                cars: 8,
+                via: "escalator",
+                target: "大江戸線 1番線",
+                walkMeters: 150,
+                walkMinutes: 2,
+              },
+            },
+            second,
+          ],
+        },
+      ],
+    },
+  });
+
+  await page.goto(resultUrl);
+
+  await expect(
+    page.getByText(
+      "前から3両目付近（8両編成） → エスカレーター → 大江戸線 1番線（約150m・徒歩2分）",
+    ),
+  ).toBeVisible();
+});
+
+test("経路検索: 何両目か分からない駅では、歩く先だけを出す", async ({
+  page,
+  api,
+}) => {
+  const [first, second] = journeySearch.journeys[0].legs;
+  api.set("/journeys", {
+    body: {
+      ...journeySearch,
+      journeys: [
+        {
+          ...journeySearch.journeys[0],
+          legs: [
+            {
+              ...first,
+              alightGuide: { target: "南改札", walkMeters: 60, walkMinutes: 1 },
+            },
+            second,
+          ],
+        },
+      ],
+    },
+  });
+
+  await page.goto(resultUrl);
+
+  await expect(page.getByText("南改札（約60m・徒歩1分）")).toBeVisible();
+});
+
 test("経路検索: 同じ名前の離れた駅で乗り降りするなら、路線名で見分けて徒歩の区間を出す", async ({
   page,
   api,

@@ -36,7 +36,16 @@ type Station struct {
 	// 乗り換え先の他社の駅ID → 使う改札の名前
 	Transfers map[string]string `json:"transfers"`
 
+	// 改札の位置。Transfers に無い他社の駅へ乗り換えるときは、その駅に最も近い改札を使う
+	Gates []Gate `json:"gates"`
+
 	Entries []Entry `json:"entries"`
+}
+
+type Gate struct {
+	Name string  `json:"name"`
+	Lat  float64 `json:"lat"`
+	Lon  float64 `json:"lon"`
 }
 
 // Entry は、ある列車（路線・方向）で降りて、ある行き先へ歩くときの案内。
@@ -75,7 +84,21 @@ func Decode(data []byte) (*Table, error) {
 	}
 
 	for _, s := range t.Stations {
+
+		gates := map[string]bool{}
+		for _, g := range s.Gates {
+			gates[g.Name] = true
+		}
+		for station, gate := range s.Transfers {
+			if !gates[gate] {
+				return nil, fmt.Errorf("transfer %s: unknown gate %s", station, gate)
+			}
+		}
+
 		for _, e := range s.Entries {
+			if e.Target.Gate != "" && !gates[e.Target.Gate] {
+				return nil, fmt.Errorf("%s %s: unknown gate %s", e.Railway, e.Direction, e.Target.Gate)
+			}
 			platform := e.Target.Railway != "" && e.Target.Direction != ""
 			gate := e.Target.Gate != ""
 			if platform == gate {
