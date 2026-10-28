@@ -109,6 +109,7 @@ func (t *Tools) Definitions() []Tool {
 				"結果は、指定した時刻の乗り換え回数ごとの候補と、その次の列車（到着時刻の指定では前の列車）の候補。早く着く順（到着時刻の指定では遅く出る順）。時刻は HH:MM、durationMinutes は所要時間（分）。" +
 				"legs の estimated が true の区間は、駅時刻表から推定した列車で、到着時刻は目安。" +
 				"legs の through が true の区間は、前の区間の列車に乗ったまま直通運転で入る（乗り換えではない）。" +
+				"legs の alightGuide は、その区間で降りる駅の中で、次に乗るホームか乗り換えに使う改札まで歩く案内（何両目付近に乗ると近いか・使う設備・距離）。" +
 				"walkBeforeMinutes・walkAfterMinutes は、出発駅から乗る駅まで・降りる駅から到着駅まで歩く時間（分。時刻に含まれる）。" +
 				"10分以上遅れている路線が関わるときは、その路線を使う経路と避けた経路をアプリが比べ、comparison に返す（faster は到着の早い方。到着時刻の指定では出発の遅い方）。",
 			Parameters: json.RawMessage(`{
@@ -381,6 +382,9 @@ type routeLeg struct {
 
 	// 駅時刻表から推定した列車（到着時刻は目安）
 	Estimated bool `json:"estimated,omitempty"`
+
+	// 降りる駅の中の案内（画面と同じ文。例: 前から10両目付近（12両編成） → 階段 → 中央西改札（約114m・徒歩2分））
+	AlightGuide string `json:"alightGuide,omitempty"`
 }
 
 func (t *Tools) searchRoute(ctx context.Context, raw json.RawMessage) (ToolOutput, error) {
@@ -578,6 +582,7 @@ func trimJourneys(journeys []service.Journey) []routeJourney {
 				DelayMinutes: l.DelayMinutes,
 				Through:      l.Through,
 				Estimated:    l.Estimated,
+				AlightGuide:  guideText(l.AlightGuide),
 			})
 		}
 
@@ -585,6 +590,32 @@ func trimJourneys(journeys []service.Journey) []routeJourney {
 	}
 
 	return result
+}
+
+var viaNames = map[string]string{
+	"stairs":    "階段",
+	"escalator": "エスカレーター",
+	"elevator":  "エレベーター",
+	"slope":     "スロープ",
+}
+
+// guideText は、降りる駅の中の案内を、画面（frontend の JourneyList.tsx）と同じ文にする。案内が無ければ空。
+func guideText(g *service.AlightGuide) string {
+
+	if g == nil {
+		return ""
+	}
+
+	var steps []string
+	if g.CarFromFront > 0 && g.Cars > 0 {
+		steps = append(steps, fmt.Sprintf("前から%d両目付近（%d両編成）", g.CarFromFront, g.Cars))
+	}
+	if name, ok := viaNames[g.Via]; ok {
+		steps = append(steps, name)
+	}
+	steps = append(steps, g.Target)
+
+	return fmt.Sprintf("%s（約%dm・徒歩%d分）", strings.Join(steps, " → "), g.WalkMeters, g.WalkMinutes)
 }
 
 type journeyTimes struct {
