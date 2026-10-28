@@ -6,6 +6,8 @@ import (
 	"strings"
 	"unicode"
 
+	"golang.org/x/text/unicode/norm"
+
 	"train-status-app/backend/internal/model"
 )
 
@@ -80,10 +82,10 @@ func (idx *Index) Find(name string) []Station {
 }
 
 // Normalize は駅名の表記の揺れをそろえる。
-// 全角の英数字を半角に、英字を小文字にし、空白・記号を除き、末尾の「駅」を取り、「ケ」「ヵ」を「ヶ」にする。
+// NFKC で互換漢字（京王の「笹塚」の U+FA10 など）を普通の漢字にそろえ、全角の英数字を半角に、英字を小文字にし、空白・記号を除き、末尾の「駅」を取り、「ケ」「ヵ」を「ヶ」にする。
 func Normalize(s string) string {
 	var b strings.Builder
-	for _, r := range s {
+	for _, r := range norm.NFKC.String(s) {
 		// 全角の英数字・記号（！〜～）を半角にする
 		if r >= '！' && r <= '～' {
 			r -= 0xFEE0
