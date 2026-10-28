@@ -4,7 +4,7 @@
 
 > 本アプリは個人が作成した**非公式**のアプリで、各鉄道事業者・公共交通オープンデータセンターとは関係ありません。
 
-![経路検索の画面](docs/images/journey-pc.png)
+![ホーム画面](docs/images/home-pc.png)
 
 # 🌍 Live Demo
 
