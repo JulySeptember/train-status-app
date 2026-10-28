@@ -2,6 +2,7 @@ package service
 
 import (
 	"math"
+	"slices"
 
 	"train-status-app/backend/assets/guide"
 	"train-status-app/backend/internal/model"
@@ -157,4 +158,59 @@ func (idx guideIndex) transferGate(g *guideStation, to string) string {
 	}
 
 	return best
+}
+
+// guideTransferMarginMinutes は、案内の歩く時間に足す余裕（列車を降りる・人の流れに合わせて歩くなど）
+const guideTransferMarginMinutes = 2
+
+// withGuideTransfers は、乗り換えの対応表のうち、案内のある駅の中で JR の別の路線の駅へ乗り換える組の時間を、
+// 案内の歩く時間に guideTransferMarginMinutes を足した時間に置き換える。駅の座標の直線距離から決めた時間
+// （transferMinutes）より、通路の長さに合う。対応表は駅の組ごとなので、降りる列車・乗る列車の向きのうち
+// 最も長い時間を使う（向きによる違いは6駅で1分以内）。他社への乗り換え（改札までしか分からない）と、
+// 同じ駅で乗り継ぐ組（対応表に無い）は変えない。
+func withGuideTransfers(ts []route.Transfer, t *guide.Table, stations []model.Station) []route.Transfer {
+
+	if t == nil {
+		return ts
+	}
+
+	railways := make(map[string]string, len(stations))
+	for _, st := range stations {
+		railways[st.SameAs] = st.Railway
+	}
+
+	type pair struct{ from, to string }
+	walks := map[pair]int{}
+
+	for _, s := range t.Stations {
+
+		// 路線 → この案内を使う駅
+		byRailway := map[string]string{}
+		for _, id := range s.StationIDs {
+			if r, ok := railways[id]; ok {
+				byRailway[r] = id
+			}
+		}
+
+		for _, e := range s.Entries {
+			if e.Target.Railway == "" {
+				continue
+			}
+			from, to := byRailway[e.Railway], byRailway[e.Target.Railway]
+			if from == "" || to == "" || from == to {
+				continue
+			}
+			p := pair{from, to}
+			walks[p] = max(walks[p], e.WalkMinutes)
+		}
+	}
+
+	result := slices.Clone(ts)
+	for i, tr := range result {
+		if w, ok := walks[pair{tr.From, tr.To}]; ok {
+			result[i].Minutes = w + guideTransferMarginMinutes
+		}
+	}
+
+	return result
 }

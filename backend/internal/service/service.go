@@ -94,7 +94,7 @@ func New(
 ) *Service {
 	routes := route.New(
 		a.TrainTimetables(),
-		transfers(a.Stations()),
+		withGuideTransfers(transfers(a.Stations()), a.StationGuide(), a.Stations()),
 		route.DefaultConfig(),
 	)
 
