@@ -28,6 +28,10 @@ const (
 	// delayWindowMinutes は、現在から何分後までの時刻に遅れを足すか。
 	// 遅れは現時点の値なので、先の列車には足さない
 	delayWindowMinutes = 60
+
+	// delayLookbackMinutes は、現在から何分前までに始発駅を出た列車に遅れを足すか。
+	// それより前に出た列車は走り終えているとみなす（過ぎた時刻を指定した検索に、今の遅れを足さない）
+	delayLookbackMinutes = 120
 )
 
 // 運行情報の文章に含まれていたら運転見合わせとみなす言葉。

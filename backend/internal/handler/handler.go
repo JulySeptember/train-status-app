@@ -363,6 +363,7 @@ func (h *Handler) TrainLocation(
 //	@Description	Journeys are sorted by arrival time (by departure time, latest first, with arriveBy).
 //	@Description	Stations with the same name on different lines (e.g. Shinjuku) are treated as one station.
 //	@Description	Times are on the current service day (before 03:00 belongs to the previous day).
+//	@Description	If it is before 03:00 now and a time at or after 03:00 is given, the time is on the next service day (from this morning): nextServiceDay is true, and delays and suspensions are not applied (delayApplied is false).
 //	@Description	Current delays (per railway and direction, within the next hour) are added to the times, and suspended railways are avoided.
 //	@Description	If the realtime status cannot be fetched, the timetable is used as is and delayApplied is false.
 //	@Description	With realtime=false, delays and suspensions are ignored and the timetable is used as is.

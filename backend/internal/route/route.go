@@ -79,8 +79,10 @@ type Query struct {
 
 	// Delays は路線・方向ごとの遅れ。始発駅を DelayUntil（運行日の0時からの分）までに出る列車に遅れを足す。
 	// それより後に出る列車は、遅れを少しずつ減らして足す（遅れは現時点の値なので、先の列車ほど元のダイヤに戻っていくとみなす）。
-	// 1本の列車には全部の停車駅に同じ遅れを足す（区間の所要時間は変えない）
+	// 1本の列車には全部の停車駅に同じ遅れを足す（区間の所要時間は変えない）。
+	// 始発駅を DelayFrom より前に出た列車には足さない（もう走り終えた列車。0 なら下限なし）
 	Delays     []Delay
+	DelayFrom  int
 	DelayUntil int
 
 	// Count は返す経路の数の目安。0 なら指定した時刻で1回だけ探す。
@@ -425,6 +427,7 @@ func removeDominated(journeys []Journey) []Journey {
 type conditions struct {
 	avoid  map[int32]bool
 	delays map[[2]int32]int32
+	from   int32
 	until  int32
 
 	// walk は Query.Walk を駅の番号で持つ
@@ -439,6 +442,7 @@ func (e *Engine) conditions(q Query) *conditions {
 	c := &conditions{
 		avoid:  make(map[int32]bool),
 		delays: make(map[[2]int32]int32),
+		from:   int32(q.DelayFrom),
 		until:  int32(q.DelayUntil),
 		walk:   make(map[int32]int32),
 	}
@@ -489,6 +493,7 @@ func (c *conditions) shifts(n *network, p *pattern) []shift {
 		minutes = max(minutes, c.delays[[2]int32{p.railways[s], p.directions[s]}])
 		result[s] = shift{
 			minutes:  minutes,
+			from:     c.from,
 			until:    c.until,
 			reversed: n.reversed,
 		}
@@ -506,10 +511,12 @@ func (c *conditions) avoided(p *pattern, s int) bool {
 // 遅れは列車ごとに、始発駅（パターンの最初の停車駅。元の向き）の発車時刻で決め、全部の停車駅に同じだけ足す。
 // 駅ごとの時刻で決めると、遅れの減り方によって区間の所要時間が縮む（0分になる）ため。
 // 始発駅の発車が until までの列車は minutes 分遅れ、それより後の列車は、until から2分ごとに1分ずつ遅れが減る。
+// from より前に始発駅を出た列車は遅れない（遅れが 0 から minutes に増えるだけなので、列車の順番は変わらない）。
 // 始発駅の発車時刻に遅れを足した時刻は列車の順に増えるので、パターンの列車の順番はほぼ変わらない
 // （後の列車が途中の駅で前の列車に追いつくほど速いと入れ替わりうるが、同じ停車駅の並びの列車ではまず無い）。
 type shift struct {
 	minutes  int32
+	from     int32
 	until    int32
 	reversed bool
 }
@@ -532,6 +539,9 @@ func (s shift) at(p *pattern, trip int, t int32) int32 {
 
 // delay は、始発駅を origin（運行日の0時からの分）に出る列車の遅れ（分）を返す。
 func (s shift) delay(origin int32) int32 {
+	if origin < s.from {
+		return 0
+	}
 	if origin <= s.until {
 		return s.minutes
 	}

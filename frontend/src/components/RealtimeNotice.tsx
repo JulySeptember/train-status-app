@@ -2,7 +2,7 @@ import { TriangleAlert } from "lucide-react";
 
 import { type JourneySearch } from "@/types";
 
-// 運転見合わせで除外した路線と、運行状況を取得できなかったことを知らせる
+// 運転見合わせで除外した路線と、運行状況を取得できなかったこと（翌運行日の時刻で探して反映しなかったこと）を知らせる
 export default function RealtimeNotice({
   data,
   realtime,
@@ -12,6 +12,14 @@ export default function RealtimeNotice({
 }) {
   if (!realtime) {
     return null;
+  }
+
+  if (data.nextServiceDay) {
+    return (
+      <p className="rounded-lg border border-border px-4 py-3 text-sm text-foreground/80">
+        今日の朝からの時刻表どおりの結果です（遅れや運転見合わせは反映していません）。
+      </p>
+    );
   }
 
   if (!data.delayApplied) {

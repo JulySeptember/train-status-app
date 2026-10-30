@@ -203,7 +203,7 @@
         },
         "/api/journeys": {
             "get": {
-                "description": "Search journeys between two stations. Returns the earliest journey for each number of transfers, plus journeys on later trains (earlier trains with arriveBy), up to 4 in total.\nJourneys are sorted by arrival time (by departure time, latest first, with arriveBy).\nStations with the same name on different lines (e.g. Shinjuku) are treated as one station.\nTimes are on the current service day (before 03:00 belongs to the previous day).\nCurrent delays (per railway and direction, within the next hour) are added to the times, and suspended railways are avoided.\nIf the realtime status cannot be fetched, the timetable is used as is and delayApplied is false.\nWith realtime=false, delays and suspensions are ignored and the timetable is used as is.",
+                "description": "Search journeys between two stations. Returns the earliest journey for each number of transfers, plus journeys on later trains (earlier trains with arriveBy), up to 4 in total.\nJourneys are sorted by arrival time (by departure time, latest first, with arriveBy).\nStations with the same name on different lines (e.g. Shinjuku) are treated as one station.\nTimes are on the current service day (before 03:00 belongs to the previous day).\nIf it is before 03:00 now and a time at or after 03:00 is given, the time is on the next service day (from this morning): nextServiceDay is true, and delays and suspensions are not applied (delayApplied is false).\nCurrent delays (per railway and direction, within the next hour) are added to the times, and suspended railways are avoided.\nIf the realtime status cannot be fetched, the timetable is used as is and delayApplied is false.\nWith realtime=false, delays and suspensions are ignored and the timetable is used as is.",
                 "produces": [
                     "application/json"
                 ],
@@ -1705,6 +1705,10 @@
                     "items": {
                         "$ref": "#/definitions/service.Journey"
                     }
+                },
+                "nextServiceDay": {
+                    "description": "現在が3時前で3時以降の時刻を指定したため、今の運行日ではなく、その朝からの運行日（翌運行日）の時刻表で探したか。\n先の運行日なので遅れと見合わせは反映せず、delayApplied は false",
+                    "type": "boolean"
                 },
                 "suspendedRailways": {
                     "description": "運転を見合わせているため使わなかった路線",
