@@ -487,6 +487,24 @@ test("経路検索: 運行状況を取れなかったら、時刻表どおりの
   await expect(page.getByText("乗り換え1回")).toBeVisible();
 });
 
+test("経路検索: 3時前に朝の時刻で探したら、その朝からの時刻表どおりの結果だと知らせる", async ({
+  page,
+  api,
+}) => {
+  api.set("/journeys", {
+    body: { ...journeySearch, delayApplied: false, nextServiceDay: true },
+  });
+
+  await page.goto(resultUrl);
+
+  await expect(
+    page.getByText(
+      "今日の朝からの時刻表どおりの結果です（遅れや運転見合わせは反映していません）。",
+    ),
+  ).toBeVisible();
+  await expect(page.getByText("運行状況を取得できなかったため")).toHaveCount(0);
+});
+
 test("経路検索: 検索に失敗したらエラーを出す", async ({ page, api }) => {
   api.set("/journeys", { status: 400, body: { error: "bad request" } });
 

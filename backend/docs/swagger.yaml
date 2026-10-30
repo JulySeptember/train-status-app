@@ -278,6 +278,11 @@ definitions:
         items:
           $ref: '#/definitions/service.Journey'
         type: array
+      nextServiceDay:
+        description: |-
+          現在が3時前で3時以降の時刻を指定したため、今の運行日ではなく、その朝からの運行日（翌運行日）の時刻表で探したか。
+          先の運行日なので遅れと見合わせは反映せず、delayApplied は false
+        type: boolean
       suspendedRailways:
         description: 運転を見合わせているため使わなかった路線
         items:

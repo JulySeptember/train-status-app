@@ -88,9 +88,18 @@ type trainRef struct {
 	trainNumber string
 }
 
+// Option は New の設定。
+type Option func(*Service)
+
+// WithClock は、現在時刻を返す関数を差し替える（ほかのパッケージのテストで時刻を固定するため）。
+func WithClock(now func() time.Time) Option {
+	return func(s *Service) { s.now = now }
+}
+
 func New(
 	c TrainClient,
 	a *assets.Loader,
+	opts ...Option,
 ) *Service {
 	routes := route.New(
 		a.TrainTimetables(),
@@ -110,6 +119,10 @@ func New(
 		routes:           routes,
 		stationIndex:     station.New(a.Stations()),
 		now:              time.Now,
+	}
+
+	for _, opt := range opts {
+		opt(s)
 	}
 
 	s.groupWalks = groupWalks(a.Stations(), s.stationGroups)
@@ -933,6 +946,10 @@ type JourneySearch struct {
 	// 遅れと運転見合わせを反映したか。運行状況を取得できなかったときは false で、時刻表どおりに探す
 	DelayApplied bool `json:"delayApplied"`
 
+	// 現在が3時前で3時以降の時刻を指定したため、今の運行日ではなく、その朝からの運行日（翌運行日）の時刻表で探したか。
+	// 先の運行日なので遅れと見合わせは反映せず、delayApplied は false
+	NextServiceDay bool `json:"nextServiceDay,omitempty"`
+
 	// 運転を見合わせているため使わなかった路線
 	SuspendedRailways []Railway `json:"suspendedRailways"`
 }
@@ -1022,6 +1039,8 @@ type AlightGuide struct {
 // （三田線の春日を指定しても、大江戸線の春日から乗る経路を返す）。
 // DepartAt と ArriveBy（"HH:MM"）はどちらか一方だけ指定でき、どちらも無ければ現在時刻に出発する。
 // 時刻は現在の運行日のものとして扱う（3時前は前日の運行日。例: 23時台に "00:30" を指定すると、その夜の 0:30）。
+// ただし現在が3時前で、3時以降の時刻を指定したときは、その朝からの運行日の時刻として扱い、遅れと見合わせは反映しない
+// （例: 土曜の 1:00 に "07:00" を指定すると、金曜の平日ダイヤではなく、土曜の土休日ダイヤの 7:00）。
 type JourneyQuery struct {
 	From string
 	To   string
@@ -1095,7 +1114,6 @@ func (s *Service) SearchJourneys(
 		From:         from,
 		To:           to,
 		Walk:         walk,
-		Calendars:    calendar.Calendars(now),
 		MaxTransfers: q.MaxTransfers,
 		Avoid:        slices.Clone(q.Avoid),
 		Count:        journeyCount,
@@ -1121,11 +1139,22 @@ func (s *Service) SearchJourneys(
 		rq.Time = serviceDayMinutes(now)
 	}
 
+	// 3時前（前日の運行日の終電のころ）に3時以降の時刻を指定したら、前日のもう過ぎた時刻ではなく、
+	// その日の朝からの運行日として探す。先の運行日なので、今の遅れと見合わせは反映しない
+	nextDay := serviceDayMinutes(now) >= 24*60 && rq.Time < 24*60
+
+	day := now
+	if nextDay {
+		day = calendar.ServiceDate(now).AddDate(0, 0, 1).Add(calendar.ServiceDayStartHour * time.Hour)
+	}
+	rq.Calendars = calendar.Calendars(day)
+
 	result := &JourneySearch{
+		NextServiceDay:    nextDay,
 		SuspendedRailways: []Railway{},
 	}
 
-	if !q.TimetableOnly {
+	if !q.TimetableOnly && !nextDay {
 		result.DelayApplied = s.applyRealtime(ctx, &rq, result, now)
 	}
 
@@ -1199,6 +1228,7 @@ func (s *Service) applyRealtime(
 	}
 
 	rq.Delays = conds.delays
+	rq.DelayFrom = serviceDayMinutes(now) - delayLookbackMinutes
 	rq.DelayUntil = serviceDayMinutes(now) + delayWindowMinutes
 
 	for _, id := range conds.suspended {

@@ -156,6 +156,9 @@ export interface JourneySearch {
   journeys: Journey[];
   // 運行状況を取得できなかったときは false で、時刻表どおりの結果になる
   delayApplied: boolean;
+  // 現在が3時前で3時以降の時刻を指定したため、その朝からの運行日（翌運行日）の時刻表で探したか。
+  // 先の運行日なので遅れと見合わせは反映しない（delayApplied は false）
+  nextServiceDay?: boolean;
   // 運転を見合わせているため使わなかった路線
   suspendedRailways: Railway[];
 }

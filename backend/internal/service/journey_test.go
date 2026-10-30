@@ -49,11 +49,11 @@ func newJourneyServiceWith(t *testing.T, c *mockClient) *Service {
 	return s
 }
 
-// stationDepartures は、journeyNow の運行日の駅時刻表の発車時刻を、駅・列車ID ごとに返す。
+// stationDepartures は、時刻 at の運行日の駅時刻表の発車時刻を、駅・列車ID ごとに返す。
 // 大江戸線の都庁前は、環状部を回って光が丘方面へ続ける列車が2回発車するので、時刻を全部持つ。
-func stationDepartures(s *Service) map[[2]string][]string {
+func stationDepartures(s *Service, at time.Time) map[[2]string][]string {
 
-	calendars := calendar.Calendars(journeyNow)
+	calendars := calendar.Calendars(at)
 
 	departures := make(map[[2]string][]string)
 	for _, tt := range s.assets.StationTimetables() {
@@ -71,12 +71,18 @@ func stationDepartures(s *Service) map[[2]string][]string {
 	return departures
 }
 
-// assertTimetable は、経路の各区間の乗車時刻が駅時刻表どおりで、
+// assertTimetable は、経路の各区間の乗車時刻が journeyNow の運行日の駅時刻表どおりで、
 // 区間どうしがつながっていることを確かめる。
 func assertTimetable(t *testing.T, s *Service, journeys []Journey) {
 	t.Helper()
+	assertTimetableOn(t, s, journeyNow, journeys)
+}
 
-	departures := stationDepartures(s)
+// assertTimetableOn は assertTimetable を、時刻 at の運行日の駅時刻表で確かめる。
+func assertTimetableOn(t *testing.T, s *Service, at time.Time, journeys []Journey) {
+	t.Helper()
+
+	departures := stationDepartures(s, at)
 
 	for _, j := range journeys {
 
@@ -138,7 +144,7 @@ func TestSearchJourneys(t *testing.T) {
 
 	s := newJourneyService(t)
 
-	departures := stationDepartures(s)
+	departures := stationDepartures(s, journeyNow)
 
 	tests := []struct {
 		name     string
@@ -347,6 +353,79 @@ func TestSearchJourneysAfterMidnight(t *testing.T) {
 	if len(got.Journeys) != 0 {
 		t.Errorf("got %d journeys after the last train", len(got.Journeys))
 	}
+}
+
+// 3時前に3時以降の時刻を指定したら、前日の運行日の過ぎた時刻ではなく、その朝からの運行日で探す。
+// 先の運行日なので、今の遅れと見合わせは反映しない
+func TestSearchJourneysBeforeServiceDayStart(t *testing.T) {
+
+	// 2026-10-10（土）1:00。運行日は金曜（平日ダイヤ）
+	now := time.Date(2026, 10, 10, 1, 0, 0, 0, journeyNow.Location())
+	saturday := time.Date(2026, 10, 10, 12, 0, 0, 0, journeyNow.Location())
+
+	s := newJourneyServiceWith(t, &mockClient{
+		trainLocations: mitaDelayed(300),
+		trainStatus: []model.TrainStatus{
+			{Railway: mitaRailway, TrainInformationText: model.LocalizedString{Ja: "三田線は、人身事故の影響で、運転を見合わせています。"}},
+		},
+	})
+	s.now = func() time.Time { return now }
+
+	for _, q := range []JourneyQuery{
+		{From: kasugaMita, To: mitaMita, DepartAt: "07:00", MaxTransfers: route.DefaultMaxTransfers},
+		{From: kasugaMita, To: mitaMita, ArriveBy: "07:30", MaxTransfers: route.DefaultMaxTransfers},
+	} {
+		got, err := s.SearchJourneys(context.Background(), q)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if !got.NextServiceDay || got.DelayApplied || len(got.SuspendedRailways) != 0 {
+			t.Errorf("%+v: nextServiceDay = %v, delayApplied = %v, suspended = %v", q, got.NextServiceDay, got.DelayApplied, got.SuspendedRailways)
+		}
+
+		// 見合わせを反映しないので、三田線で行ける
+		if len(got.Journeys) == 0 || got.Journeys[0].Legs[0].Railway != mitaRailway {
+			t.Fatalf("%+v: journeys = %+v", q, got.Journeys)
+		}
+
+		// 土曜の土休日ダイヤの列車に乗る
+		assertTimetableOn(t, s, saturday, got.Journeys)
+	}
+
+	// 3時前の時刻は、今の運行日（金曜の夜）の終電のころ。遅れは反映する
+	got, err := s.SearchJourneys(context.Background(), JourneyQuery{From: kasugaMita, To: mitaMita, DepartAt: "00:30"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.DelayApplied || got.NextServiceDay {
+		t.Errorf("00:30: delayApplied = %v, nextServiceDay = %v", got.DelayApplied, got.NextServiceDay)
+	}
+}
+
+// 始発駅を現在の delayLookbackMinutes より前に出た列車には、今の遅れを足さない
+func TestSearchJourneysPastNoDelay(t *testing.T) {
+
+	s := newJourneyServiceWith(t, &mockClient{trainLocations: mitaDelayed(300)})
+
+	got, err := s.SearchJourneys(context.Background(), JourneyQuery{From: kasugaMita, To: mitaMita, DepartAt: "06:00"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !got.DelayApplied || len(got.Journeys) == 0 {
+		t.Fatalf("delayApplied = %v, journeys = %d", got.DelayApplied, len(got.Journeys))
+	}
+
+	for _, j := range got.Journeys {
+		for _, l := range j.Legs {
+			if l.DelayMinutes != 0 {
+				t.Errorf("%s departs %s with delay %d", l.Train, l.DepartureTime, l.DelayMinutes)
+			}
+		}
+	}
+
+	assertTimetable(t, s, got.Journeys)
 }
 
 func TestSearchJourneysInvalid(t *testing.T) {
