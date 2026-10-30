@@ -111,6 +111,7 @@ func (t *Tools) Definitions() []Tool {
 				"legs の through が true の区間は、前の区間の列車に乗ったまま直通運転で入る（乗り換えではない）。" +
 				"legs の alightGuide は、その区間で降りる駅の中で、次に乗るホームか乗り換えに使う改札まで歩く案内（何両目付近に乗ると近いか・降りて右左どちらへ歩くか・使う設備・距離）。" +
 				"walkBeforeMinutes・walkAfterMinutes は、出発駅から乗る駅まで・降りる駅から到着駅まで歩く時間（分。時刻に含まれる）。" +
+				"午前3時前に3時以降の時刻を指定すると、その朝からの運行日（翌日）の時刻表で探し、nextServiceDay が true になる。このときは遅れと運転見合わせを反映していない（時刻表どおり）。" +
 				"10分以上遅れている路線が関わるときは、その路線を使う経路と避けた経路をアプリが比べ、comparison に返す（faster は到着の早い方。到着時刻の指定では出発の遅い方）。",
 			Parameters: json.RawMessage(`{
 				"type": "object",
@@ -328,7 +329,10 @@ const bigDelayMinutes = 10
 
 // 経路の結果を、AI に必要な項目に絞った形
 type routeResult struct {
-	DelayApplied      bool           `json:"delayApplied"`
+	DelayApplied bool `json:"delayApplied"`
+
+	// 現在が3時前で3時以降の時刻を指定したため、その朝からの運行日（翌運行日）の時刻表で探したか
+	NextServiceDay    bool           `json:"nextServiceDay,omitempty"`
 	SuspendedRailways []string       `json:"suspendedRailways"`
 	Journeys          []routeJourney `json:"journeys"`
 
@@ -431,6 +435,7 @@ func (t *Tools) searchRoute(ctx context.Context, raw json.RawMessage) (ToolOutpu
 
 	result := routeResult{
 		DelayApplied:      search.DelayApplied,
+		NextServiceDay:    search.NextServiceDay,
 		SuspendedRailways: []string{},
 		Journeys:          trimJourneys(search.Journeys),
 	}

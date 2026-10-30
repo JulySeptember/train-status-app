@@ -393,13 +393,28 @@ func TestSearchJourneysBeforeServiceDayStart(t *testing.T) {
 		assertTimetableOn(t, s, saturday, got.Journeys)
 	}
 
-	// 3時前の時刻は、今の運行日（金曜の夜）の終電のころ。遅れは反映する
-	got, err := s.SearchJourneys(context.Background(), JourneyQuery{From: kasugaMita, To: mitaMita, DepartAt: "00:30"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !got.DelayApplied || got.NextServiceDay {
-		t.Errorf("00:30: delayApplied = %v, nextServiceDay = %v", got.DelayApplied, got.NextServiceDay)
+	// 境目: 3時前の時刻は今の運行日（金曜の夜）の終電のころで、遅れを反映する。3時以降は翌運行日。
+	// 3時を過ぎたら、指定した時刻はいつも今の運行日
+	for _, tt := range []struct {
+		now  time.Time
+		at   string
+		next bool
+	}{
+		{now, "00:30", false},
+		{now, "02:59", false},
+		{now, "03:00", true},
+		{now, "23:30", true},
+		{time.Date(2026, 10, 10, 2, 59, 0, 0, journeyNow.Location()), "03:00", true},
+		{time.Date(2026, 10, 10, 3, 0, 0, 0, journeyNow.Location()), "03:00", false},
+	} {
+		s.now = func() time.Time { return tt.now }
+		got, err := s.SearchJourneys(context.Background(), JourneyQuery{From: kasugaMita, To: mitaMita, DepartAt: tt.at})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.NextServiceDay != tt.next || got.DelayApplied == tt.next {
+			t.Errorf("now %s, %s: nextServiceDay = %v, delayApplied = %v", tt.now.Format("15:04"), tt.at, got.NextServiceDay, got.DelayApplied)
+		}
 	}
 }
 
