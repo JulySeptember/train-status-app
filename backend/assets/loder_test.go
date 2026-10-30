@@ -234,6 +234,20 @@ func TestLoadExtra(t *testing.T) {
 		}
 	})
 
+	t.Run("without timetables", func(t *testing.T) {
+		l, err := newFromFS(fsys, WithExtra(), WithoutTimetables())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if !l.HasExtra() || len(l.Railways()) != len(base.Railways())+1 || len(l.Stations()) != len(base.Stations())+1 {
+			t.Fatal("expected railways and stations with extra data")
+		}
+		if len(l.StationTimetables()) != 0 || l.TrainTimetables() == nil || len(l.TrainTimetables().Trains) != 0 {
+			t.Fatal("expected no timetables")
+		}
+	})
+
 	t.Run("no extra files", func(t *testing.T) {
 		l, err := newFromFS(testFS(t, nil), WithExtra())
 		if err != nil {

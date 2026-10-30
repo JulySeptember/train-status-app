@@ -54,6 +54,12 @@ type Service struct {
 	// 路線ID → 路線名
 	railwayNames map[string]string
 
+	// 駅ID → assets.Stations() の添字
+	stationByID map[string]int
+
+	// 駅ID → その駅の assets.StationTimetables() の添字（assets の順）
+	stationTimetables map[string][]int
+
 	// 事業者（odpt.Operator:<Name> の Name）→ 路線ID（assets の順）
 	operatorRailways map[string][]string
 
@@ -77,6 +83,10 @@ type Service struct {
 	// 経路検索に反映する運行状況のキャッシュ
 	realtime realtimeCache
 
+	// 運行情報（GET /api/status）と、事業者ごとの列車位置のキャッシュ
+	statusCache   ttlCache[client.Result[model.TrainStatus]]
+	locationCache ttlCache[[]model.TrainLocation]
+
 	// 駅の中の案内の索引。assets/extra に案内の表が無ければ空
 	guides guideIndex
 
@@ -99,17 +109,19 @@ func New(
 	)
 
 	s := &Service{
-		client:           c,
-		assets:           a,
-		trains:           indexTrains(a.StationTimetables()),
-		stationNames:     indexStationNames(a.Stations(), a.DestinationStations()),
-		trainTypeNames:   indexTrainTypeNames(a.TrainTypes()),
-		railwayNames:     indexRailwayNames(a.Railways()),
-		operatorRailways: indexOperatorRailways(a.Railways()),
-		stationGroups:    stationGroups(a.Stations(), routes.HasStation),
-		routes:           routes,
-		stationIndex:     station.New(a.Stations()),
-		now:              time.Now,
+		client:            c,
+		assets:            a,
+		trains:            indexTrains(a.StationTimetables()),
+		stationNames:      indexStationNames(a.Stations(), a.DestinationStations()),
+		trainTypeNames:    indexTrainTypeNames(a.TrainTypes()),
+		railwayNames:      indexRailwayNames(a.Railways()),
+		stationByID:       indexStations(a.Stations()),
+		stationTimetables: indexStationTimetables(a.StationTimetables()),
+		operatorRailways:  indexOperatorRailways(a.Railways()),
+		stationGroups:     stationGroups(a.Stations(), routes.HasStation),
+		routes:            routes,
+		stationIndex:      station.New(a.Stations()),
+		now:               time.Now,
 	}
 
 	s.groupWalks = groupWalks(a.Stations(), s.stationGroups)
@@ -121,6 +133,22 @@ func New(
 	s.warnUnknownNames()
 
 	return s
+}
+
+// NewConditions は、運行状況（GetRailwayConditions）と路線名（HasRailway・RailwayName）だけを使う Service を作る。
+// 通知用の Lambda（5分ごとにコールドスタートする）で、経路探索のエンジンや時刻表の索引を作らないため。
+// a は assets.WithoutTimetables() で読み込んだものでよい。ほかのメソッドは呼ばない
+func NewConditions(
+	c TrainClient,
+	a *assets.Loader,
+) *Service {
+	return &Service{
+		client:           c,
+		assets:           a,
+		railwayNames:     indexRailwayNames(a.Railways()),
+		operatorRailways: indexOperatorRailways(a.Railways()),
+		now:              time.Now,
+	}
 }
 
 func indexStationNames(
@@ -160,6 +188,32 @@ func indexRailwayNames(
 
 	for _, r := range railways {
 		result[r.SameAs] = r.RailwayTitle.Ja
+	}
+
+	return result
+}
+
+func indexStations(
+	stations []model.Station,
+) map[string]int {
+
+	result := make(map[string]int, len(stations))
+
+	for i, st := range stations {
+		result[st.SameAs] = i
+	}
+
+	return result
+}
+
+func indexStationTimetables(
+	timetables []model.StationTimetable,
+) map[string][]int {
+
+	result := make(map[string][]int)
+
+	for i, tt := range timetables {
+		result[tt.Station] = append(result[tt.Station], i)
 	}
 
 	return result
@@ -300,7 +354,7 @@ func (s *Service) GetTrainStatus(
 	ctx context.Context,
 ) ([]TrainStatus, error) {
 
-	statuses, err := s.client.GetTrainStatus(ctx)
+	statuses, err := s.statusCache.get(ctx, "", statusTTL, s.now(), s.client.GetTrainStatus)
 	if err != nil {
 		if errors.Is(err, client.ErrExternalAPI) {
 			return nil, ErrExternalAPI
@@ -666,31 +720,13 @@ func (s *Service) GetStationDetail(
 	stationID string,
 ) (*StationDetail, error) {
 
-	stations := s.assets.Stations()
-	timetables := s.assets.StationTimetables()
-
-	stationMap := associateBy(
-		stations,
-		func(st model.Station) string {
-			return st.SameAs
-		},
-	)
-
-	station, ok := stationMap[stationID]
+	i, ok := s.stationByID[stationID]
 	if !ok {
 		return nil, ErrStationNotFound
 	}
+	station := s.assets.Stations()[i]
 
-	stationTables := make([]model.StationTimetable, 0)
-
-	for _, tt := range timetables {
-		if tt.Station == stationID {
-			stationTables = append(
-				stationTables,
-				tt,
-			)
-		}
-	}
+	timetables := s.assets.StationTimetables()
 
 	detail := &StationDetail{
 		ID:                     station.SameAs,
@@ -703,8 +739,9 @@ func (s *Service) GetStationDetail(
 
 	groups := make(map[string]*DirectionTimetable)
 
-	for _, tt := range stationTables {
+	for _, j := range s.stationTimetables[stationID] {
 
+		tt := timetables[j]
 		key := tt.Calendar + "|" + tt.RailDirection
 
 		group, ok := groups[key]
@@ -828,7 +865,10 @@ func (s *Service) GetTrainLocation(
 	}
 
 	// 列車の事業者にだけ問い合わせる
-	trains, err := s.client.GetOperatorTrainLocations(ctx, operatorOf(trainID))
+	operator := operatorOf(trainID)
+	trains, err := s.locationCache.get(ctx, operator, trainLocationTTL, s.now(), func(ctx context.Context) ([]model.TrainLocation, error) {
+		return s.client.GetOperatorTrainLocations(ctx, operator)
+	})
 	if err != nil {
 		switch {
 		case errors.Is(err, client.ErrNoSource):
@@ -839,20 +879,6 @@ func (s *Service) GetTrainLocation(
 		}
 		return nil, err
 	}
-
-	stationMap := associateBy(
-		s.assets.Stations(),
-		func(st model.Station) string {
-			return st.SameAs
-		},
-	)
-
-	railwayMap := associateBy(
-		s.assets.Railways(),
-		func(r model.Railway) string {
-			return r.SameAs
-		},
-	)
 
 	for _, train := range trains {
 
@@ -875,9 +901,7 @@ func (s *Service) GetTrainLocation(
 			Available:      true,
 		}
 
-		if railway, ok := railwayMap[train.Railway]; ok {
-			item.Railway = railway.RailwayTitle.Ja
-		}
+		item.Railway = s.railwayNames[train.Railway]
 
 		if len(train.DestinationStation) > 0 {
 			item.Destination = s.stationName(train.DestinationStation[0])
@@ -885,21 +909,13 @@ func (s *Service) GetTrainLocation(
 
 		if train.FromStation != nil {
 			item.FromStationID = *train.FromStation
-			if station, ok := stationMap[*train.FromStation]; ok {
-				item.FromStation = station.StationTitle.Ja
-			} else if name, ok := s.stationNames[*train.FromStation]; ok {
-				// 都外の駅（行先の駅のデータにあれば）
-				item.FromStation = name
-			}
+			// 都外の駅も、行先の駅のデータにあれば引ける
+			item.FromStation = s.stationNames[*train.FromStation]
 		}
 
 		if train.ToStation != nil {
 			item.ToStationID = *train.ToStation
-			if station, ok := stationMap[*train.ToStation]; ok {
-				item.ToStation = station.StationTitle.Ja
-			} else if name, ok := s.stationNames[*train.ToStation]; ok {
-				item.ToStation = name
-			}
+			item.ToStation = s.stationNames[*train.ToStation]
 		}
 
 		return item, nil

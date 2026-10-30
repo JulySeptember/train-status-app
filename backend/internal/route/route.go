@@ -146,6 +146,9 @@ type Engine struct {
 	stations   map[string]int32
 	stationOf  []int32
 
+	// 路線・方向の ID → Strings の番号（Query.Avoid・Query.Delays を引くため）
+	lines map[string]int32
+
 	transfers []Transfer
 
 	// 直通運転で1本の列車として走る列車の並び（throughChains）と、そのどれかに入っている列車
@@ -170,6 +173,7 @@ func New(tt *slim.TrainTimetables, transfers []Transfer, cfg Config) *Engine {
 		cfg:       cfg,
 		stations:  make(map[string]int32),
 		stationOf: make([]int32, len(tt.Strings)),
+		lines:     make(map[string]int32),
 		transfers: transfers,
 		networks:  make(map[string]*networkPair),
 	}
@@ -179,6 +183,8 @@ func New(tt *slim.TrainTimetables, transfers []Transfer, cfg Config) *Engine {
 	}
 
 	for _, train := range tt.Trains {
+		e.lines[tt.String(train.Railway)] = train.Railway
+		e.lines[tt.String(train.RailDirection)] = train.RailDirection
 		for _, stop := range train.Stops {
 			e.station(tt.String(stop.Station))
 			e.stationOf[stop.Station] = e.stations[tt.String(stop.Station)]
@@ -449,23 +455,18 @@ func (e *Engine) conditions(q Query) *conditions {
 		}
 	}
 
-	index := make(map[string]int32, len(e.tt.Strings))
-	for i, s := range e.tt.Strings {
-		index[s] = int32(i)
-	}
-
 	for _, id := range q.Avoid {
-		if i, ok := index[id]; ok {
+		if i, ok := e.lines[id]; ok {
 			c.avoid[i] = true
 		}
 	}
 
 	for _, d := range q.Delays {
-		railway, ok := index[d.Railway]
+		railway, ok := e.lines[d.Railway]
 		if !ok || d.Minutes <= 0 {
 			continue
 		}
-		direction, ok := index[d.RailDirection]
+		direction, ok := e.lines[d.RailDirection]
 		if !ok {
 			continue
 		}
