@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useMutationState } from "@tanstack/react-query";
 import {
   CircleCheck,
   Info,
@@ -32,9 +32,15 @@ import {
   MAX_INPUT_CHARS,
   type ChatLocationState,
 } from "@/lib/chat";
-
-// 会話は sessionStorage に置き、駅のページなどへ移動して戻っても続けられるようにする
-const STORAGE_KEY = "chatEntries";
+import {
+  addAnswer,
+  addQuestion,
+  dropQuestion,
+  resetChat,
+  setChatInput,
+  useChatState,
+  type ChatEntry,
+} from "@/lib/chatStore";
 
 // 上限に達したときなど、AI の代わりに通常の検索を案内するエラー
 const FALLBACK_CODES = [
@@ -44,32 +50,10 @@ const FALLBACK_CODES = [
   "timeout",
 ];
 
-type Entry =
-  | { role: "user"; text: string }
-  | {
-      role: "assistant";
-      text: string;
-      steps: ChatStep[];
-      journeys?: JourneySearch;
-    };
+// 回答を待っている質問の mutation。画面を離れて戻っても、待っていることを表示できるようにキーを付ける
+const CHAT_MUTATION_KEY = ["chat"];
 
-function loadEntries(): Entry[] {
-  try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
-    const value: unknown = raw ? JSON.parse(raw) : [];
-    return Array.isArray(value) ? (value as Entry[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveEntries(entries: Entry[]) {
-  try {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
-  } catch {
-    // 保存できなくても、このページを開いている間は会話を続けられる
-  }
-}
+type ChatVariables = { history: ChatMessage[]; generation: number };
 
 function Steps({ steps }: { steps: ChatStep[] }) {
   if (steps.length === 0) {
@@ -110,7 +94,7 @@ function JourneySearchLink({ journeys }: { journeys: JourneySearch }) {
 function AssistantMessage({
   entry,
 }: {
-  entry: Extract<Entry, { role: "assistant" }>;
+  entry: Extract<ChatEntry, { role: "assistant" }>;
 }) {
   const journeys = entry.journeys;
 
@@ -171,26 +155,42 @@ function ChatErrorMessage({ error }: { error: Error }) {
 }
 
 export default function Chat() {
-  const [entries, setEntries] = useState<Entry[]>(loadEntries);
-  const [input, setInput] = useState("");
+  const { entries, generation, input } = useChatState();
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  const chat = useMutation<ChatResponse, Error, ChatMessage[]>({
-    mutationFn: api.chat,
+  // 回答の追加は、送るたびの callback ではなく useMutation の onSuccess・onError で行う。
+  // 送るたびの callback は、回答を待つ間に別の画面へ移る（アンマウントする）と呼ばれず、回答が捨てられるため
+  const chat = useMutation<ChatResponse, Error, ChatVariables>({
+    mutationKey: CHAT_MUTATION_KEY,
+    mutationFn: ({ history }) => api.chat(history),
+    onSuccess: (res, { generation }) => {
+      addAnswer(generation, {
+        role: "assistant",
+        text: res.reply,
+        steps: res.steps,
+        journeys: res.journeys,
+      });
+    },
+    onError: (_, { history, generation }) => {
+      // 答えられなかった質問は履歴から外し、入力欄に戻して送り直せるようにする
+      dropQuestion(generation, history[history.length - 1].text);
+    },
   });
 
-  useEffect(() => {
-    saveEntries(entries);
-  }, [entries]);
+  // 画面を離れて戻ったときも、この会話の質問の回答を待っていれば、待っている表示にし、続けて送らせない
+  const pending = useMutationState({
+    filters: { mutationKey: CHAT_MUTATION_KEY, status: "pending" },
+    select: (m) => (m.state.variables as ChatVariables).generation,
+  }).includes(generation);
 
   // 新しい発言・考え中の表示・エラーが出たら、そこまでスクロールする
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
-  }, [entries.length, chat.isPending, chat.isError]);
+  }, [entries.length, pending, chat.isError]);
 
   const send = (text: string) => {
     const question = text.trim();
-    if (!question || chat.isPending) {
+    if (!question || pending) {
       return;
     }
 
@@ -199,27 +199,7 @@ export default function Chat() {
       { role: "user" as const, text: question },
     ].slice(-MAX_HISTORY_MESSAGES);
 
-    setEntries((prev) => [...prev, { role: "user", text: question }]);
-    setInput("");
-
-    chat.mutate(history, {
-      onSuccess: (res) => {
-        setEntries((prev) => [
-          ...prev,
-          {
-            role: "assistant",
-            text: res.reply,
-            steps: res.steps,
-            journeys: res.journeys,
-          },
-        ]);
-      },
-      onError: () => {
-        // 答えられなかった質問は履歴から外し、入力欄に戻して送り直せるようにする
-        setEntries((prev) => prev.slice(0, -1));
-        setInput(question);
-      },
-    });
+    chat.mutate({ history, generation: addQuestion(question) });
   };
 
   // ホームで入力した質問は、この画面を開いたときに一度だけ送る。
@@ -242,8 +222,7 @@ export default function Chat() {
   }, [initialQuestion]);
 
   const reset = () => {
-    setEntries([]);
-    setInput("");
+    resetChat();
     chat.reset();
   };
 
@@ -299,7 +278,7 @@ export default function Chat() {
           ),
         )}
 
-        {chat.isPending && (
+        {pending && (
           <div className="flex items-center gap-2 rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground">
             <LoaderCircle size={16} className="animate-spin" />
             運行状況や時刻表を調べています（10秒ほどかかることがあります）
@@ -321,7 +300,7 @@ export default function Chat() {
         <div className="flex items-end gap-2">
           <Textarea
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => setChatInput(e.target.value)}
             onKeyDown={(e) => {
               // 日本語の変換を確定する Enter では送らない
               if (
@@ -342,7 +321,7 @@ export default function Chat() {
           <Button
             type="submit"
             size="icon-lg"
-            disabled={!input.trim() || chat.isPending}
+            disabled={!input.trim() || pending}
             aria-label="送信"
           >
             <SendHorizontal />

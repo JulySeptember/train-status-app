@@ -5,12 +5,18 @@ import { allStations, railways, statuses } from "./data.ts";
 // 画面の現在時刻（日本時間の平日の朝）。時刻表の「次発」や「本日」は、この時刻で決まる
 export const NOW = new Date("2026-10-19T08:00:00+09:00");
 
-type Reply = { status?: number; body?: unknown };
+type Reply = {
+  status?: number;
+  body?: unknown;
+  // 応答を返す前に待つ（回答を待つ間の画面を確かめるため）
+  wait?: Promise<unknown>;
+};
 
-// /api への GET に固定の応答を返す。登録していないパスへのリクエストは、テストの終わりに失敗にする
+// /api への GET（と post で登録した POST）に固定の応答を返す。登録していないパスへのリクエストは、テストの終わりに失敗にする
 // （モックの登録漏れや、画面が想定外の API を呼んだことに気づけるように）
 export class MockApi {
   private replies = new Map<string, Reply>();
+  private postReplies = new Map<string, Reply>();
 
   readonly unhandled: string[] = [];
 
@@ -33,6 +39,11 @@ export class MockApi {
     this.replies.set(path, reply);
   }
 
+  // POST の応答を登録する
+  post(path: string, reply: Reply) {
+    this.postReplies.set(path, reply);
+  }
+
   async install(page: Page) {
     await page.route(
       (url) => url.pathname.startsWith("/api/"),
@@ -41,13 +52,19 @@ export class MockApi {
         const url = new URL(request.url());
         const path = decodeURIComponent(url.pathname.slice("/api".length));
         const reply =
-          request.method() === "GET" ? this.replies.get(path) : undefined;
+          request.method() === "GET"
+            ? this.replies.get(path)
+            : request.method() === "POST"
+              ? this.postReplies.get(path)
+              : undefined;
 
         if (!reply) {
           this.unhandled.push(`${request.method()} ${path}`);
           await route.fulfill({ status: 404, json: { error: "not mocked" } });
           return;
         }
+
+        await reply.wait;
 
         await route.fulfill({
           status: reply.status ?? 200,
