@@ -155,7 +155,7 @@ function ChatErrorMessage({ error }: { error: Error }) {
 }
 
 export default function Chat() {
-  const { entries, generation, input } = useChatState();
+  const { entries, generation, input, error } = useChatState();
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // 回答の追加は、送るたびの callback ではなく useMutation の onSuccess・onError で行う。
@@ -171,9 +171,9 @@ export default function Chat() {
         journeys: res.journeys,
       });
     },
-    onError: (_, { history, generation }) => {
+    onError: (err, { history, generation }) => {
       // 答えられなかった質問は履歴から外し、入力欄に戻して送り直せるようにする
-      dropQuestion(generation, history[history.length - 1].text);
+      dropQuestion(generation, history[history.length - 1].text, err);
     },
   });
 
@@ -186,7 +186,7 @@ export default function Chat() {
   // 新しい発言・考え中の表示・エラーが出たら、そこまでスクロールする
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
-  }, [entries.length, pending, chat.isError]);
+  }, [entries.length, pending, error]);
 
   const send = (text: string) => {
     const question = text.trim();
@@ -216,6 +216,11 @@ export default function Chat() {
     }
     sentInitial.current = true;
     navigate(location.pathname, { replace: true, state: null });
+    // 前の質問の回答を待っていたら、送らずに入力欄に入れる（捨てない）
+    if (pending) {
+      setChatInput(initialQuestion);
+      return;
+    }
     send(initialQuestion);
     // send は描画ごとに作り直されるが、ここでは最初の1回だけ呼べばよい
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -285,7 +290,7 @@ export default function Chat() {
           </div>
         )}
 
-        {chat.isError && <ChatErrorMessage error={chat.error} />}
+        {error && <ChatErrorMessage error={error} />}
 
         <div ref={bottomRef} />
       </div>

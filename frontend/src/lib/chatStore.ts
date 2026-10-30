@@ -22,6 +22,9 @@ type ChatState = {
 
   // 入力欄の文字。答えられなかった質問もここに戻す（画面を離れている間に失敗したときも）
   input: string;
+
+  // 最後の質問に答えられなかった理由。画面を離れている間に失敗しても、戻ったときに出す。保存はしない
+  error: Error | null;
 };
 
 const STORAGE_KEY = "chatEntries";
@@ -40,10 +43,12 @@ function load(): ChatState {
   // 履歴から外して入力欄に戻す。残すと user の発言が2つ続いた履歴を送ってしまう
   const last = entries.at(-1);
   if (last?.role === "user") {
-    return { entries: entries.slice(0, -1), generation: 0, input: last.text };
+    entries = entries.slice(0, -1);
+    save(entries);
+    return { entries, generation: 0, input: last.text, error: null };
   }
 
-  return { entries, generation: 0, input: "" };
+  return { entries, generation: 0, input: "", error: null };
 }
 
 let state: ChatState | undefined;
@@ -54,16 +59,19 @@ function current(): ChatState {
   return state;
 }
 
-function update(next: ChatState) {
-  const saved = state?.entries === next.entries;
-  state = next;
-  if (!saved) {
-    try {
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next.entries));
-    } catch {
-      // 保存できなくても、ページを開いている間は会話を続けられる
-    }
+function save(entries: ChatEntry[]) {
+  try {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+  } catch {
+    // 保存できなくても、ページを開いている間は会話を続けられる
   }
+}
+
+function update(next: ChatState) {
+  if (state?.entries !== next.entries) {
+    save(next.entries);
+  }
+  state = next;
   listeners.forEach((l) => l());
 }
 
@@ -85,7 +93,12 @@ export function setChatInput(input: string) {
 // addQuestion は質問を会話に足して入力欄を空にし、その会話の generation を返す
 export function addQuestion(text: string): number {
   const s = current();
-  update({ ...s, entries: [...s.entries, { role: "user", text }], input: "" });
+  update({
+    ...s,
+    entries: [...s.entries, { role: "user", text }],
+    input: "",
+    error: null,
+  });
   return s.generation;
 }
 
@@ -101,17 +114,17 @@ export function addAnswer(
   update({ ...s, entries: [...s.entries, entry] });
 }
 
-// dropQuestion は、答えられなかった質問を履歴から外し、入力欄に戻して送り直せるようにする
-export function dropQuestion(generation: number, text: string) {
+// dropQuestion は、答えられなかった質問を履歴から外し、入力欄に戻して送り直せるようにする。理由は error に置く
+export function dropQuestion(generation: number, text: string, error: Error) {
   const s = current();
   const last = s.entries.at(-1);
   if (s.generation !== generation || last?.role !== "user") {
     return;
   }
-  update({ ...s, entries: s.entries.slice(0, -1), input: text });
+  update({ ...s, entries: s.entries.slice(0, -1), input: text, error });
 }
 
 export function resetChat() {
   const s = current();
-  update({ entries: [], generation: s.generation + 1, input: "" });
+  update({ entries: [], generation: s.generation + 1, input: "", error: null });
 }
