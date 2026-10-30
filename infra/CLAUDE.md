@@ -31,7 +31,7 @@ main への push が続くと、待機中の実行は新しいものに置き換
 - `make tf-main-plan` / `tf-main-apply`: `main` を `env/dev.tfvars` で適用する。`tf-*-apply` / `destroy` は `-auto-approve` 付き
 - `bootstrap`: tfstate 用 S3・DynamoDB、Lambda アーティファクト用 S3、GitHub Actions 用の OIDC プロバイダと IAM ロール（PR の plan 用・main のデプロイ用）、Lambda の実行ロール（`lambda_role.tf`）とそれに付けるポリシー（`lambda_ai.tf`・`lambda_odpt.tf`）を作る。state はローカルにあるので、手元から `make tf-bootstrap-apply` で適用する。bootstrap を変えた PR は、マージ（CD の `terraform apply`）の前に bootstrap を適用する
 - Lambda に権限を足すときは、`bootstrap` にポリシーを作って `aws_iam_role_policy_attachment.lambda` に足す。deploy 用ロールには、Lambda の実行ロールの `iam:PassRole` 以外の IAM の権限を与えない（信頼ポリシーやポリシーを変えられると、SSM の API キーを読めるロールを引き受けたり、権限を広げたりできる）
-- plan・deploy 用ロールは `ReadOnlyAccess` を土台にしているので、読ませたくないもの（SSM の API キー、DynamoDB の利用者のデータ、plan では `assets-extra/*` の他社データ）は `github_oidc.tf` で明示的に Deny している。アプリのテーブルや読ませたくないデータを足したら、そこにも足す。deploy 用ロールには、アーティファクト用バケットへは `lambda/bootstrap.zip` を置くことだけを、アプリのテーブルへは Terraform がテーブルを管理する操作だけを許している
+- plan・deploy 用ロールは `ReadOnlyAccess` を土台にしているので、読ませたくないもの（SSM の API キー、DynamoDB の利用者のデータ、plan では `assets-extra/*` の他社データ）は `github_oidc.tf` で明示的に Deny している。アプリのテーブルや読ませたくないデータを足したら、そこにも足す。Deny は多層防御で、完全には守れない（plan でも `lambda/bootstrap.zip` に埋め込まれた他社データは読める。deploy は `lambda:*` で関数のコードを差し替えれば実行ロールの権限で読める）。deploy 用ロールには、アーティファクト用バケットへは `lambda/bootstrap.zip` を置くことだけを、アプリのテーブルへは Terraform がテーブルを管理する操作だけを許している
 
 ## Ruleset
 

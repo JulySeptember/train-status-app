@@ -277,6 +277,17 @@ data "aws_iam_policy_document" "github_deny_app_data" {
     resources = concat(local.app_table_arns, [for arn in local.app_table_arns : "${arn}/index/*"])
   }
 
+  # deploy は UpdateTable で Streams を有効にできるので、ストリームから書き込まれた項目を読むことも拒否する
+  statement {
+    sid    = "DenyReadAppTableStreams"
+    effect = "Deny"
+    actions = [
+      "dynamodb:GetShardIterator",
+      "dynamodb:GetRecords",
+    ]
+    resources = [for arn in local.app_table_arns : "${arn}/stream/*"]
+  }
+
   # users テーブルは deletion_protection_enabled で守っているが、UpdateTable で外せるので、削除そのものも拒否する
   statement {
     sid       = "DenyDeleteUsersTable"
@@ -298,7 +309,10 @@ resource "aws_iam_role_policy" "github_deny_app_data" {
 }
 
 # 都営以外の事業者のデータ（ODPT のライセンスの第8条4項で第三者への公開が禁じられている）は、
-# deploy の backend-extra-download だけが読む。plan に要るのは tfstate と lambda/bootstrap.zip なので、plan では拒否する
+# deploy の backend-extra-download だけが読む。plan に要るのは tfstate と lambda/bootstrap.zip なので、plan では拒否する。
+# ただし bootstrap.zip のバイナリ（と lambda:GetFunction が返すコードの URL）には他社データが埋め込まれていて、
+# plan の data "aws_s3_object"（HeadObject は s3:GetObject の権限）と Lambda の refresh に要るため、そちらは塞げない。
+# plan ロールを引き受けられるのがこのリポジトリに push できる人だけ（フォークの PR には ID トークンが出ない）であることが前提
 data "aws_iam_policy_document" "github_plan_deny_extra_assets" {
   statement {
     sid       = "DenyReadExtraAssets"
