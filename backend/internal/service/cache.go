@@ -85,6 +85,11 @@ func (c *ttlCache[T]) get(
 		return zero, err
 	}
 
+	// 取得の途中で呼び出し側が待てなくなったら、一部の事業者だけ取れた結果かもしれないので覚えない
+	if ctx.Err() != nil {
+		return value, nil
+	}
+
 	e.value, e.ok, e.at = value, true, now()
 	e.err = nil
 

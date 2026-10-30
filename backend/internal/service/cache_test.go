@@ -107,6 +107,27 @@ func TestTTLCacheCanceled(t *testing.T) {
 	}
 }
 
+// 取得の途中で呼び出し側がキャンセルしたら、取れた結果（一部の事業者だけかもしれない）を覚えない
+func TestTTLCacheCanceledDuringFetch(t *testing.T) {
+
+	var c ttlCache[int]
+	clock := func() time.Time { return journeyNow }
+
+	ctx, cancel := context.WithCancel(context.Background())
+	v, err := c.get(ctx, "", time.Minute, clock, func(context.Context) (int, error) {
+		cancel()
+		return 1, nil
+	})
+	if err != nil || v != 1 {
+		t.Fatalf("canceled = %d, %v", v, err)
+	}
+
+	v, err = c.get(context.Background(), "", time.Minute, clock, func(context.Context) (int, error) { return 2, nil })
+	if err != nil || v != 2 {
+		t.Fatalf("after cancel = %d, %v", v, err)
+	}
+}
+
 // 運行情報（GET /api/status）は statusTTL のあいだ使い回す
 func TestGetTrainStatusCache(t *testing.T) {
 
