@@ -273,6 +273,9 @@ data "aws_iam_policy_document" "github_deny_app_data" {
       "dynamodb:Query",
       "dynamodb:Scan",
       "dynamodb:PartiQLSelect",
+      # ReadOnlyAccess（v190）にあるほかの読み取り。AWS が ReadOnlyAccess に読み取りを足したら、ここも足す
+      "dynamodb:SearchVectors",
+      "dynamodb:ReadDataForReplication",
     ]
     resources = concat(local.app_table_arns, [for arn in local.app_table_arns : "${arn}/index/*"])
   }
