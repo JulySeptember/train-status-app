@@ -354,7 +354,7 @@ func (s *Service) GetTrainStatus(
 	ctx context.Context,
 ) ([]TrainStatus, error) {
 
-	statuses, err := s.statusCache.get(ctx, "", statusTTL, s.now(), s.client.GetTrainStatus)
+	statuses, err := s.statusCache.get(ctx, "", statusTTL, s.now, s.client.GetTrainStatus)
 	if err != nil {
 		if errors.Is(err, client.ErrExternalAPI) {
 			return nil, ErrExternalAPI
@@ -866,7 +866,7 @@ func (s *Service) GetTrainLocation(
 
 	// 列車の事業者にだけ問い合わせる
 	operator := operatorOf(trainID)
-	trains, err := s.locationCache.get(ctx, operator, trainLocationTTL, s.now(), func(ctx context.Context) ([]model.TrainLocation, error) {
+	trains, err := s.locationCache.get(ctx, operator, trainLocationTTL, s.now, func(ctx context.Context) ([]model.TrainLocation, error) {
 		return s.client.GetOperatorTrainLocations(ctx, operator)
 	})
 	if err != nil {

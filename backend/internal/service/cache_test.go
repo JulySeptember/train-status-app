@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -23,7 +24,7 @@ func TestTTLCache(t *testing.T) {
 
 	get := func(key string) int {
 		t.Helper()
-		v, err := c.get(context.Background(), key, 10*time.Second, now, fetch)
+		v, err := c.get(context.Background(), key, 10*time.Second, func() time.Time { return now }, fetch)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -56,23 +57,31 @@ func TestTTLCacheError(t *testing.T) {
 
 	var c ttlCache[int]
 	now := journeyNow
+	clock := func() time.Time { return now }
 
 	calls := 0
 	failure := errors.New("timeout")
+
+	// 取得に10秒かかって失敗する（ODPT が応答せず期限まで待った）。失敗は取得を終えた時刻から数える
 	fetch := func(context.Context) (int, error) {
 		calls++
+		now = now.Add(10 * time.Second)
 		return 0, failure
 	}
 
-	for _, at := range []time.Duration{0, fetchRetryAfter - time.Second} {
-		_, err := c.get(context.Background(), "", time.Minute, now.Add(at), fetch)
-		if !errors.Is(err, failure) || calls != 1 {
-			t.Fatalf("at %v: err = %v, calls = %d", at, err, calls)
-		}
+	if _, err := c.get(context.Background(), "", time.Minute, clock, fetch); !errors.Is(err, failure) {
+		t.Fatalf("err = %v", err)
+	}
+	failedAt := now
+
+	now = failedAt.Add(fetchRetryAfter - time.Second)
+	if _, err := c.get(context.Background(), "", time.Minute, clock, fetch); !errors.Is(err, failure) || calls != 1 {
+		t.Fatalf("within retry interval: err = %v, calls = %d", err, calls)
 	}
 
 	// fetchRetryAfter を過ぎたら取り直す
-	v, err := c.get(context.Background(), "", time.Minute, now.Add(fetchRetryAfter), func(context.Context) (int, error) { return 7, nil })
+	now = failedAt.Add(fetchRetryAfter)
+	v, err := c.get(context.Background(), "", time.Minute, clock, func(context.Context) (int, error) { return 7, nil })
 	if err != nil || v != 7 {
 		t.Fatalf("retry = %d, %v", v, err)
 	}
@@ -86,11 +95,13 @@ func TestTTLCacheCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	if _, err := c.get(ctx, "", time.Minute, journeyNow, func(ctx context.Context) (int, error) { return 0, ctx.Err() }); err == nil {
+	clock := func() time.Time { return journeyNow }
+
+	if _, err := c.get(ctx, "", time.Minute, clock, func(ctx context.Context) (int, error) { return 0, ctx.Err() }); err == nil {
 		t.Fatal("expected error")
 	}
 
-	v, err := c.get(context.Background(), "", time.Minute, journeyNow, func(context.Context) (int, error) { return 7, nil })
+	v, err := c.get(context.Background(), "", time.Minute, clock, func(context.Context) (int, error) { return 7, nil })
 	if err != nil || v != 7 {
 		t.Fatalf("after cancel = %d, %v", v, err)
 	}
@@ -131,14 +142,28 @@ func TestGetTrainLocationCache(t *testing.T) {
 	m := &mockClient{}
 	s := newJourneyServiceWith(t, m)
 
-	for range 2 {
-		if _, err := s.GetTrainLocation(context.Background(), "odpt.Train:Toei.Asakusa.1001T"); err != nil && !errors.Is(err, ErrTrainNotFound) {
+	now := journeyNow
+	s.now = func() time.Time { return now }
+
+	trainID, _ := findTrain(t, s.assets, mitaRailway)
+
+	get := func() {
+		t.Helper()
+		if _, err := s.GetTrainLocation(context.Background(), trainID); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	if len(m.locationOperators) > 1 {
-		t.Fatalf("operators = %v, want at most one call", m.locationOperators)
+	get()
+	get()
+	if !slices.Equal(m.locationOperators, []string{"Toei"}) {
+		t.Fatalf("operators = %v, want one call", m.locationOperators)
+	}
+
+	now = journeyNow.Add(trainLocationTTL)
+	get()
+	if len(m.locationOperators) != 2 {
+		t.Fatalf("operators = %v, want two calls", m.locationOperators)
 	}
 }
 

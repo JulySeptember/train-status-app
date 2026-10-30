@@ -40,12 +40,13 @@ type ttlEntry[T any] struct {
 
 // get は、ttl より新しいキャッシュの値か、fetch で取り直した値を返す。
 // 取得に失敗したら、fetchRetryAfter のあいだは取りに行かずに同じエラーを返す。
+// 取得した時刻・失敗した時刻は、取得を終えたときの now() にする（ODPT が応答せず期限まで待ったときも、そこから数える）。
 // 呼び出し側が待てなくなった（期限切れ・キャンセル）だけの失敗は覚えず、次の呼び出しで取り直す。
 func (c *ttlCache[T]) get(
 	ctx context.Context,
 	key string,
 	ttl time.Duration,
-	now time.Time,
+	now func() time.Time,
 	fetch func(context.Context) (T, error),
 ) (T, error) {
 
@@ -63,11 +64,13 @@ func (c *ttlCache[T]) get(
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	if e.ok && now.Sub(e.at) < ttl {
+	at := now()
+
+	if e.ok && at.Sub(e.at) < ttl {
 		return e.value, nil
 	}
 
-	if e.err != nil && now.Sub(e.failedAt) < fetchRetryAfter {
+	if e.err != nil && at.Sub(e.failedAt) < fetchRetryAfter {
 		var zero T
 		return zero, e.err
 	}
@@ -76,13 +79,13 @@ func (c *ttlCache[T]) get(
 	if err != nil {
 		if ctx.Err() == nil {
 			e.err = err
-			e.failedAt = now
+			e.failedAt = now()
 		}
 		var zero T
 		return zero, err
 	}
 
-	e.value, e.ok, e.at = value, true, now
+	e.value, e.ok, e.at = value, true, now()
 	e.err = nil
 
 	return value, nil
