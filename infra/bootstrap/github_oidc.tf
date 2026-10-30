@@ -7,6 +7,16 @@ locals {
   name_prefix = "${var.project_name}-${var.env}"
 
   github_oidc_host = "token.actions.githubusercontent.com"
+
+  # infra/env/dev.tfvars の lambda_artifact_key・Makefile の LAMBDA_ARTIFACT_KEY と合わせる
+  lambda_artifact_key = "lambda/bootstrap.zip"
+  # 都営以外の事業者のデータの置き場所（Makefile の EXTRA_PREFIX）
+  extra_assets_prefix = "assets-extra"
+
+  app_table_arns = [
+    "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.current.account_id}:table/${local.ai_usage_table_name}",
+    "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.current.account_id}:table/${local.users_table_name}",
+  ]
 }
 
 data "aws_caller_identity" "current" {}
@@ -115,13 +125,22 @@ data "aws_iam_policy_document" "github_deploy" {
     resources = [aws_dynamodb_table.terraform_lock.arn]
   }
 
-  # Lambda のアーティファクトと、フロントエンドのバケット
+  # Lambda のアーティファクト用バケットは bootstrap の管理なので、backend-upload で zip を置くことだけを許す
+  # （バケットポリシー・公開ブロックの変更や削除はさせない）。読み取りは ReadOnlyAccess で足りる
   statement {
-    sid     = "S3"
+    sid = "LambdaArtifactUpload"
+    actions = [
+      "s3:PutObject",
+      "s3:AbortMultipartUpload",
+    ]
+    resources = ["${aws_s3_bucket.artifact.arn}/${local.lambda_artifact_key}"]
+  }
+
+  # フロントエンドのバケットは infra/main が作って管理する
+  statement {
+    sid     = "FrontendBucket"
     actions = ["s3:*"]
     resources = [
-      aws_s3_bucket.artifact.arn,
-      "${aws_s3_bucket.artifact.arn}/*",
       "arn:aws:s3:::${local.name_prefix}-frontend-assets",
       "arn:aws:s3:::${local.name_prefix}-frontend-assets/*",
     ]
@@ -168,14 +187,19 @@ data "aws_iam_policy_document" "github_deploy" {
     }
   }
 
-  # AI エージェントの利用上限を数えるテーブルと、ログインした利用者のテーブル
+  # AI エージェントの利用上限を数えるテーブルと、ログインした利用者のテーブル。
+  # Terraform がテーブルを作って設定を変える操作だけを許し、項目の読み書き・バックアップ・エクスポートはさせない
   statement {
-    sid     = "AppTables"
-    actions = ["dynamodb:*"]
-    resources = [
-      "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.current.account_id}:table/${local.ai_usage_table_name}",
-      "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.current.account_id}:table/${local.users_table_name}",
+    sid = "AppTables"
+    actions = [
+      "dynamodb:CreateTable",
+      "dynamodb:UpdateTable",
+      "dynamodb:DeleteTable",
+      "dynamodb:UpdateTimeToLive",
+      "dynamodb:TagResource",
+      "dynamodb:UntagResource",
     ]
+    resources = local.app_table_arns
   }
 
   statement {
@@ -235,4 +259,57 @@ resource "aws_iam_role_policy" "github_deny_ssm" {
   name   = "${local.name_prefix}-github-deny-ssm"
   role   = each.value
   policy = data.aws_iam_policy_document.github_deny_ssm.json
+}
+
+# ReadOnlyAccess には dynamodb:Scan などが含まれ、ログインした利用者のデータ（Google のユーザー ID・お気に入り・
+# Push の購読先）と AI の利用回数まで読めてしまう。plan・apply にはテーブルの設定（Describe*）だけがあればよい
+data "aws_iam_policy_document" "github_deny_app_data" {
+  statement {
+    sid    = "DenyReadAppTableItems"
+    effect = "Deny"
+    actions = [
+      "dynamodb:GetItem",
+      "dynamodb:BatchGetItem",
+      "dynamodb:Query",
+      "dynamodb:Scan",
+      "dynamodb:PartiQLSelect",
+    ]
+    resources = concat(local.app_table_arns, [for arn in local.app_table_arns : "${arn}/index/*"])
+  }
+
+  # users テーブルは deletion_protection_enabled で守っているが、UpdateTable で外せるので、削除そのものも拒否する
+  statement {
+    sid       = "DenyDeleteUsersTable"
+    effect    = "Deny"
+    actions   = ["dynamodb:DeleteTable"]
+    resources = ["arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.current.account_id}:table/${local.users_table_name}"]
+  }
+}
+
+resource "aws_iam_role_policy" "github_deny_app_data" {
+  for_each = {
+    plan   = aws_iam_role.github_plan.id
+    deploy = aws_iam_role.github_deploy.id
+  }
+
+  name   = "${local.name_prefix}-github-deny-app-data"
+  role   = each.value
+  policy = data.aws_iam_policy_document.github_deny_app_data.json
+}
+
+# 都営以外の事業者のデータ（ODPT のライセンスの第8条4項で第三者への公開が禁じられている）は、
+# deploy の backend-extra-download だけが読む。plan に要るのは tfstate と lambda/bootstrap.zip なので、plan では拒否する
+data "aws_iam_policy_document" "github_plan_deny_extra_assets" {
+  statement {
+    sid       = "DenyReadExtraAssets"
+    effect    = "Deny"
+    actions   = ["s3:GetObject*"]
+    resources = ["${aws_s3_bucket.artifact.arn}/${local.extra_assets_prefix}/*"]
+  }
+}
+
+resource "aws_iam_role_policy" "github_plan_deny_extra_assets" {
+  name   = "${local.name_prefix}-github-plan-deny-extra-assets"
+  role   = aws_iam_role.github_plan.id
+  policy = data.aws_iam_policy_document.github_plan_deny_extra_assets.json
 }
