@@ -74,27 +74,9 @@ func genExtra(rawDir, areaPath, outDir string) error {
 		return files, err
 	}
 
-	// 駅
-	files, err := operatorFiles("Station.json")
-	if err != nil {
-		return err
-	}
-	stations, err := filterRaw(files, func(v struct {
-		SameAs   string `json:"owl:sameAs"`
-		Operator string `json:"odpt:operator"`
-	}) bool {
-		ok := v.Operator != toeiOperator && area[v.SameAs]
-		if ok {
-			summary.of(v.Operator).stations++
-		}
-		return ok
-	})
-	if err != nil {
-		return err
-	}
-
-	// 路線（都内の駅を1つでも通るもの）
-	files, err = operatorFiles("Railway.json")
+	// 路線（都内の駅を2つ以上通るもの）。都内が1駅だけの路線（高尾までの中央本線など）は、
+	// 列車が都内に2駅以上停まらず残らない（clipTrain）ので、駅だけの空の路線になる
+	files, err := operatorFiles("Railway.json")
 	if err != nil {
 		return err
 	}
@@ -106,13 +88,39 @@ func genExtra(rawDir, areaPath, outDir string) error {
 		Operator     string               `json:"odpt:operator"`
 		StationOrder []model.StationOrder `json:"odpt:stationOrder"`
 	}) bool {
-		ok := v.Operator != toeiOperator && slices.ContainsFunc(v.StationOrder, func(o model.StationOrder) bool {
-			return area[o.Station]
-		})
+		inTokyo := 0
+		for _, o := range v.StationOrder {
+			if area[o.Station] {
+				inTokyo++
+			}
+		}
+		ok := v.Operator != toeiOperator && inTokyo >= 2
 		if ok {
 			operators[v.Operator] = true
 			keptRailways[v.SameAs] = true
 			summary.of(v.Operator).railways++
+		}
+		return ok
+	})
+	if err != nil {
+		return err
+	}
+
+	// 駅（残した路線の都内の駅）
+	keptStations := make(map[string]bool)
+	files, err = operatorFiles("Station.json")
+	if err != nil {
+		return err
+	}
+	stations, err := filterRaw(files, func(v struct {
+		SameAs   string `json:"owl:sameAs"`
+		Operator string `json:"odpt:operator"`
+		Railway  string `json:"odpt:railway"`
+	}) bool {
+		ok := v.Operator != toeiOperator && area[v.SameAs] && keptRailways[v.Railway]
+		if ok {
+			keptStations[v.SameAs] = true
+			summary.of(v.Operator).stations++
 		}
 		return ok
 	})
@@ -134,7 +142,7 @@ func genExtra(rawDir, areaPath, outDir string) error {
 		return err
 	}
 
-	// 駅時刻表（都内の駅のもの）
+	// 駅時刻表（残した駅のもの）
 	files, err = dumpFiles("StationTimetable.json")
 	if err != nil {
 		return err
@@ -146,7 +154,7 @@ func genExtra(rawDir, areaPath, outDir string) error {
 			return err
 		}
 		for _, tt := range all {
-			if tt.Operator != toeiOperator && area[tt.Station] {
+			if tt.Operator != toeiOperator && keptStations[tt.Station] {
 				stationTimetables = append(stationTimetables, tt)
 				summary.of(tt.Operator).stationTimetables++
 			}

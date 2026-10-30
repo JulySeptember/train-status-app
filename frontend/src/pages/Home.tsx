@@ -45,7 +45,7 @@ import {
   useOperatorOrder,
   useRailwayOrder,
 } from "@/lib/railwayOrder";
-import { groupByOperator, HIDDEN_RAILWAYS, useRailways } from "@/lib/railways";
+import { groupByOperator, useRailways } from "@/lib/railways";
 import { useFavorites } from "@/lib/favorites";
 import { stationPath } from "@/lib/station";
 import { EXAMPLES, MAX_INPUT_CHARS, type ChatLocationState } from "@/lib/chat";
@@ -431,14 +431,12 @@ function StatusSection() {
     return <Error />;
   }
 
-  // 小田急など運行情報を配信していない路線と、HIDDEN_RAILWAYS の路線は出さない。
+  // 小田急など運行情報を配信していない路線は出さない。
   // 取得に失敗した路線（unavailable）は配信元から返るので残る
   const statuses = new Map(status.data.map((s) => [s.railwayId, s]));
   const items = railways.data.flatMap((railway) => {
     const s = statuses.get(railway.id);
-    return s && !HIDDEN_RAILWAYS.has(railway.id)
-      ? [{ railway, status: s }]
-      : [];
+    return s ? [{ railway, status: s }] : [];
   });
 
   // 並び順は表示しない路線も含めた全路線で持つ。のちに配信が始まった路線も、並べた位置に出る
