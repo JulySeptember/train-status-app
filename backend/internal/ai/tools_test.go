@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"train-status-app/backend/assets"
 	"train-status-app/backend/internal/ai"
@@ -221,7 +222,9 @@ func TestToolSearchRouteComparesDelayed(t *testing.T) {
 		}
 		c.statuses = append(c.statuses, model.TrainStatus{Railway: r.SameAs, TrainInformationText: model.LocalizedString{Ja: text}})
 	}
-	tools := ai.NewTools(service.New(c, loader))
+	// 遅れは今の時刻の近くの列車にだけ足すので、平日の 10:00 に固定する
+	now := time.Date(2026, 10, 8, 10, 0, 0, 0, time.FixedZone("Asia/Tokyo", 9*60*60))
+	tools := ai.NewTools(service.New(c, loader, service.WithClock(func() time.Time { return now })))
 
 	args := map[string]any{
 		"from":     "odpt.Station:Toei.Mita.Mita",

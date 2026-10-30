@@ -265,6 +265,12 @@ func TestSearch(t *testing.T) {
 			want:  [][]string{{"B.1020@B2>B3"}},
 		},
 		{
+			// B.1020 は DelayFrom より前に始発駅を出ているので、遅れを足さない
+			name:  "DelayFrom より前の列車には遅れを足さない",
+			query: Query{From: []string{"B2"}, To: []string{"B3"}, Time: hm("10:25"), Delays: []Delay{{Railway: "B", Minutes: 10}}, DelayFrom: hm("10:21"), DelayUntil: hm("12:00"), MaxTransfers: DefaultMaxTransfers},
+			want:  [][]string{{"B.1040@B2>B3"}},
+		},
+		{
 			name:  "別の方向の遅れは足さない",
 			query: Query{From: []string{"B2"}, To: []string{"B3"}, Time: hm("10:25"), Delays: []Delay{{Railway: "B", RailDirection: "other", Minutes: 10}}, DelayUntil: hm("12:00"), MaxTransfers: DefaultMaxTransfers},
 			want:  [][]string{{"B.1040@B2>B3"}},
