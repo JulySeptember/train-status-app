@@ -71,16 +71,19 @@ func TestGenExtra(t *testing.T) {
 	out := t.TempDir()
 
 	area := filepath.Join(raw, "tokyo_stations.txt")
-	writeFile(t, area, "# test\nodpt.Station:Test.Line.A\nodpt.Station:Test.Line.B\nodpt.Station:Toei.Line.A\n")
+	writeFile(t, area, "# test\nodpt.Station:Test.Line.A\nodpt.Station:Test.Line.B\nodpt.Station:Test.Short.C\nodpt.Station:Toei.Line.A\n")
 
 	writeFile(t, filepath.Join(raw, "operators", "Test", "Station.json"), `[
-		{"owl:sameAs": "odpt.Station:Test.Line.A", "odpt:operator": "odpt.Operator:Test", "odpt:connectingStation": ["odpt.Station:Toei.Line.A"]},
-		{"owl:sameAs": "odpt.Station:Test.Line.B", "odpt:operator": "odpt.Operator:Test"},
-		{"owl:sameAs": "odpt.Station:Test.Line.Outside", "odpt:operator": "odpt.Operator:Test", "odpt:stationTitle": {"ja": "都外"}}
+		{"owl:sameAs": "odpt.Station:Test.Line.A", "odpt:operator": "odpt.Operator:Test", "odpt:railway": "odpt.Railway:Test.Line", "odpt:connectingStation": ["odpt.Station:Toei.Line.A"]},
+		{"owl:sameAs": "odpt.Station:Test.Line.B", "odpt:operator": "odpt.Operator:Test", "odpt:railway": "odpt.Railway:Test.Line"},
+		{"owl:sameAs": "odpt.Station:Test.Line.Outside", "odpt:operator": "odpt.Operator:Test", "odpt:railway": "odpt.Railway:Test.Outside", "odpt:stationTitle": {"ja": "都外"}},
+		{"owl:sameAs": "odpt.Station:Test.Short.C", "odpt:operator": "odpt.Operator:Test", "odpt:railway": "odpt.Railway:Test.Short"},
+		{"owl:sameAs": "odpt.Station:Test.Short.Outside", "odpt:operator": "odpt.Operator:Test", "odpt:railway": "odpt.Railway:Test.Short"}
 	]`)
 	writeFile(t, filepath.Join(raw, "operators", "Test", "Railway.json"), `[
-		{"owl:sameAs": "odpt.Railway:Test.Line", "odpt:operator": "odpt.Operator:Test", "odpt:stationOrder": [{"odpt:station": "odpt.Station:Test.Line.A"}]},
-		{"owl:sameAs": "odpt.Railway:Test.Outside", "odpt:operator": "odpt.Operator:Test", "odpt:stationOrder": [{"odpt:station": "odpt.Station:Test.Line.Outside"}]}
+		{"owl:sameAs": "odpt.Railway:Test.Line", "odpt:operator": "odpt.Operator:Test", "odpt:stationOrder": [{"odpt:station": "odpt.Station:Test.Line.A"}, {"odpt:station": "odpt.Station:Test.Line.B"}]},
+		{"owl:sameAs": "odpt.Railway:Test.Outside", "odpt:operator": "odpt.Operator:Test", "odpt:stationOrder": [{"odpt:station": "odpt.Station:Test.Line.Outside"}]},
+		{"owl:sameAs": "odpt.Railway:Test.Short", "odpt:operator": "odpt.Operator:Test", "odpt:stationOrder": [{"odpt:station": "odpt.Station:Test.Short.C"}, {"odpt:station": "odpt.Station:Test.Short.Outside"}]}
 	]`)
 	writeFile(t, filepath.Join(raw, "operators", "Test", "TrainType.json"), `[
 		{"owl:sameAs": "odpt.TrainType:Test.Local", "odpt:operator": "odpt.Operator:Test"}
@@ -95,6 +98,7 @@ func TestGenExtra(t *testing.T) {
 			{"odpt:departureTime": "10:10", "odpt:destinationStation": ["odpt.Station:Test.Line.B", "odpt.Station:Keisei.Main.Unknown"]}
 		]},
 		{"odpt:operator": "odpt.Operator:Test", "odpt:station": "odpt.Station:Test.Line.Outside", "odpt:stationTimetableObject": []},
+		{"odpt:operator": "odpt.Operator:Test", "odpt:station": "odpt.Station:Test.Short.C", "odpt:stationTimetableObject": []},
 		{"odpt:operator": "odpt.Operator:Toei", "odpt:station": "odpt.Station:Toei.Line.A", "odpt:stationTimetableObject": []}
 	]`)
 	writeFile(t, filepath.Join(raw, "dumps", "basic", "TrainTimetable.json"), `[
@@ -128,6 +132,7 @@ func TestGenExtra(t *testing.T) {
 		return result
 	}
 
+	// 都内の駅が1つだけの路線（Test.Short）は、路線・駅・駅時刻表とも残さない
 	for name, want := range map[string][]string{
 		"station.json":    {"odpt.Station:Test.Line.A", "odpt.Station:Test.Line.B"},
 		"railway.json":    {"odpt.Railway:Test.Line"},

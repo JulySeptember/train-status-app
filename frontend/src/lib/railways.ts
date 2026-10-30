@@ -18,12 +18,6 @@ const LINE_CODES: Record<string, string> = {
   "odpt.Railway:Keikyu.Main": "KK",
 };
 
-// 運行情報の一覧に出さない路線。都内の駅が1つだけで、都内に絞った時刻表に列車が無い
-export const HIDDEN_RAILWAYS = new Set([
-  "odpt.Railway:JR-East.Chuo", // 中央本線（高尾〜塩尻。都内は高尾だけ）
-  "odpt.Railway:Seibu.Yamaguchi", // 山口線（多摩湖〜西武球場前。都内は多摩湖だけ）
-]);
-
 async function getRailways(): Promise<Railway[]> {
   const railways = await api.getRoutes();
   return railways.map((r) => ({

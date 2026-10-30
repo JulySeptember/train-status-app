@@ -265,12 +265,8 @@ test("運行情報: 事業者の運行情報を取れなかった路線は、遅
   await expect(oedo).not.toContainText("平常運転");
 });
 
-test("運行情報: 記号の無い路線に記号を補い、都内の駅が1つだけの路線は出さない", async ({
-  page,
-  api,
-}) => {
+test("運行情報: 記号の無い路線に記号を補う", async ({ page, api }) => {
   const jobanRapid = "odpt.Railway:JR-East.JobanRapid";
-  const chuo = "odpt.Railway:JR-East.Chuo";
   const jr = {
     operator: "odpt.Operator:JR-East",
     operatorName: "JR東日本",
@@ -280,7 +276,6 @@ test("運行情報: 記号の無い路線に記号を補い、都内の駅が1�
       ...railways,
       // ODPT が odpt:lineCode を配信していない路線
       { id: jobanRapid, name: "常磐線快速", color: "#00B261", ...jr },
-      { id: chuo, name: "中央本線", color: "#0072BC", ...jr },
     ],
   });
   api.set("/status", {
@@ -294,8 +289,13 @@ test("運行情報: 記号の無い路線に記号を補い、都内の駅が1�
         railway: "常磐線快速",
         status: "現在、平常どおり運転しています。",
       },
-      // 出さない路線の遅れは、遅れのまとめにも入れない
-      { railwayId: chuo, railway: "中央本線", status: "遅れが出ています。" },
+      // 路線一覧に無い路線（都内の駅が1つだけの中央本線は、バックエンドのデータに無い）の
+      // 運行情報は、一覧にも遅れのまとめにも入れない
+      {
+        railwayId: "odpt.Railway:JR-East.Chuo",
+        railway: "中央本線",
+        status: "遅れが出ています。",
+      },
     ],
   });
 
@@ -311,7 +311,7 @@ test("運行情報: 記号の無い路線に記号を補い、都内の駅が1�
 
   await expect(page.getByRole("link", { name: /^常磐線快速/ })).toBeVisible();
   await expect(page.getByText("JJ", { exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: /^中央本線/ })).toHaveCount(0);
+  await expect(page.getByText("中央本線")).toHaveCount(0);
 });
 
 test("運行情報: 取得に失敗したらエラーを出す", async ({ page, api }) => {
