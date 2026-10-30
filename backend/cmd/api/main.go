@@ -47,9 +47,18 @@ func main() {
 
 	c := client.New(odptSources(cfg.ODPTOperators), odptKeys(cfg, isLambda()))
 
+	// 通知用の Lambda（EventBridge から5分ごとに呼ばれる）は、運行情報と路線名しか使わないので、
+	// 時刻表を読み込まず、経路探索のエンジンなども作らない
+	notifyMode := cfg.AppMode == "notify"
+
 	// assets/extra に他社のデータがあれば読み込む。本番のビルド（make backend-build）は S3 から取って埋め込む。
 	// 無ければ（CI のテストなど）都営だけで動く
-	loader, err := assets.New(assets.WithExtra())
+	assetOpts := []assets.Option{assets.WithExtra()}
+	if notifyMode {
+		assetOpts = append(assetOpts, assets.WithoutTimetables())
+	}
+
+	loader, err := assets.New(assetOpts...)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -58,7 +67,12 @@ func main() {
 		log.Printf("loaded other operators' assets from assets/extra")
 	}
 
-	svc := service.New(c, loader)
+	var svc *service.Service
+	if notifyMode {
+		svc = service.NewConditions(c, loader)
+	} else {
+		svc = service.New(c, loader)
+	}
 
 	debug.SetGCPercent(gcPercent)
 
@@ -67,8 +81,8 @@ func main() {
 	store := newUserStore(cfg, onLambda)
 	keys := vapidKeys(cfg, onLambda)
 
-	// 通知用の Lambda（EventBridge から5分ごとに呼ばれる）。手元では1回だけ確かめて終わる
-	if cfg.AppMode == "notify" {
+	// 手元では1回だけ確かめて終わる
+	if notifyMode {
 		runNotifier(store, keys, svc, onLambda)
 		return
 	}

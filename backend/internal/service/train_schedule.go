@@ -38,16 +38,28 @@ type trainSchedule struct {
 }
 
 // todaySchedule は、列車ID の本日のダイヤを列車時刻表から探す。
-// 常駐するデータを増やさないよう、索引は作らずに毎回探す（都営だけで約5,600本）
+// 常駐するデータを増やさないよう、索引は作らずに毎回探す（都営だけで約5,600本）。
+// 列車ID とダイヤ種別は先に文字列表の番号にし、列車は番号どうしで比べる
 func (s *Service) todaySchedule(trainID string, now time.Time) (trainSchedule, bool) {
 
 	tt := s.assets.TrainTimetables()
-	calendars := calendar.Calendars(now)
+
+	train32, ok := stringIndex(tt, trainID)
+	if !ok {
+		return trainSchedule{}, false
+	}
+
+	var calendars []int32
+	for _, c := range calendar.Calendars(now) {
+		if i, ok := stringIndex(tt, c); ok {
+			calendars = append(calendars, i)
+		}
+	}
 
 	for _, train := range tt.Trains {
 
-		if tt.String(train.Train) != trainID ||
-			!slices.Contains(calendars, tt.String(train.Calendar)) ||
+		if train.Train != train32 ||
+			!slices.Contains(calendars, train.Calendar) ||
 			len(train.Stops) == 0 {
 			continue
 		}
@@ -69,6 +81,12 @@ func (s *Service) todaySchedule(trainID string, now time.Time) (trainSchedule, b
 	}
 
 	return trainSchedule{}, false
+}
+
+// stringIndex は、文字列表での v の番号を返す
+func stringIndex(tt *slim.TrainTimetables, v string) (int32, bool) {
+	i := slices.Index(tt.Strings, v)
+	return int32(i), i >= 0
 }
 
 // stopTime は、優先する時刻が無ければもう一方の時刻を返す

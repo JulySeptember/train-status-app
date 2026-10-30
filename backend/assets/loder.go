@@ -56,10 +56,16 @@ type Loader struct {
 	stationGuide *guide.Table
 
 	hasExtra bool
+
+	// WithoutTimetables で、時刻表を読み込まなかったか
+	skipTimetables bool
 }
 
 type options struct {
 	extra bool
+
+	// skipTimetables なら、駅時刻表・列車時刻表を読み込まない
+	skipTimetables bool
 }
 
 type Option func(*options)
@@ -68,6 +74,14 @@ type Option func(*options)
 func WithExtra() Option {
 	return func(o *options) {
 		o.extra = true
+	}
+}
+
+// WithoutTimetables は、駅時刻表と列車時刻表を読み込まない（StationTimetables は空、TrainTimetables は列車の無い表を返す）。
+// 運行情報と路線名だけを使う通知用の Lambda で、起動を短くするため。
+func WithoutTimetables() Option {
+	return func(o *options) {
+		o.skipTimetables = true
 	}
 }
 
@@ -82,7 +96,7 @@ func newFromFS(fsys fs.FS, opts ...Option) (*Loader, error) {
 		opt(&o)
 	}
 
-	l := &Loader{}
+	l := &Loader{skipTimetables: o.skipTimetables, trainTimetables: &slim.TrainTimetables{}}
 
 	if err := load(fsys, "railway.json", &l.railways); err != nil {
 		return nil, err
@@ -92,12 +106,14 @@ func newFromFS(fsys fs.FS, opts ...Option) (*Loader, error) {
 		return nil, err
 	}
 
-	if err := loadStationTimetables(fsys, "station_timetable.gob", &l.stationTimetables); err != nil {
-		return nil, err
-	}
+	if !l.skipTimetables {
+		if err := loadStationTimetables(fsys, "station_timetable.gob", &l.stationTimetables); err != nil {
+			return nil, err
+		}
 
-	if err := loadTrainTimetables(fsys, "train_timetable.gob", &l.trainTimetables); err != nil {
-		return nil, err
+		if err := loadTrainTimetables(fsys, "train_timetable.gob", &l.trainTimetables); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := load(fsys, "train_type.json", &l.trainTypes); err != nil {
@@ -160,12 +176,14 @@ func (l *Loader) loadExtra(fsys fs.FS) error {
 		return err
 	}
 
-	if err := loadStationTimetables(fsys, extraDir+"/station_timetable.gob", &stationTimetables); err != nil {
-		return err
-	}
+	if !l.skipTimetables {
+		if err := loadStationTimetables(fsys, extraDir+"/station_timetable.gob", &stationTimetables); err != nil {
+			return err
+		}
 
-	if err := loadTrainTimetables(fsys, extraDir+"/train_timetable.gob", &trainTimetables); err != nil {
-		return err
+		if err := loadTrainTimetables(fsys, extraDir+"/train_timetable.gob", &trainTimetables); err != nil {
+			return err
+		}
 	}
 
 	if err := load(fsys, extraDir+"/destination_station.json", &destinations); err != nil {
@@ -176,7 +194,9 @@ func (l *Loader) loadExtra(fsys fs.FS) error {
 	l.stations = append(l.stations, stations...)
 	l.trainTypes = append(l.trainTypes, trainTypes...)
 	l.stationTimetables = append(l.stationTimetables, stationTimetables...)
-	l.trainTimetables = slim.MergeTrainTimetables(l.trainTimetables, trainTimetables)
+	if trainTimetables != nil {
+		l.trainTimetables = slim.MergeTrainTimetables(l.trainTimetables, trainTimetables)
+	}
 	l.destinationStations = destinations
 	l.hasExtra = true
 
