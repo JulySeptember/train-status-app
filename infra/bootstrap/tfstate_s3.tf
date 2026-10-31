@@ -1,7 +1,13 @@
 resource "aws_s3_bucket" "tfstate" {
   bucket = "${var.project_name}-${var.env}-terraform-state"
 
-  force_destroy = true
+  # main の tfstate（と、その古い版）が入っている。誤って消さないように、中身があれば消せないようにし、
+  # Terraform からも消せないようにする（消すときは、prevent_destroy を外してから中身を移す・消す）
+  force_destroy = false
+
+  lifecycle {
+    prevent_destroy = true
+  }
 
   tags = merge(
     var.tags,
@@ -25,6 +31,26 @@ resource "aws_s3_bucket_versioning" "tfstate" {
   versioning_configuration {
     status = "Enabled"
   }
+}
+
+# 古い版の tfstate は、壊れたときに戻すために90日だけ残す
+resource "aws_s3_bucket_lifecycle_configuration" "tfstate" {
+  bucket = aws_s3_bucket.tfstate.id
+
+  rule {
+    id     = "expire-old-tfstate-versions"
+    status = "Enabled"
+
+    filter {
+      prefix = ""
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 90
+    }
+  }
+
+  depends_on = [aws_s3_bucket_versioning.tfstate]
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "tfstate" {

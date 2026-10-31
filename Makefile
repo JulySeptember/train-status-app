@@ -205,9 +205,9 @@ tf-bootstrap-apply:
 	-auto-approve \
 	-var-file=$(TF_ENV_FILE)
 
+# tfstate のバケットなどを消すので、確認を求める（-auto-approve を付けない）
 tf-bootstrap-destroy:
 	cd $(BOOTSTRAP_DIR) && terraform destroy \
-	-auto-approve \
 	-var-file=$(TF_ENV_FILE)
 
 # ============================
