@@ -6,9 +6,24 @@
 const CACHE = "push-owner";
 const KEY = "/push-owner";
 
-export async function rememberPushOwner(endpoint: string) {
+// 記録を消した回数。購読の確認・登録を待つ間にログアウト・ログインし直しで記録が消えたら、
+// その確認の結果（前の利用者の endpoint）を書き戻さない
+let generation = 0;
+
+export function pushOwnerGeneration(): number {
+  return generation;
+}
+
+// since は、確認・登録を始める前に pushOwnerGeneration() で取った値
+export async function rememberPushOwner(endpoint: string, since: number) {
+  if (since !== generation) {
+    return;
+  }
   try {
     const cache = await caches.open(CACHE);
+    if (since !== generation) {
+      return;
+    }
     await cache.put(KEY, new Response(JSON.stringify({ endpoint })));
   } catch {
     // 記録できなくても、SW は /status で確かめる
@@ -16,6 +31,7 @@ export async function rememberPushOwner(endpoint: string) {
 }
 
 export async function forgetPushOwner() {
+  generation++;
   try {
     await caches.delete(CACHE);
   } catch {

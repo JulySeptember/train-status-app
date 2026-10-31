@@ -243,7 +243,13 @@ function AlertEditor({
 }
 
 // 路線を選んで、通知の条件を足す。お気に入りの路線を先に並べる
-function AddAlert({ exclude }: { exclude: string[] }) {
+function AddAlert({
+  exclude,
+  disabled,
+}: {
+  exclude: string[];
+  disabled: boolean;
+}) {
   const client = useQueryClient();
   const railways = useRailways();
   const { favorites } = useFavorites();
@@ -295,7 +301,7 @@ function AddAlert({ exclude }: { exclude: string[] }) {
         <Button
           variant="outline"
           size="sm"
-          disabled={!railwayId || add.isPending}
+          disabled={!railwayId || add.isPending || disabled}
           onClick={() => add.mutate()}
         >
           <Plus />
@@ -370,7 +376,11 @@ export default function NotificationSettings() {
 
       {items &&
         (items.length < MAX_ALERTS ? (
-          <AddAlert exclude={items.map((a) => a.railwayId)} />
+          <AddAlert
+            exclude={items.map((a) => a.railwayId)}
+            // 読み込み直している間・読み込み直しに失敗した間は、一覧が古いことがあるので追加させない
+            disabled={alerts.isFetching || alerts.isError}
+          />
         ) : (
           <p className="text-sm text-muted-foreground">
             通知する路線は{MAX_ALERTS}路線まで登録できます。
