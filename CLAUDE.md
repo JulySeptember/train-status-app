@@ -60,6 +60,6 @@ main へのマージで CI（`.github/workflows/ci.yml`）が、検証が通っ�
 
 PR では `ci.yml` が変更のあった領域だけを検証する（backend: gofmt・vet・test・Swagger が最新か / frontend: lint・build・E2E / infra: terraform fmt・validate と、PR への `terraform plan` の結果のコメント）。main は Ruleset で保護していて、ci.yml のジョブ名を変えたり検証のジョブを足したりしたら Ruleset の必須チェックも変える（`infra/CLAUDE.md`）。
 
-`gh pr edit` は Projects (classic) 廃止の GraphQL エラーで失敗する。PR の題名・説明は `gh api -X PATCH repos/JulySeptember/train-status-app/pulls/<番号> -f title=... -F body=@<ファイル>` で更新する。
+`gh pr edit` と `gh issue view` は Projects (classic) 廃止の GraphQL エラーで失敗する。PR の題名・説明は `gh api -X PATCH repos/JulySeptember/train-status-app/pulls/<番号> -f title=... -F body=@<ファイル>` で更新し、Issue は `gh api repos/JulySeptember/train-status-app/issues/<番号>`（コメントは `.../issues/<番号>/comments`）で読む。
 
 PR を作ったら `pr-review` スキル（`.claude/skills/pr-review/SKILL.md`）の手順でレビューさせる。Claude がマージするのは、ユーザーにマージを指示されたときだけ。レビューが通っただけではマージしない。
