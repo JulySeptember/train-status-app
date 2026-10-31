@@ -318,7 +318,8 @@ export default function NotificationSettings() {
     return null;
   }
 
-  const items = alerts.data ?? [];
+  // 登録済みの通知が分かるまでは追加させない（登録済みの路線を初期値で上書きしたり、上限を超えたりしないように）
+  const items = alerts.data;
 
   return (
     <section className="space-y-4">
@@ -334,7 +335,22 @@ export default function NotificationSettings() {
 
       <DeviceSettings />
 
-      {items.length > 0 && (
+      {alerts.isPending && (
+        <p className="text-sm text-muted-foreground">
+          登録済みの通知を読み込み中...
+        </p>
+      )}
+      {alerts.isError && (
+        <ErrorText
+          error={
+            new Error(
+              "登録済みの通知を読み込めませんでした。再読み込みしてください。",
+            )
+          }
+        />
+      )}
+
+      {items && items.length > 0 && (
         <ul className="space-y-3">
           {items.map((a) => {
             const railway = railways.data?.find((r) => r.id === a.railwayId);
@@ -351,13 +367,14 @@ export default function NotificationSettings() {
         </ul>
       )}
 
-      {items.length < MAX_ALERTS ? (
-        <AddAlert exclude={items.map((a) => a.railwayId)} />
-      ) : (
-        <p className="text-sm text-muted-foreground">
-          通知する路線は{MAX_ALERTS}路線まで登録できます。
-        </p>
-      )}
+      {items &&
+        (items.length < MAX_ALERTS ? (
+          <AddAlert exclude={items.map((a) => a.railwayId)} />
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            通知する路線は{MAX_ALERTS}路線まで登録できます。
+          </p>
+        ))}
     </section>
   );
 }
