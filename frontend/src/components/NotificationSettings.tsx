@@ -340,7 +340,8 @@ export default function NotificationSettings() {
           登録済みの通知を読み込み中...
         </p>
       )}
-      {alerts.isError && (
+      {/* 読み込めたあとの再取得の失敗では、前の一覧を出し続ける */}
+      {alerts.isError && !items && (
         <ErrorText
           error={
             new Error(
