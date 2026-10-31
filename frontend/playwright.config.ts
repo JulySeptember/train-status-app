@@ -17,7 +17,19 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
 
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  // mobile.spec.ts はスマホの幅（画面下のタブバー・時刻表のタブ）だけを確かめるので、mobile でだけ動かす
+  projects: [
+    {
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"] },
+      testIgnore: /mobile\.spec\.ts/,
+    },
+    {
+      name: "mobile",
+      use: { ...devices["Pixel 7"] },
+      testMatch: /mobile\.spec\.ts/,
+    },
+  ],
 
   // 開発用の vite（5173）と重ならないポートで起動する
   webServer: {

@@ -134,3 +134,45 @@ test("AI 乗換相談: 回答を待つ間に新しい会話にしたら、前の
     "次の質問",
   );
 });
+
+test("AI 乗換相談: 回答と、AI が行った手順を出す", async ({ page, api }) => {
+  api.post("/chat", { body: answer });
+
+  await page.goto("/chat");
+  await page.getByRole("textbox", { name: "質問" }).fill(QUESTION);
+  await page.getByRole("button", { name: "送信" }).click();
+
+  await expect(page.getByText(answer.reply)).toBeVisible();
+  await expect(page.getByText("経路を探しました")).toBeVisible();
+  await expect(page.locator("p", { hasText: QUESTION })).toHaveCount(1);
+  await expect(page.getByRole("textbox", { name: "質問" })).toHaveValue("");
+  expect(api.sent).toEqual(["POST /chat"]);
+});
+
+test("AI 乗換相談: 1日の上限に達したら、理由と AI を使わない機能を案内する", async ({
+  page,
+  api,
+}) => {
+  api.post("/chat", {
+    status: 429,
+    body: {
+      error: "本日の AI の利用上限に達しました。",
+      code: "quota_exceeded",
+    },
+  });
+
+  await page.goto("/chat");
+  await page.getByRole("textbox", { name: "質問" }).fill(QUESTION);
+  await page.getByRole("button", { name: "送信" }).click();
+
+  await expect(
+    page.getByText("本日の AI の利用上限に達しました。"),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("alert").getByRole("link", { name: "経路検索" }),
+  ).toHaveAttribute("href", "/journeys");
+  // 質問は入力欄に戻す
+  await expect(page.getByRole("textbox", { name: "質問" })).toHaveValue(
+    QUESTION,
+  );
+});

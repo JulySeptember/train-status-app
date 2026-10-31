@@ -17,7 +17,7 @@ Go の REST API（AWS Lambda）と React + TypeScript の SPA（S3 + CloudFront�
 ## 守ること
 
 - AWS に反映される操作（`*-deploy`・`tf-*-apply`・`backend-extra-upload`・SSM への登録）は、実行前にユーザーへ確認する。手元で続けて実行するときは make を1つずつ順に実行し、前のものが成功したのを確かめてから次に進む（同時に実行すると、途中で止まったときに片方だけ反映される）
-- API キー（Gemini・ODPT）と、AI への入力・応答の本文を、画面・会話・ログ・レスポンス・Terraform・tfvars・Lambda の環境変数に出さない。キーは SSM の SecureString に置き、ユーザーに `! aws ssm put-parameter ...` で登録してもらう（手順は `infra/CLAUDE.md`）。ODPT のキーは URL のクエリに入るので、キーを入れた URL や `*url.Error` もそのまま出さない。`backend/.env` の変数名を見るときは `sed 's/=.*/=<hidden>/' backend/.env`
+- API キー（Gemini・ODPT）・VAPID の秘密鍵と、AI への入力・応答の本文を、画面・会話・ログ・レスポンス・Terraform・tfvars・Lambda の環境変数に出さない。キーは SSM の SecureString に置き、ユーザーに `! aws ssm put-parameter ...` で登録してもらう（手順は `infra/CLAUDE.md`）。ODPT のキーは URL のクエリに入るので、キーを入れた URL や `*url.Error` もそのまま出さない。`backend/.env` の変数名を見るときは `sed 's/=.*/=<hidden>/' backend/.env`
 - 都営以外の事業者のデータは、JSON も gob もコミットしない（ODPT のライセンスの第8条4項が、データと派生データを第三者が再利用できる状態で公開することを禁じている。このリポジトリは公開で、一度入れると履歴から消すのに force push が要り、main では禁止している）。`backend/assets/extra/` は gitignore 済み
 - 列車は列車番号ではなく列車ID で特定する（列車番号は路線間・ダイヤ間で重複する）。運行日は3時前を前日として扱い、24時以降の時刻がある
 - バックエンドの DTO（`backend/internal/service/service.go`）を変えたら、フロントの `src/types.ts`・`src/api.ts`・E2E の `e2e/data.ts` と、Swagger（`backend/docs/`）も合わせる。デプロイは `backend-deploy` → `tf-main-apply` → `frontend-deploy` まで行う（片方だけだと本番で型がずれる）
@@ -60,6 +60,6 @@ main へのマージで CI（`.github/workflows/ci.yml`）が、検証が通っ�
 
 PR では `ci.yml` が変更のあった領域だけを検証する（backend: gofmt・vet・test・Swagger が最新か / frontend: lint・build・E2E / infra: terraform fmt・validate と、PR への `terraform plan` の結果のコメント）。main は Ruleset で保護していて、ci.yml のジョブ名を変えたり検証のジョブを足したりしたら Ruleset の必須チェックも変える（`infra/CLAUDE.md`）。
 
-`gh pr edit` と `gh issue view` は Projects (classic) 廃止の GraphQL エラーで失敗する。PR の題名・説明は `gh api -X PATCH repos/JulySeptember/train-status-app/pulls/<番号> -f title=... -F body=@<ファイル>` で更新し、Issue は `gh api repos/JulySeptember/train-status-app/issues/<番号>`（コメントは `.../issues/<番号>/comments`）で読む。
+`gh` は GitHub 公式の apt リポジトリから入れている。Ubuntu 標準の古い版（2.45）では `gh pr edit`・`gh issue view` が Projects (classic) 廃止の GraphQL エラーで失敗するので、このエラーが出たら `gh --version` を確かめる。
 
 PR を作ったら `pr-review` スキル（`.claude/skills/pr-review/SKILL.md`）の手順でレビューさせる。Claude がマージするのは、ユーザーにマージを指示されたときだけ。レビューが通っただけではマージしない。

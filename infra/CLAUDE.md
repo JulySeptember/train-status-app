@@ -6,6 +6,8 @@ Terraform で管理する AWS の構成と、デプロイ・CI の詳細。ル�
 
 CloudFront が `/api/*` を API Gateway（HTTP API）→ Lambda（`provided.al2023`, arm64, 1024MB。他社のデータを埋め込むため 512MB 以上が要り、起動を速くするため CPU の多い 1024MB にしている）に流し、それ以外を S3 に流す。リージョンは `ap-northeast-1`。
 
+運行情報の通知は、API と同じ実行ファイルを `APP_MODE=notify` で動かす notifier の Lambda（`main/notifier.tf`）を、EventBridge のルールで5分ごとに呼ぶ（1時〜5時はすぐ終わる）。ログイン・お気に入り・通知の設定・購読・セッションは DynamoDB の `train-status-app-dev-users`（`main/dynamodb.tf`。GSI `gsi1` で路線を見ている利用者を引く）に、AI の利用回数は `train-status-app-dev-ai-usage` に置く（docs/design/login.md）。
+
 SPA のルーティングは CloudFront Function（`main/functions/spa_rewrite.js`）で `/index.html` に書き換えている。`custom_error_response` は `/api/*` のエラーまで `index.html` の 200 にしてしまうので使わない。
 
 CloudFront は標準の証明書（`cloudfront_default_certificate = true`）を使っている。この場合 AWS が `minimum_protocol_version` を `TLSv1` に固定するので、指定しない（指定すると `plan` に毎回差分が出る）。独自ドメインと ACM 証明書にしたら指定する。
@@ -15,6 +17,8 @@ CloudFront は標準の証明書（`cloudfront_default_certificate = true`）を
 AI エージェントの API キー（Gemini）は SSM Parameter Store の SecureString（`/train-status-app/dev/gemini-api-key`）に手で登録する。Terraform・tfvars・Lambda の環境変数には置かない。キーの値が会話に出ないよう、ユーザーに `! aws ssm put-parameter --region ap-northeast-1 --type SecureString --overwrite --name /train-status-app/dev/gemini-api-key --value 'AIza...'` を実行してもらう（引用符の中はキーだけにする。以前、例の `<キー>` の `<` `>` まで登録されて Gemini が `API_KEY_INVALID` を返した）。利用上限は DynamoDB（`train-status-app-dev-ai-usage`）で数え、アプリ全体の1日の上限は `ai_calls_per_day`（tfvars）で変える。
 
 ODPT のキーも同じく SSM の SecureString（`/train-status-app/dev/odpt-consumer-key`・`/train-status-app/dev/odpt-challenge-consumer-key`）に手で登録する。読む権限は `bootstrap/lambda_odpt.tf`。
+
+通知（Web Push）の VAPID の秘密鍵も SSM の SecureString（`/train-status-app/dev/vapid-private-key`）に置く。鍵の値が画面や会話に出ないよう、作ってそのまま登録する: `! cd backend && aws ssm put-parameter --region ap-northeast-1 --type SecureString --name /train-status-app/dev/vapid-private-key --value "$(go run ./cmd/vapid-key)"`。公開鍵はバックエンドが秘密鍵から計算する（`GET /api/push/config`）。鍵を作り直すと、利用者の今の購読にはすべて届かなくなるので、作り直さない（`--overwrite` を付けない）。読む権限は `bootstrap/lambda_users.tf`。
 
 ## デプロイ
 
@@ -28,8 +32,8 @@ main への push が続くと、待機中の実行は新しいものに置き換
 
 - `make backend-deploy`: linux/arm64 でビルドして zip にし、S3 にアップロードする。Lambda への反映は `make tf-main-apply`（`s3_object_version` を参照している）
 - `make frontend-deploy`: ビルドして S3 に sync し、CloudFront を invalidate する
-- `make tf-main-plan` / `tf-main-apply`: `main` を `env/dev.tfvars` で適用する。`tf-*-apply` / `destroy` は `-auto-approve` 付き
-- `bootstrap`: tfstate 用 S3・DynamoDB、Lambda アーティファクト用 S3、GitHub Actions 用の OIDC プロバイダと IAM ロール（PR の plan 用・main のデプロイ用）、Lambda の実行ロール（`lambda_role.tf`）とそれに付けるポリシー（`lambda_ai.tf`・`lambda_odpt.tf`）を作る。state はローカルにあるので、手元から `make tf-bootstrap-apply` で適用する。bootstrap を変えた PR は、マージ（CD の `terraform apply`）の前に bootstrap を適用する
+- `make tf-main-plan` / `tf-main-apply`: `main` を `env/dev.tfvars` で適用する。`tf-*-apply` と `tf-main-destroy` は `-auto-approve` 付き。`tf-bootstrap-destroy` は確認を求め、tfstate のバケットは `prevent_destroy`・`force_destroy = false` で消せない（古い版の tfstate は90日残す）
+- `bootstrap`: tfstate 用 S3・DynamoDB、Lambda アーティファクト用 S3、GitHub Actions 用の OIDC プロバイダと IAM ロール（PR の plan 用・main のデプロイ用）、Lambda の実行ロール（`lambda_role.tf`）とそれに付けるポリシー（`lambda_ai.tf`・`lambda_odpt.tf`・`lambda_users.tf`）を作る。state はローカルにあるので、手元から `make tf-bootstrap-apply` で適用する。bootstrap を変えた PR は、マージ（CD の `terraform apply`）の前に bootstrap を適用する
 - Lambda に権限を足すときは、`bootstrap` にポリシーを作って `aws_iam_role_policy_attachment.lambda` に足す。deploy 用ロールには、Lambda の実行ロールの `iam:PassRole` 以外の IAM の権限を与えない（信頼ポリシーやポリシーを変えられると、SSM の API キーを読めるロールを引き受けたり、権限を広げたりできる）
 - plan・deploy 用ロールは `ReadOnlyAccess` を土台にしているので、読ませたくないもの（SSM の API キー、DynamoDB の利用者のデータ、plan では `assets-extra/*` の他社データ）は `github_oidc.tf` で明示的に Deny している。アプリのテーブルや読ませたくないデータを足したら、そこにも足す。Deny は多層防御で、完全には守れない（plan でも `lambda/bootstrap.zip` に埋め込まれた他社データは読める。deploy は `lambda:*` で関数のコードを差し替えれば実行ロールの権限で読める）。deploy 用ロールには、アーティファクト用バケットへは `lambda/bootstrap.zip` を置くことだけを、アプリのテーブルへは Terraform がテーブルを管理する操作だけを許している
 
