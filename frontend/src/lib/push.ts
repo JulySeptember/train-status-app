@@ -2,6 +2,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "@/api";
 import { useMe } from "@/lib/auth";
+import {
+  forgetPushOwner,
+  pushOwnerGeneration,
+  rememberPushOwner,
+} from "@/lib/pushOwner";
 
 const DEVICE_KEY = ["pushDevice"];
 
@@ -84,7 +89,12 @@ export function usePushDevice() {
       ) {
         return false;
       }
+      const since = pushOwnerGeneration();
       const status = await api.subscriptionStatus(subscription.endpoint);
+      // 前からの購読も、Service Worker が登録し直せるように記録する
+      if (status.registered) {
+        await rememberPushOwner(subscription.endpoint, since);
+      }
       return status.registered;
     },
     enabled: !!me.data && pushSupported() && config.isSuccess,
@@ -125,7 +135,9 @@ export function useEnablePush() {
         applicationServerKey: decodeKey(config.publicKey),
       });
 
+      const since = pushOwnerGeneration();
       await api.subscribePush(subscription.toJSON());
+      await rememberPushOwner(subscription.endpoint, since);
     },
     onSuccess: () => client.setQueryData(DEVICE_KEY, true),
   });
@@ -137,6 +149,7 @@ export function useDisablePush() {
 
   return useMutation({
     mutationFn: async () => {
+      await forgetPushOwner();
       const subscription = await currentSubscription();
       if (subscription) {
         await api.unsubscribePush(subscription.endpoint);

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "@/api";
+import { forgetPushOwner } from "@/lib/pushOwner";
 
 const ME_KEY = ["me"];
 
@@ -15,6 +16,7 @@ function clearUserData(client: ReturnType<typeof useQueryClient>) {
 // server が true なら、サーバーの購読からも外す（ログアウトの前。退会ではサーバーがまとめて消す）。
 // 失敗してもログアウト・退会は続ける（サーバーの購読は、退会すれば消える）
 async function forgetThisDevice(server: boolean) {
+  await forgetPushOwner();
   try {
     if (!("serviceWorker" in navigator)) {
       return;
@@ -59,7 +61,11 @@ export function useLogin() {
   const client = useQueryClient();
 
   return useMutation({
-    mutationFn: api.login,
+    mutationFn: async (credential: string) => {
+      // 別の利用者でログインし直したときに、前の利用者の購読を Service Worker が今の利用者に登録し直さないように
+      await forgetPushOwner();
+      return await api.login(credential);
+    },
     onSuccess: (res) => {
       // 別の利用者でログインし直したときに、前のお気に入りを出さない
       clearUserData(client);

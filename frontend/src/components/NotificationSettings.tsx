@@ -243,7 +243,13 @@ function AlertEditor({
 }
 
 // 路線を選んで、通知の条件を足す。お気に入りの路線を先に並べる
-function AddAlert({ exclude }: { exclude: string[] }) {
+function AddAlert({
+  exclude,
+  disabled,
+}: {
+  exclude: string[];
+  disabled: boolean;
+}) {
   const client = useQueryClient();
   const railways = useRailways();
   const { favorites } = useFavorites();
@@ -295,7 +301,7 @@ function AddAlert({ exclude }: { exclude: string[] }) {
         <Button
           variant="outline"
           size="sm"
-          disabled={!railwayId || add.isPending}
+          disabled={!railwayId || add.isPending || disabled}
           onClick={() => add.mutate()}
         >
           <Plus />
@@ -318,7 +324,8 @@ export default function NotificationSettings() {
     return null;
   }
 
-  const items = alerts.data ?? [];
+  // 登録済みの通知が分かるまでは追加させない（登録済みの路線を初期値で上書きしたり、上限を超えたりしないように）
+  const items = alerts.data;
 
   return (
     <section className="space-y-4">
@@ -334,7 +341,23 @@ export default function NotificationSettings() {
 
       <DeviceSettings />
 
-      {items.length > 0 && (
+      {alerts.isPending && (
+        <p className="text-sm text-muted-foreground">
+          登録済みの通知を読み込み中...
+        </p>
+      )}
+      {/* 読み込めたあとの再取得の失敗では、前の一覧を出し続ける */}
+      {alerts.isError && !items && (
+        <ErrorText
+          error={
+            new Error(
+              "登録済みの通知を読み込めませんでした。再読み込みしてください。",
+            )
+          }
+        />
+      )}
+
+      {items && items.length > 0 && (
         <ul className="space-y-3">
           {items.map((a) => {
             const railway = railways.data?.find((r) => r.id === a.railwayId);
@@ -351,13 +374,18 @@ export default function NotificationSettings() {
         </ul>
       )}
 
-      {items.length < MAX_ALERTS ? (
-        <AddAlert exclude={items.map((a) => a.railwayId)} />
-      ) : (
-        <p className="text-sm text-muted-foreground">
-          通知する路線は{MAX_ALERTS}路線まで登録できます。
-        </p>
-      )}
+      {items &&
+        (items.length < MAX_ALERTS ? (
+          <AddAlert
+            exclude={items.map((a) => a.railwayId)}
+            // 読み込み直している間・読み込み直しに失敗した間は、一覧が古いことがあるので追加させない
+            disabled={alerts.isFetching || alerts.isError}
+          />
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            通知する路線は{MAX_ALERTS}路線まで登録できます。
+          </p>
+        ))}
     </section>
   );
 }
