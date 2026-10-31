@@ -47,23 +47,60 @@ function decodeKey(base64url) {
   return Uint8Array.from(raw, (c) => c.charCodeAt(0));
 }
 
-async function resubscribe(oldSubscription, newSubscription) {
-  // 古い購読が今ログインしている利用者のものだったときだけ登録し直す
-  // （セッション切れや別のアカウントでのログインのあとに、前の利用者の購読を今の利用者に移さない）
-  if (!oldSubscription?.endpoint) {
-    return;
+// この端末の購読が今ログインしている利用者のものだという記録（src/lib/pushOwner.ts と名前を合わせる）
+const OWNER_CACHE = "push-owner";
+const OWNER_KEY = "/push-owner";
+
+async function readOwner() {
+  try {
+    const res = await (await caches.open(OWNER_CACHE)).match(OWNER_KEY);
+    return res ? await res.json() : null;
+  } catch {
+    return null;
+  }
+}
+
+async function writeOwner(endpoint) {
+  try {
+    const cache = await caches.open(OWNER_CACHE);
+    await cache.put(OWNER_KEY, new Response(JSON.stringify({ endpoint })));
+  } catch {
+    // 何もしない
+  }
+}
+
+// 古い購読が今ログインしている利用者のものか。
+// ページが記録した持ち主（ログイン・ログアウト・退会・停止で消える）と一致すれば、サーバーが送信の 410 で
+// 古い購読を消したあとでも登録し直せる。記録が無ければ、サーバーに今も登録されているかで確かめる。
+// （セッション切れや別のアカウントでのログインのあとに、前の利用者の購読を今の利用者に移さない）
+async function ownedByCurrentUser(oldEndpoint) {
+  const owner = await readOwner();
+  if (owner?.endpoint && (!oldEndpoint || owner.endpoint === oldEndpoint)) {
+    return owner.endpoint;
+  }
+  if (!oldEndpoint) {
+    return null;
   }
   const status = await postJSON("POST", "/api/me/push-subscriptions/status", {
-    endpoint: oldSubscription.endpoint,
+    endpoint: oldEndpoint,
   });
-  if (!status.ok || !(await status.json()).registered) {
+  if (status.ok && (await status.json()).registered) {
+    return oldEndpoint;
+  }
+  return null;
+}
+
+async function resubscribe(oldSubscription, newSubscription) {
+  // ブラウザによっては oldSubscription が無いので、そのときは記録した endpoint を古い購読とみなす
+  const oldEndpoint = await ownedByCurrentUser(oldSubscription?.endpoint);
+  if (!oldEndpoint) {
     return;
   }
 
   let subscription = newSubscription;
   if (!subscription) {
     // 今の公開鍵で購読し直す（鍵を作り直していても届くように）。取れなければ前と同じ鍵を使う
-    let key = oldSubscription.options?.applicationServerKey;
+    let key = oldSubscription?.options?.applicationServerKey;
     const config = await fetch("/api/push/config").catch(() => null);
     if (config?.ok) {
       key = decodeKey((await config.json()).publicKey);
@@ -85,11 +122,12 @@ async function resubscribe(oldSubscription, newSubscription) {
   if (!res.ok) {
     return;
   }
+  await writeOwner(subscription.endpoint);
 
   // 古い購読はサーバーから外す（失敗しても、次に送ったときに 410 が返って消える）
-  if (oldSubscription.endpoint !== subscription.endpoint) {
+  if (oldEndpoint !== subscription.endpoint) {
     await postJSON("DELETE", "/api/me/push-subscriptions", {
-      endpoint: oldSubscription.endpoint,
+      endpoint: oldEndpoint,
     }).catch(() => {});
   }
 }
