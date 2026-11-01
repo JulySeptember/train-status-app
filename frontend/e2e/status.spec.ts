@@ -369,7 +369,10 @@ test("運行情報: 取り直しに失敗しても、前に取得した情報を
   api.set("/status", { status: 500, body: { error: "internal" } });
   await returnToPage(page, 5);
 
-  await expect(page.getByText("（更新に失敗しました）")).toBeVisible();
+  // 1回失敗したあと、再試行（retry: 1）を約2秒待ってから失敗になる
+  await expect(page.getByText("（更新に失敗しました）")).toBeVisible({
+    timeout: 10_000,
+  });
   await expect(page.getByText("8:00 時点の情報")).toBeVisible();
   await expect(page.getByRole("link", { name: /^三田線/ })).toContainText(
     "人身事故の影響で",
