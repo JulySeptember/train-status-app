@@ -1,5 +1,7 @@
+import { type Page } from "@playwright/test";
+
 import { ASAKUSA, OEDO, asakusaStations, railways, statuses } from "./data.ts";
-import { expect, test } from "./mock.ts";
+import { NOW, expect, test } from "./mock.ts";
 
 test("運行情報: 平常の路線と遅れのある路線を見分けて出す", async ({
   page,
@@ -321,4 +323,58 @@ test("運行情報: 取得に失敗したらエラーを出す", async ({ page, 
 
   await expect(page.getByText("データの取得に失敗しました。")).toBeVisible();
   await expect(page.getByRole("button", { name: "再読み込み" })).toBeVisible();
+});
+
+// バックグラウンドから戻ったときを、時計を進めて visibilitychange を送ることで再現する
+// （staleTime を過ぎるまでは取り直さないので、時計も進める）
+async function returnToPage(page: Page, minutes: number) {
+  await page.clock.setFixedTime(new Date(NOW.getTime() + minutes * 60_000));
+  await page.evaluate(() =>
+    window.dispatchEvent(new Event("visibilitychange")),
+  );
+}
+
+test("運行情報: 画面に戻ったら取り直し、取得した時刻を出す", async ({
+  page,
+  api,
+}) => {
+  await page.goto("/");
+
+  await expect(page.getByText("8:00 時点の情報")).toBeVisible();
+  await expect(
+    page.getByText("三田線で遅れが出ています。", { exact: true }),
+  ).toBeVisible();
+
+  api.set("/status", {
+    body: statuses.map((s) => ({
+      ...s,
+      status: "現在、平常どおり運転しています。",
+    })),
+  });
+  await returnToPage(page, 5);
+
+  await expect(
+    page.getByText("すべての路線で、15分以上の遅れはありません。"),
+  ).toBeVisible();
+  await expect(page.getByText("8:05 時点の情報")).toBeVisible();
+});
+
+test("運行情報: 取り直しに失敗しても、前に取得した情報を出し続ける", async ({
+  page,
+  api,
+}) => {
+  await page.goto("/");
+  await expect(page.getByText("8:00 時点の情報")).toBeVisible();
+
+  api.set("/status", { status: 500, body: { error: "internal" } });
+  await returnToPage(page, 5);
+
+  // 1回失敗したあと、再試行（retry: 1）を約2秒待ってから失敗になる
+  await expect(page.getByText("（更新に失敗しました）")).toBeVisible({
+    timeout: 10_000,
+  });
+  await expect(page.getByText("8:00 時点の情報")).toBeVisible();
+  await expect(page.getByRole("link", { name: /^三田線/ })).toContainText(
+    "人身事故の影響で",
+  );
 });
