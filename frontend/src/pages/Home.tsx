@@ -278,13 +278,33 @@ function OperatorSummary({
   );
 }
 
+// 運行情報は、開いたままでも1分ごとに取り直し、バックグラウンドから戻ったときにも取り直す。
+// アプリ全体では画面に戻ったときの再取得を止めているので、このクエリだけで有効にする。
+// 隠れている間は取り直さない（refetchIntervalInBackground は false のまま）
+const STATUS_REFETCH_INTERVAL = 60_000;
+
+function useStatus() {
+  return useQuery({
+    queryKey: ["status"],
+    queryFn: api.getStatus,
+    refetchInterval: STATUS_REFETCH_INTERVAL,
+    refetchOnWindowFocus: true,
+  });
+}
+
+// 取得した時刻を「8:05」の形にする
+function formatUpdatedAt(updatedAt: number) {
+  return new Date(updatedAt).toLocaleTimeString("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 // ログインした利用者のお気に入り。登録が無ければ出さない
 function FavoritesSection() {
   const { favorites } = useFavorites();
-  const status = useQuery({
-    queryKey: ["status"],
-    queryFn: api.getStatus,
-  });
+  const status = useStatus();
   const railways = useRailways();
   const stations = useQuery({
     queryKey: ["stations"],
@@ -409,10 +429,7 @@ function saveOpenedOperators(opened: string[]) {
 }
 
 function StatusSection() {
-  const status = useQuery({
-    queryKey: ["status"],
-    queryFn: api.getStatus,
-  });
+  const status = useStatus();
   const railways = useRailways();
   const railwayOrder = useRailwayOrder();
   const operatorOrder = useOperatorOrder();
@@ -427,7 +444,8 @@ function StatusSection() {
     return <Loading />;
   }
 
-  if (status.error || railways.error) {
+  // 取り直しに失敗しても、前に取得した情報があればそれを出し続ける
+  if (!status.data || railways.error) {
     return <Error />;
   }
 
@@ -517,6 +535,11 @@ function StatusSection() {
               ? `${delayed.map((i) => i.railway.name).join("・")}で遅れが出ています。`
               : items.length > 0 &&
                 "すべての路線で、15分以上の遅れはありません。"}
+          </p>
+
+          <p className="mt-1 text-xs text-muted-foreground">
+            {formatUpdatedAt(status.dataUpdatedAt)} 時点の情報
+            {status.isError && "（更新に失敗しました）"}
           </p>
         </div>
 
