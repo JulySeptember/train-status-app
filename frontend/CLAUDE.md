@@ -11,6 +11,8 @@ React の SPA。ルートの CLAUDE.md の「守ること」も合わせて守�
 - `components/ui` は base-ui ベース。`PopoverTrigger` などのトリガーに `Button` を使うときは、子要素にせず `render={<Button ... />}` で渡す（子にすると button が入れ子になる）
 - `components/ui` は shadcn の生成物で書式が違う（行末のセミコロンが無い）。Prettier は変えたファイルだけにかけ、`npx prettier --write src` のようにまとめてかけない
 - 色は `index.css` のトークン（`primary`・`brand`・`warning`・`destructive-foreground` など）で指定し、色コードを直接書かない。路線の色・記号は `GET /api/routes`（ODPT の `odpt:color`・`odpt:lineCode`）を `lib/railways.ts` の `useRailways` / `useRailway` で引く
+- タブ（`components/ui/tabs`）は、切り替える中身を `TabsContent` に入れるときだけ使う（tabpanel が無いと読み上げで役割がずれる）。中身の無い選択（時刻の指定、時刻表の方向など）は `components/SegmentedControl.tsx`（ネイティブのラジオボタンの radiogroup）を使う
+- 画面の遅延読み込みは `router.tsx` の `lazyPage`（`lib/lazyPage.tsx`）を使う。`lazy` の中で例外を投げない（React Router 7.18 では、投げると `errorElement` が出ずに `Outlet` が空になる）。読み込めなければ1回だけ読み直し（オフラインでは読み直さない）、それでも駄目ならエラーの画面を返す
 
 ## テスト
 
