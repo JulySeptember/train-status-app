@@ -38,6 +38,8 @@ URL に入れる ID の `:` は `%3A` にする（アプリと同じく `encodeU
 
 注意:
 
+- Playwright MCP がブラウザが無いというエラーを返したら、`npx @playwright/mcp install-browser chrome-for-testing` で入れる
+
 - WSL では、続けて編集したファイルを vite が読み落とし、古い画面が出ることがある。変更が画面に出ていないときは、まず vite を起動し直す
 - `backend/assets/extra/` があれば他社の駅・路線も出る。無ければ都営だけになる。どちらで確かめたかを報告に書く
 - `backend/.env` の中身は表示しない（ODPT のキーが入っている）
