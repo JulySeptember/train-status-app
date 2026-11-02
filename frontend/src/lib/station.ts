@@ -15,7 +15,7 @@ export function stationPath(id: string, direction?: string) {
 export function stationQuery(id: string) {
   return queryOptions({
     queryKey: ["station", id],
-    queryFn: () => api.getStation(id),
+    queryFn: ({ signal }) => api.getStation(id, { signal }),
     staleTime: 5 * 60 * 1000,
   });
 }

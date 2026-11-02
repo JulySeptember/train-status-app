@@ -2,7 +2,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Sparkles } from "lucide-react";
 
-import { api } from "@/api";
+import { api, isClientError } from "@/api";
 
 import Loading from "@/components/Loading";
 import JourneyForm, { readJourneyQuery } from "@/components/JourneyForm";
@@ -31,7 +31,7 @@ export default function Journey() {
 
   const journeys = useQuery({
     queryKey: ["journeys", query],
-    queryFn: () => api.searchJourneys(query!),
+    queryFn: ({ signal }) => api.searchJourneys(query!, { signal }),
     enabled: query !== null,
   });
 
@@ -61,9 +61,12 @@ export default function Journey() {
 
       {query && journeys.isPending && <Loading />}
 
+      {/* 4xx は指定の誤り、5xx や通信の失敗はサーバー側の問題なので、指定を見直すよう案内しない */}
       {query && journeys.error && (
         <Message title="経路を検索できませんでした。">
-          駅や時刻の指定を確かめて、もう一度検索してください。
+          {isClientError(journeys.error)
+            ? "駅や時刻の指定を確かめて、もう一度検索してください。"
+            : "通信できなかったか、サーバーでエラーが発生しました。時間をおいて、もう一度検索してください。"}
         </Message>
       )}
 

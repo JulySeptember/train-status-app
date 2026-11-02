@@ -8,7 +8,7 @@ import RailwayBadge from "@/components/RailwayBadge";
 import PageTitle from "@/components/PageTitle";
 import FavoriteButton from "@/components/FavoriteButton";
 
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { directionLabel } from "@/lib/odpt";
 import { railwayIdOf, useRailway } from "@/lib/railways";
 import { stationQuery } from "@/lib/station";
@@ -16,7 +16,9 @@ import { stationQuery } from "@/lib/station";
 export default function Station() {
   const { stationId = "" } = useParams();
 
-  const { data, isPending, error } = useQuery(stationQuery(stationId));
+  const { data, isPending, error, refetch, isFetching } = useQuery(
+    stationQuery(stationId),
+  );
 
   const railway = useRailway(railwayIdOf(stationId));
 
@@ -31,7 +33,7 @@ export default function Station() {
   }
 
   if (error || !data) {
-    return <Error />;
+    return <Error onRetry={() => refetch()} retrying={isFetching} />;
   }
 
   const directions = [...new Set(data.timetables.map((t) => t.railDirection))];
@@ -101,8 +103,13 @@ export default function Station() {
             : "この路線は列車位置情報が提供されていません。"}
         </p>
 
-        <Tabs value={selectedDirection} onValueChange={setDirection}>
-          <TabsList>
+        {/* 方向のタブで、その方向の時刻表（tabpanel）を切り替える */}
+        <Tabs
+          value={selectedDirection}
+          onValueChange={setDirection}
+          className="gap-4"
+        >
+          <TabsList aria-label="方向">
             {directions.map((d) => (
               <TabsTrigger key={d} value={d}>
                 {railway?.directions?.find((r) => r.id === d)?.name ??
@@ -110,16 +117,18 @@ export default function Station() {
               </TabsTrigger>
             ))}
           </TabsList>
-        </Tabs>
 
-        <Timetable
-          weekday={weekday}
-          saturday={saturday}
-          holiday={holiday}
-          saturdayHoliday={saturdayHoliday}
-          raceDay={raceDay}
-          trainLocationAvailable={data.trainLocationAvailable}
-        />
+          <TabsContent value={selectedDirection} className="text-base">
+            <Timetable
+              weekday={weekday}
+              saturday={saturday}
+              holiday={holiday}
+              saturdayHoliday={saturdayHoliday}
+              raceDay={raceDay}
+              trainLocationAvailable={data.trainLocationAvailable}
+            />
+          </TabsContent>
+        </Tabs>
       </section>
     </div>
   );

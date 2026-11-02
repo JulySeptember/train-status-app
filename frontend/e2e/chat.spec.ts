@@ -27,7 +27,12 @@ async function ask(page: Page) {
   await page.goto("/chat");
   await page.getByRole("textbox", { name: "質問" }).fill(QUESTION);
   await page.getByRole("button", { name: "送信" }).click();
-  await expect(page.getByText("運行状況や時刻表を調べています")).toBeVisible();
+  // 考え中の表示は status として読み上げられる
+  await expect(
+    page
+      .getByRole("status")
+      .filter({ hasText: "運行状況や時刻表を調べています" }),
+  ).toBeVisible();
 }
 
 test("AI 乗換相談: 回答を待つ間に別の画面へ移っても、戻ると回答が入っている", async ({
@@ -50,7 +55,10 @@ test("AI 乗換相談: 回答を待つ間に別の画面へ移っても、戻る
   await nav(page, "AI 乗換相談").click();
 
   await expect(page.locator("p", { hasText: QUESTION })).toHaveCount(1);
-  await expect(page.getByText(answer.reply)).toBeVisible();
+  // 発言と回答は、読み上げられる会話の一覧（role="log"）に入る
+  const log = page.getByRole("log", { name: "会話" });
+  await expect(log).toContainText(QUESTION);
+  await expect(log).toContainText(answer.reply);
   await expect(page.getByText("運行状況や時刻表を調べています")).toHaveCount(0);
 });
 
@@ -175,4 +183,85 @@ test("AI 乗換相談: 1日の上限に達したら、理由と AI を使わな�
   await expect(page.getByRole("textbox", { name: "質問" })).toHaveValue(
     QUESTION,
   );
+});
+
+test("AI 乗換相談: 画面の JS を読み込めなければ、1回だけ読み直し、それでも駄目ならエラーを出す", async ({
+  page,
+}) => {
+  // デプロイで前の版の JS が消えたときを、チャットの画面のモジュールの取得を失敗させて再現する
+  let attempts = 0;
+  await page.route("**/src/pages/Chat.tsx*", (route) => {
+    attempts++;
+    return route.abort();
+  });
+
+  await page.goto("/");
+  await nav(page, "AI 乗換相談").click();
+
+  await expect(page.getByText("画面を読み込めませんでした。")).toBeVisible();
+  // ヘッダーは残る
+  await expect(nav(page, "運行情報")).toBeVisible();
+  // 最初の失敗で1回だけ読み直す（読み直したあとの失敗では読み直さない）
+  expect(attempts).toBe(2);
+});
+
+test("AI 乗換相談: 読み直したあとに読み込めたら、画面を出す", async ({
+  page,
+}) => {
+  // 1回目だけ失敗させる（デプロイの直後に、前の版のタブで開いたとき）
+  let attempts = 0;
+  await page.route("**/src/pages/Chat.tsx*", (route) =>
+    ++attempts === 1 ? route.abort() : route.continue(),
+  );
+
+  await page.goto("/");
+  await nav(page, "AI 乗換相談").click();
+
+  await expect(
+    page.getByRole("heading", { level: 1, name: "AI 乗換相談" }),
+  ).toBeVisible();
+  await expect(page).toHaveURL("/chat");
+  // 読み直したことの目印は消える（次のデプロイのあとにも1回は読み直せる）
+  expect(
+    await page.evaluate(() => sessionStorage.getItem("lazyPageReloaded")),
+  ).toBeNull();
+});
+
+test("AI 乗換相談: オフラインで画面の JS を読み込めなければ、読み直さずにエラーを出す", async ({
+  page,
+  context,
+}) => {
+  let attempts = 0;
+  await page.route("**/src/pages/Chat.tsx*", (route) => {
+    attempts++;
+    return route.abort();
+  });
+
+  await page.goto("/");
+  await expect(nav(page, "運行情報")).toBeVisible();
+  await context.setOffline(true);
+  await nav(page, "AI 乗換相談").click();
+
+  await expect(page.getByText("画面を読み込めませんでした。")).toBeVisible();
+  expect(attempts).toBe(1);
+});
+
+test("AI 乗換相談: 直接開いたときも、読み込むまでヘッダーを出す", async ({
+  page,
+}) => {
+  const chunk = deferred();
+  await page.route("**/src/pages/Chat.tsx*", async (route) => {
+    await chunk.promise;
+    await route.continue();
+  });
+
+  await page.goto("/chat");
+
+  await expect(page.getByText("読み込み中...")).toBeVisible();
+  await expect(nav(page, "運行情報")).toBeVisible();
+
+  chunk.resolve();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "AI 乗換相談" }),
+  ).toBeVisible();
 });

@@ -342,7 +342,7 @@ export default function TrainLocation({ train }: Props) {
 
   const stations = useQuery({
     queryKey: ["stations", train.railwayId],
-    queryFn: () => api.getStations(train.railwayId),
+    queryFn: ({ signal }) => api.getStations(train.railwayId, { signal }),
     enabled: train.railwayId !== "",
     staleTime: Infinity,
   });

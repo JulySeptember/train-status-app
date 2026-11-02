@@ -1,8 +1,9 @@
 import type { RailDirection } from "@/types";
 
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import SegmentedControl from "@/components/SegmentedControl";
 
-// 駅の一覧で、駅の時刻表を開く方向を選ぶタブ。方向が1つ以下の路線では出さない
+// 駅の一覧で、駅の時刻表を開く方向を選ぶ。方向が1つ以下の路線では出さない。
+// 一覧の中身は変わらず、開く時刻表の方向だけが変わるので、タブではなくラジオボタンにする
 export default function DirectionTabs({
   directions,
   value,
@@ -17,15 +18,14 @@ export default function DirectionTabs({
   }
 
   return (
-    <Tabs value={value} onValueChange={onChange}>
-      <TabsList className="h-10! w-full sm:w-fit">
-        {directions.map((d) => (
-          <TabsTrigger key={d.id} value={d.id} className="px-4">
-            {d.name}
-          </TabsTrigger>
-        ))}
-      </TabsList>
-    </Tabs>
+    <SegmentedControl
+      options={directions.map((d) => ({ value: d.id, label: d.name }))}
+      value={value}
+      onChange={onChange}
+      label="時刻表の方向"
+      className="h-10 w-full sm:w-fit"
+      optionClassName="px-4"
+    />
   );
 }
 

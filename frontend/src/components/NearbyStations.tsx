@@ -37,9 +37,11 @@ type Locate =
 export default function NearbyStations() {
   const [locate, setLocate] = useState<Locate>({ state: "idle" });
   const railways = useRailways();
+  // 全駅（座標）は、現在地を取り始めてから取る。押さない人には取らない
   const stations = useQuery({
     queryKey: ["stations"],
     queryFn: api.getAllStations,
+    enabled: locate.state === "locating" || locate.state === "located",
   });
 
   const start = () => {
@@ -76,7 +78,12 @@ export default function NearbyStations() {
     if (stations.isPending) {
       body = <Loading />;
     } else if (stations.error) {
-      body = <Error />;
+      body = (
+        <Error
+          onRetry={() => stations.refetch()}
+          retrying={stations.isFetching}
+        />
+      );
     } else {
       const nearby = nearbyStations(stations.data, locate.here);
       body =

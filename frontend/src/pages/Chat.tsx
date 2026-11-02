@@ -271,24 +271,35 @@ export default function Chat() {
       )}
 
       <div className="space-y-4">
-        {entries.map((entry, i) =>
-          entry.role === "user" ? (
-            <div key={i} className="flex justify-end">
-              <p className="max-w-[85%] rounded-xl bg-primary px-4 py-2.5 whitespace-pre-wrap text-foreground">
-                {entry.text}
-              </p>
-            </div>
-          ) : (
-            <AssistantMessage key={i} entry={entry} />
-          ),
-        )}
+        {/* 新しい発言（AI の回答）を読み上げる。考え中の表示とエラーは、それぞれ status・alert で読み上げる */}
+        <div
+          role="log"
+          aria-live="polite"
+          aria-label="会話"
+          className="space-y-4 empty:hidden"
+        >
+          {entries.map((entry, i) =>
+            entry.role === "user" ? (
+              <div key={i} className="flex justify-end">
+                <p className="max-w-[85%] rounded-xl bg-primary px-4 py-2.5 whitespace-pre-wrap text-primary-foreground">
+                  {entry.text}
+                </p>
+              </div>
+            ) : (
+              <AssistantMessage key={i} entry={entry} />
+            ),
+          )}
+        </div>
 
-        {pending && (
-          <div className="flex items-center gap-2 rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground">
-            <LoaderCircle size={16} className="animate-spin" />
-            運行状況や時刻表を調べています（10秒ほどかかることがあります）
-          </div>
-        )}
+        {/* 読み上げの領域は中身を入れる前から置いておく（中身ごと差し込むと読み上げない読み上げソフトがある） */}
+        <div role="status" className="empty:hidden">
+          {pending && (
+            <div className="flex items-center gap-2 rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground">
+              <LoaderCircle size={16} className="animate-spin" aria-hidden />
+              運行状況や時刻表を調べています（10秒ほどかかることがあります）
+            </div>
+          )}
+        </div>
 
         {error && <ChatErrorMessage error={error} />}
 

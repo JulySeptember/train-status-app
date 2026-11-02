@@ -13,17 +13,18 @@ import {
 } from "./data.ts";
 import { expect, test } from "./mock.ts";
 
-// 駅を選ぶ（ボタンを押し、駅名で絞り込んで選ぶ）。
-// 駅のボタン（role="combobox"）には名前が付いていないので、並び順（出発駅・到着駅）で引く
+// 駅のボタン（role="combobox"）。名前は「出発駅を選択」か、選んだあとは「出発駅: 五反田」
+function stationButton(page: Page, label: "出発駅" | "到着駅") {
+  return page.getByRole("combobox", { name: new RegExp(`^${label}`) });
+}
+
+// 駅を選ぶ（ボタンを押し、駅名で絞り込んで選ぶ）
 async function selectStation(
   page: Page,
   label: "出発駅" | "到着駅",
   name: string,
 ) {
-  await page
-    .getByRole("combobox")
-    .nth(label === "出発駅" ? 0 : 1)
-    .click();
+  await stationButton(page, label).click();
   await page.getByPlaceholder(`${label}を検索...`).fill(name);
   await page.getByRole("option", { name, exact: true }).click();
   // 閉じるアニメーションのあいだは選択肢が残るので、次の駅を選ぶ前に閉じるのを待つ
@@ -55,9 +56,9 @@ test("経路検索: ホームから駅を選んで検索し、乗り換えと遅
   await selectStation(page, "出発駅", "五反田");
   await selectStation(page, "到着駅", "六本木");
   // 時刻を入れてから「今すぐ」に戻したときも、時刻は送らない
-  await page.getByRole("tab", { name: "出発" }).click();
+  await page.getByRole("radio", { name: "出発" }).check();
   await page.getByLabel("出発時刻").fill("09:00");
-  await page.getByRole("tab", { name: "今すぐ" }).click();
+  await page.getByRole("radio", { name: "今すぐ" }).check();
   const request = waitForJourneys(page);
   await search.click();
 
@@ -96,7 +97,7 @@ test("経路検索: 遅延を反映しない・到着時刻を指定した条件
 
   await selectStation(page, "出発駅", "五反田");
   await selectStation(page, "到着駅", "六本木");
-  await page.getByRole("tab", { name: "到着" }).click();
+  await page.getByRole("radio", { name: "到着" }).check();
   await page.getByLabel("到着時刻").fill("09:00");
   await page.getByLabel("遅延・運転見合わせを反映").uncheck();
   const request = waitForJourneys(page);
@@ -110,10 +111,7 @@ test("経路検索: 遅延を反映しない・到着時刻を指定した条件
 
   // 条件は URL に残り、再読み込みしても入力欄に戻る
   await page.reload();
-  await expect(page.getByRole("tab", { name: "到着" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  await expect(page.getByRole("radio", { name: "到着" })).toBeChecked();
   await expect(page.getByLabel("到着時刻")).toHaveValue("09:00");
   await expect(page.getByLabel("遅延・運転見合わせを反映")).not.toBeChecked();
 });
@@ -122,7 +120,7 @@ test("経路検索: ひらがな・カタカナ・ローマ字でも駅を探せ
   page,
 }) => {
   await page.goto("/journeys");
-  await page.getByRole("combobox").first().click();
+  await stationButton(page, "出発駅").click();
   const input = page.getByPlaceholder("出発駅を検索...");
   const option = (name: string) =>
     page.getByRole("option", { name, exact: true });
@@ -146,7 +144,10 @@ test("経路検索: ひらがな・カタカナ・ローマ字でも駅を探せ
 
   await input.fill("ごたんだ");
   await option("五反田").click();
-  await expect(page.getByRole("combobox").first()).toContainText("五反田");
+  // ボタンの名前は、選んだ駅だけでなく出発駅か到着駅かも含む
+  await expect(stationButton(page, "出発駅")).toHaveAccessibleName(
+    "出発駅: 五反田",
+  );
 });
 
 test("経路検索: 拗音・長音・b の前の m・英単語の駅名も、かなとローマ字で探せる", async ({
@@ -176,7 +177,7 @@ test("経路検索: 拗音・長音・b の前の m・英単語の駅名も、�
   });
 
   await page.goto("/journeys");
-  await page.getByRole("combobox").first().click();
+  await stationButton(page, "出発駅").click();
   const input = page.getByPlaceholder("出発駅を検索...");
 
   const cases: [string, string][] = [
@@ -233,8 +234,8 @@ test("経路検索: 出発駅と到着駅が同じなら検索できない", asy
   await page
     .getByRole("button", { name: "出発駅と到着駅を入れ替える" })
     .click();
-  await expect(page.getByRole("combobox").nth(0)).toContainText("五反田");
-  await expect(page.getByRole("combobox").nth(1)).toContainText("大門");
+  await expect(stationButton(page, "出発駅")).toContainText("五反田");
+  await expect(stationButton(page, "到着駅")).toContainText("大門");
   await expect(page.getByRole("button", { name: "検索" })).toBeEnabled();
   await selectStation(page, "到着駅", "五反田");
   await expect(page.getByRole("button", { name: "検索" })).toBeDisabled();
@@ -253,8 +254,8 @@ test("経路検索: 経路検索で1つにまとめた駅どうし（大江戸�
     `/journeys?from=${encodeURIComponent(OEDO_DAIMON)}&to=${encodeURIComponent(ASAKUSA_DAIMON)}`,
   );
 
-  await expect(page.getByRole("combobox").nth(0)).toContainText("大門");
-  await expect(page.getByRole("combobox").nth(1)).toContainText("大門");
+  await expect(stationButton(page, "出発駅")).toContainText("大門");
+  await expect(stationButton(page, "到着駅")).toContainText("大門");
   await expect(page.getByRole("button", { name: "検索" })).toBeDisabled();
 });
 
@@ -505,10 +506,85 @@ test("経路検索: 3時前に朝の時刻で探したら、その朝からの�
   await expect(page.getByText("運行状況を取得できなかったため")).toHaveCount(0);
 });
 
-test("経路検索: 検索に失敗したらエラーを出す", async ({ page, api }) => {
+test("経路検索: 指定の誤り（4xx）なら、指定を確かめるよう案内する", async ({
+  page,
+  api,
+}) => {
   api.set("/journeys", { status: 400, body: { error: "bad request" } });
 
   await page.goto(resultUrl);
 
   await expect(page.getByText("経路を検索できませんでした。")).toBeVisible();
+  await expect(page.getByText("駅や時刻の指定を確かめて")).toBeVisible();
+});
+
+test("経路検索: サーバーのエラー（5xx）なら、指定ではなく時間をおくよう案内する", async ({
+  page,
+  api,
+}) => {
+  api.set("/journeys", { status: 500, body: { error: "internal" } });
+
+  await page.goto(resultUrl);
+
+  // 1回失敗したあと、再試行（retry: 1）を待ってから失敗になる
+  await expect(page.getByText("経路を検索できませんでした。")).toBeVisible({
+    timeout: 10_000,
+  });
+  await expect(
+    page.getByText("時間をおいて、もう一度検索してください。"),
+  ).toBeVisible();
+  await expect(page.getByText("駅や時刻の指定を確かめて")).toHaveCount(0);
+});
+
+test("経路検索: 流量の制限（429）でも、指定ではなく時間をおくよう案内する", async ({
+  page,
+  api,
+}) => {
+  api.set("/journeys", { status: 429, body: { message: "Too Many Requests" } });
+
+  await page.goto(resultUrl);
+
+  await expect(page.getByText("経路を検索できませんでした。")).toBeVisible({
+    timeout: 10_000,
+  });
+  await expect(
+    page.getByText("時間をおいて、もう一度検索してください。"),
+  ).toBeVisible();
+});
+
+test("経路検索: 時刻の指定は矢印キーで選べる", async ({ page }) => {
+  await page.goto("/journeys");
+
+  const now = page.getByRole("radio", { name: "今すぐ" });
+  await now.focus();
+  await page.keyboard.press("ArrowRight");
+
+  await expect(page.getByRole("radio", { name: "出発" })).toBeChecked();
+  await expect(page.getByLabel("出発時刻")).toBeVisible();
+});
+
+test("経路検索: 結果を待つ間に画面を離れたら、検索のリクエストを取り消す", async ({
+  page,
+  api,
+}) => {
+  // 応答を返さないまま待たせる
+  api.set("/journeys", { body: journeySearch, wait: new Promise(() => {}) });
+
+  const requests: string[] = [];
+  const failed: string[] = [];
+  const isJourneys = (url: string) => new URL(url).pathname === "/api/journeys";
+  page.on("request", (r) => isJourneys(r.url()) && requests.push(r.url()));
+  page.on("requestfailed", (r) => isJourneys(r.url()) && failed.push(r.url()));
+
+  await page.goto(resultUrl);
+  await expect(page.getByText("読み込み中...")).toBeVisible();
+  // 開発時の StrictMode は一度アンマウントして最初のリクエストを取り消すので、待っているリクエストが残るのを待つ
+  await expect.poll(() => requests.length - failed.length).toBe(1);
+
+  await page
+    .getByRole("navigation", { name: "メイン" })
+    .getByRole("link", { name: "運行情報" })
+    .click();
+
+  await expect.poll(() => requests.length - failed.length).toBe(0);
 });

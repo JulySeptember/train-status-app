@@ -63,9 +63,9 @@ function refetchInterval(data?: TrainLocationType): number | false {
 export default function Train() {
   const { trainId = "" } = useParams();
 
-  const { data, isPending, error } = useQuery({
+  const { data, isPending, error, refetch, isFetching } = useQuery({
     queryKey: ["train", trainId],
-    queryFn: () => api.getTrain(trainId),
+    queryFn: ({ signal }) => api.getTrain(trainId, { signal }),
 
     staleTime: 15_000,
 
@@ -78,7 +78,7 @@ export default function Train() {
   }
 
   if (error || !data) {
-    return <Error />;
+    return <Error onRetry={() => refetch()} retrying={isFetching} />;
   }
 
   const title = `${data.railway ? `${data.railway} ` : ""}${data.trainNumber}`;

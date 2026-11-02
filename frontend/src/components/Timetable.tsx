@@ -9,7 +9,7 @@ import {
 import { nowServiceMinutes, timeToServiceMinutes } from "@/lib/time";
 import { cn } from "@/lib/utils";
 
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type Props = {
   weekday?: DirectionTimetable;
@@ -279,26 +279,29 @@ export default function Timetable({
 
   return (
     <div>
-      <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
-        <TabsList className="mb-3 h-10! w-full">
+      <Tabs
+        value={tab}
+        onValueChange={(v) => setTab(v as Tab)}
+        className="gap-0"
+      >
+        <TabsList aria-label="ダイヤ" className="mb-3 h-10! w-full">
           {cards.map((c) => (
             <TabsTrigger key={c.tab} value={c.tab}>
               {c.label ?? c.title}
             </TabsTrigger>
           ))}
         </TabsList>
-      </Tabs>
 
-      {cards
-        .filter((c) => c.tab === tab)
-        .map((c) => (
-          <TimetableCard
-            key={c.tab}
-            title={c.title}
-            timetable={c.timetable}
-            trainLocationAvailable={trainLocationAvailable}
-          />
+        {cards.map((c) => (
+          <TabsContent key={c.tab} value={c.tab} className="text-base">
+            <TimetableCard
+              title={c.title}
+              timetable={c.timetable}
+              trainLocationAvailable={trainLocationAvailable}
+            />
+          </TabsContent>
         ))}
+      </Tabs>
     </div>
   );
 }

@@ -21,11 +21,55 @@ import type {
 
 const API = "/api";
 
-async function request<T>(url: string): Promise<T> {
-  const res = await fetch(`${API}${url}`);
+// HttpError は GET の API が成功以外のステータスを返したときのエラー。
+// 指定の誤り（4xx）とサーバー側の失敗（5xx）で、画面の文言を分けるのに使う
+export class HttpError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
+// 4xx（指定の誤り）か。通信の失敗（fetch の TypeError）や 5xx は false。
+// 429 は API Gateway の流量の制限で、指定の誤りではないので false
+export function isClientError(error: unknown) {
+  return (
+    error instanceof HttpError &&
+    error.status >= 400 &&
+    error.status < 500 &&
+    error.status !== 429
+  );
+}
+
+// Query は TanStack Query の queryFn に渡される値のうち、使うもの。
+// signal を渡すと、条件が変わったときや画面を離れたときに前のリクエストを取り消せる
+type Query = { signal?: AbortSignal };
+
+async function request<T>(url: string, { signal }: Query = {}): Promise<T> {
+  const res = await fetch(`${API}${url}`, { signal });
 
   if (!res.ok) {
-    throw new Error(await res.text());
+    throw new HttpError(res.status, await res.text());
+  }
+
+  return await res.json();
+}
+
+// status のときは null を返す GET（ログインしていない 401、設定が無い 503 など）
+async function requestOrNull<T>(
+  url: string,
+  status: number,
+  { signal }: Query = {},
+): Promise<T | null> {
+  const res = await fetch(`${API}${url}`, { signal });
+
+  if (res.status === status) {
+    return null;
+  }
+  if (!res.ok) {
+    throw new HttpError(res.status, await res.text());
   }
 
   return await res.json();
@@ -87,45 +131,18 @@ async function send<T>(
 }
 
 // ログインしていなければ null を返す
-async function getMe(): Promise<User | null> {
-  const res = await fetch(`${API}/me`);
-
-  if (res.status === 401) {
-    return null;
-  }
-  if (!res.ok) {
-    throw new Error(await res.text());
-  }
-
-  return await res.json();
+function getMe(query?: Query): Promise<User | null> {
+  return requestOrNull<User>("/me", 401, query);
 }
 
 // セッションが切れている（401）ときは null を返す
-async function getFavorites(): Promise<Favorites | null> {
-  const res = await fetch(`${API}/me/favorites`);
-
-  if (res.status === 401) {
-    return null;
-  }
-  if (!res.ok) {
-    throw new Error(await res.text());
-  }
-
-  return await res.json();
+function getFavorites(query?: Query): Promise<Favorites | null> {
+  return requestOrNull<Favorites>("/me/favorites", 401, query);
 }
 
 // ログインを使えない（バックエンドに設定が無い）ときは null を返す
-async function getAuthConfig(): Promise<AuthConfig | null> {
-  const res = await fetch(`${API}/auth/config`);
-
-  if (res.status === 503) {
-    return null;
-  }
-  if (!res.ok) {
-    throw new Error(await res.text());
-  }
-
-  return await res.json();
+function getAuthConfig(query?: Query): Promise<AuthConfig | null> {
+  return requestOrNull<AuthConfig>("/auth/config", 503, query);
 }
 
 // 経路の id は「出発駅ID~到着駅ID」。ID は : を含むので、それぞれ encodeURIComponent する
@@ -134,35 +151,40 @@ function favoritePath(kind: FavoriteKind, id: string) {
 }
 
 export const api = {
-  getStatus() {
-    return request<TrainStatus[]>("/status");
+  getStatus(query?: Query) {
+    return request<TrainStatus[]>("/status", query);
   },
 
-  getRoutes() {
-    return request<Railway[]>("/routes");
+  getRoutes(query?: Query) {
+    return request<Railway[]>("/routes", query);
   },
 
-  getStations(routeId: string) {
+  getStations(routeId: string, query?: Query) {
     return request<Station[]>(
       `/routes/${encodeURIComponent(routeId)}/stations`,
+      query,
     );
   },
 
-  getAllStations() {
-    return request<StationSummary[]>("/stations");
+  getAllStations(query?: Query) {
+    return request<StationSummary[]>("/stations", query);
   },
 
-  getStation(stationId: string) {
-    return request<StationDetail>(`/stations/${encodeURIComponent(stationId)}`);
+  getStation(stationId: string, query?: Query) {
+    return request<StationDetail>(
+      `/stations/${encodeURIComponent(stationId)}`,
+      query,
+    );
   },
 
-  getTrain(trainId: string) {
+  getTrain(trainId: string, query?: Query) {
     return request<TrainLocation>(
       `/trains/${encodeURIComponent(trainId)}/location`,
+      query,
     );
   },
 
-  searchJourneys(query: JourneyQuery) {
+  searchJourneys(query: JourneyQuery, options?: Query) {
     const params = new URLSearchParams({ from: query.from, to: query.to });
 
     if (query.departAt) params.set("departAt", query.departAt);
@@ -173,7 +195,7 @@ export const api = {
     if (query.avoid?.length) params.set("avoid", query.avoid.join(","));
     if (query.realtime === false) params.set("realtime", "false");
 
-    return request<JourneySearch>(`/journeys?${params}`);
+    return request<JourneySearch>(`/journeys?${params}`, options);
   },
 
   chat(messages: ChatMessage[]) {
@@ -207,19 +229,12 @@ export const api = {
   },
 
   // 通知を使えない（VAPID の鍵が無い）ときは null を返す
-  async getPushConfig(): Promise<PushConfig | null> {
-    const res = await fetch(`${API}/push/config`);
-    if (res.status === 503) {
-      return null;
-    }
-    if (!res.ok) {
-      throw new Error(await res.text());
-    }
-    return await res.json();
+  getPushConfig(query?: Query): Promise<PushConfig | null> {
+    return requestOrNull<PushConfig>("/push/config", 503, query);
   },
 
-  getAlerts() {
-    return request<Alert[]>("/me/alerts");
+  getAlerts(query?: Query) {
+    return request<Alert[]>("/me/alerts", query);
   },
 
   setAlert({ railwayId, ...body }: Alert) {

@@ -108,6 +108,10 @@ export default function StationSelect({
           <Button
             variant="outline"
             role="combobox"
+            // 選んだあとも、出発駅か到着駅かが分かる名前にする（見た目は駅名だけ）
+            aria-label={
+              current ? `${label}: ${current.name}` : `${label}を選択`
+            }
             disabled={disabled}
             className="h-10 w-full justify-between text-base"
           />
