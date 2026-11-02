@@ -39,3 +39,13 @@ test("路線: 駅を路線の順に並べ、選んだ方向で駅の時刻表を
     "true",
   );
 });
+
+test("路線: 方向は矢印キーでも選べ、URL に残る", async ({ page }) => {
+  await page.goto(`/routes/${encodeURIComponent(ASAKUSA)}`);
+
+  await page.getByRole("radio", { name: "押上方面" }).focus();
+  await page.keyboard.press("ArrowRight");
+
+  await expect(page.getByRole("radio", { name: "西馬込方面" })).toBeChecked();
+  await expect(page).toHaveURL(/direction=odpt\.RailDirection%3ASouthbound/);
+});

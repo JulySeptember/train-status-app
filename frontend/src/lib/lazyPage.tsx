@@ -19,8 +19,8 @@ function markReloaded(): boolean {
   }
 }
 
-// 画面を読み込めたら目印を消す（次のデプロイのあとにも、1回は読み直せるように）
-function clearLazyPageReloaded() {
+// 目印を消す（次のデプロイのあとにも、1回は読み直せるように）
+function clearReloaded() {
   try {
     sessionStorage.removeItem(RELOADED_KEY);
   } catch {
@@ -37,14 +37,21 @@ function ReloadPage() {
   return <Loading />;
 }
 
-// 読み直しても読み込めなかったときの画面（ボタンでもう一度読み直せる）
+// 読み込めなかったときの画面（「再読み込み」のボタンで読み直せる）。
+// React Router は lazy の結果を覚えるので、ページを読み直すまでこのルートはこの画面のまま。
+// 自動の読み直しはここで終わりなので目印を消し、次のデプロイのあとにも1回は自動で読み直せるようにする
 function LoadFailed() {
+  useEffect(() => {
+    clearReloaded();
+  }, []);
+
   return <Error message="画面を読み込めませんでした。" />;
 }
 
 // 画面のモジュールを読み込む（React Router の lazy から呼ぶ）。
 // デプロイで前の版の JS が消えたあと、開いたままのタブで開くと読み込めないので、
 // その画面の URL のまま1回だけ読み直して新しい版を取る。読み直しても駄目ならエラーを出す。
+// オフラインのときは、読み直すとブラウザのオフラインの画面になり今の画面も失うので、読み直さずにエラーを出す。
 // 失敗しても投げずに、代わりの画面を返す（lazy が投げると、React Router は route.lazy が残ったままになり、
 // errorElement を出さずに Outlet を空にする）
 export async function loadLazyPage(
@@ -52,9 +59,12 @@ export async function loadLazyPage(
 ): Promise<ComponentType> {
   try {
     const page = await load();
-    clearLazyPageReloaded();
+    clearReloaded();
     return page.default;
   } catch {
+    if (!navigator.onLine) {
+      return LoadFailed;
+    }
     return markReloaded() ? LoadFailed : ReloadPage;
   }
 }
