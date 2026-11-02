@@ -17,9 +17,9 @@ import { stationPath, usePrefetchStation } from "@/lib/station";
 export default function Route() {
   const { routeId = "" } = useParams();
 
-  const { data, isPending, error } = useQuery({
+  const { data, isPending, error, refetch } = useQuery({
     queryKey: ["stations", routeId],
-    queryFn: () => api.getStations(routeId),
+    queryFn: ({ signal }) => api.getStations(routeId, { signal }),
   });
 
   const railway = useRailway(routeId);
@@ -33,7 +33,7 @@ export default function Route() {
 
   if (isPending) return <Loading />;
 
-  if (error) return <Error />;
+  if (error) return <Error onRetry={() => refetch()} />;
 
   return (
     <div className="space-y-6">

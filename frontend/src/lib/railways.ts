@@ -18,8 +18,12 @@ const LINE_CODES: Record<string, string> = {
   "odpt.Railway:Keikyu.Main": "KK",
 };
 
-async function getRailways(): Promise<Railway[]> {
-  const railways = await api.getRoutes();
+async function getRailways({
+  signal,
+}: {
+  signal?: AbortSignal;
+}): Promise<Railway[]> {
+  const railways = await api.getRoutes({ signal });
   return railways.map((r) => ({
     ...r,
     color: r.color || RAILWAY_COLORS[r.id],

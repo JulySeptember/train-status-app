@@ -176,7 +176,12 @@ export default function Account() {
   if (config.isPending || me.isPending) {
     body = <Loading />;
   } else if (me.isError) {
-    body = <Error message="ログインの状態を確かめられませんでした。" />;
+    body = (
+      <Error
+        message="ログインの状態を確かめられませんでした。"
+        onRetry={() => me.refetch()}
+      />
+    );
   } else if (me.data) {
     body = <LoggedIn createdAt={me.data.createdAt} />;
   } else if (config.data) {

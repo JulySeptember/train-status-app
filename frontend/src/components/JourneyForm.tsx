@@ -10,7 +10,7 @@ import RailwayBadge from "@/components/RailwayBadge";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import SegmentedControl from "@/components/SegmentedControl";
 
 import { uniqueBadges, useRailways } from "@/lib/railways";
 
@@ -190,15 +190,13 @@ export default function JourneyForm({ initial, onSearch }: Props) {
       )}
 
       <div className="flex flex-wrap items-center gap-3">
-        <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)}>
-          <TabsList aria-label="時刻の指定">
-            {modes.map((m) => (
-              <TabsTrigger key={m.value} value={m.value} className="px-3">
-                {m.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+        <SegmentedControl
+          options={modes}
+          value={mode}
+          onChange={setMode}
+          label="時刻の指定"
+          optionClassName="px-3"
+        />
 
         {mode !== "now" && (
           <Input

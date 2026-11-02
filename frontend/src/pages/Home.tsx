@@ -306,9 +306,12 @@ function FavoritesSection() {
   const { favorites } = useFavorites();
   const status = useStatus();
   const railways = useRailways();
+  // 全駅は駅名を出すためだけに使うので、駅か経路のお気に入りがあるときだけ取る
   const stations = useQuery({
     queryKey: ["stations"],
     queryFn: api.getAllStations,
+    enabled:
+      !!favorites && favorites.stations.length + favorites.journeys.length > 0,
   });
 
   const data = favorites;
@@ -446,7 +449,14 @@ function StatusSection() {
 
   // 取り直しに失敗しても、前に取得した情報があればそれを出し続ける
   if (!status.data || railways.error) {
-    return <Error />;
+    return (
+      <Error
+        onRetry={() => {
+          if (!status.data) status.refetch();
+          if (railways.error) railways.refetch();
+        }}
+      />
+    );
   }
 
   // 小田急など運行情報を配信していない路線は出さない。

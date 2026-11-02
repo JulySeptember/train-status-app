@@ -298,7 +298,14 @@ export default function Stations() {
   }
 
   if (railways.error || stations.error) {
-    return <Error />;
+    return (
+      <Error
+        onRetry={() => {
+          if (railways.error) railways.refetch();
+          if (stations.error) stations.refetch();
+        }}
+      />
+    );
   }
 
   return (

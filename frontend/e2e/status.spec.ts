@@ -325,6 +325,46 @@ test("運行情報: 取得に失敗したらエラーを出す", async ({ page, 
   await expect(page.getByRole("button", { name: "再読み込み" })).toBeVisible();
 });
 
+test("運行情報: 再読み込みのボタンで、ページを読み直さずに取り直す", async ({
+  page,
+  api,
+}) => {
+  api.set("/status", { status: 500, body: { error: "internal" } });
+
+  await page.goto("/");
+  await expect(page.getByText("データの取得に失敗しました。")).toBeVisible({
+    timeout: 10_000,
+  });
+
+  // ページを読み直したら消える目印を置いておく
+  await page.evaluate(() => {
+    (window as { notReloaded?: boolean }).notReloaded = true;
+  });
+  api.set("/status", { body: statuses });
+  await page.getByRole("button", { name: "再読み込み" }).click();
+
+  await expect(page.getByRole("link", { name: /^三田線/ })).toContainText(
+    "人身事故の影響で",
+  );
+  expect(
+    await page.evaluate(
+      () => (window as { notReloaded?: boolean }).notReloaded,
+    ),
+  ).toBe(true);
+});
+
+test("運行情報: お気に入りや現在地を使わなければ、全駅の一覧を取らない", async ({
+  page,
+}) => {
+  const requested: string[] = [];
+  page.on("request", (r) => requested.push(new URL(r.url()).pathname));
+
+  await page.goto("/");
+  await expect(page.getByText("8:00 時点の情報")).toBeVisible();
+
+  expect(requested).not.toContain("/api/stations");
+});
+
 // バックグラウンドから戻ったときを、時計を進めて visibilitychange を送ることで再現する
 // （staleTime を過ぎるまでは取り直さないので、時計も進める）
 async function returnToPage(page: Page, minutes: number) {

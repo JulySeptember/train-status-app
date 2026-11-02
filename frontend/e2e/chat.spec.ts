@@ -27,7 +27,12 @@ async function ask(page: Page) {
   await page.goto("/chat");
   await page.getByRole("textbox", { name: "質問" }).fill(QUESTION);
   await page.getByRole("button", { name: "送信" }).click();
-  await expect(page.getByText("運行状況や時刻表を調べています")).toBeVisible();
+  // 考え中の表示は status として読み上げられる
+  await expect(
+    page
+      .getByRole("status")
+      .filter({ hasText: "運行状況や時刻表を調べています" }),
+  ).toBeVisible();
 }
 
 test("AI 乗換相談: 回答を待つ間に別の画面へ移っても、戻ると回答が入っている", async ({
@@ -50,7 +55,10 @@ test("AI 乗換相談: 回答を待つ間に別の画面へ移っても、戻る
   await nav(page, "AI 乗換相談").click();
 
   await expect(page.locator("p", { hasText: QUESTION })).toHaveCount(1);
-  await expect(page.getByText(answer.reply)).toBeVisible();
+  // 発言と回答は、読み上げられる会話の一覧（role="log"）に入る
+  const log = page.getByRole("log", { name: "会話" });
+  await expect(log).toContainText(QUESTION);
+  await expect(log).toContainText(answer.reply);
   await expect(page.getByText("運行状況や時刻表を調べています")).toHaveCount(0);
 });
 

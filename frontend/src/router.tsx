@@ -1,6 +1,8 @@
+import type React from "react";
 import { createBrowserRouter } from "react-router-dom";
 
 import Layout from "@/components/Layout";
+import Loading from "@/components/Loading";
 
 import Home from "@/pages/Home";
 import Route from "@/pages/Route";
@@ -8,15 +10,19 @@ import Station from "@/pages/Station";
 import Stations from "@/pages/Stations";
 import Train from "@/pages/Train";
 import Journey from "@/pages/Journey";
-import Chat from "@/pages/Chat";
 import NotFound from "@/pages/NotFound";
-import License from "./pages/License";
-import Account from "@/pages/Account";
-import Privacy from "@/pages/Privacy";
+
+// 開く人の少ない画面は、開いたときに読み込む（最初に読み込む JS を小さくする）。
+// 読み込むまでは前の画面を出したままにする（React Router の lazy）
+const lazyPage = (load: () => Promise<{ default: React.ComponentType }>) => ({
+  lazy: async () => ({ Component: (await load()).default }),
+});
 
 export const router = createBrowserRouter([
   {
     element: <Layout />,
+    // 遅延読み込みの画面を直接開いたときは、読み込むまでこれを出す
+    hydrateFallbackElement: <Loading />,
     children: [
       {
         path: "/",
@@ -44,19 +50,19 @@ export const router = createBrowserRouter([
       },
       {
         path: "/chat",
-        element: <Chat />,
+        ...lazyPage(() => import("@/pages/Chat")),
       },
       {
         path: "/license",
-        element: <License />,
+        ...lazyPage(() => import("@/pages/License")),
       },
       {
         path: "/account",
-        element: <Account />,
+        ...lazyPage(() => import("@/pages/Account")),
       },
       {
         path: "/privacy",
-        element: <Privacy />,
+        ...lazyPage(() => import("@/pages/Privacy")),
       },
     ],
   },

@@ -48,8 +48,8 @@ export function useFavorites() {
 
   const query = useQuery({
     queryKey: FAVORITES_KEY,
-    queryFn: async () => {
-      const favorites = await api.getFavorites();
+    queryFn: async ({ signal }) => {
+      const favorites = await api.getFavorites({ signal });
       if (favorites === null) {
         await client.invalidateQueries({ queryKey: ["me"] });
       }

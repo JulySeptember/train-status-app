@@ -19,13 +19,11 @@ test("路線: 駅を路線の順に並べ、選んだ方向で駅の時刻表を
   );
 
   // 方向を選ぶと URL に残る
-  const southbound = page.getByRole("tab", { name: "西馬込方面" });
-  await expect(page.getByRole("tab", { name: "押上方面" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  const southbound = page.getByRole("radio", { name: "西馬込方面" });
+  await expect(page.getByRole("radio", { name: "押上方面" })).toBeChecked();
+  // 選んだ方向は URL を変えてから反映されるので、check() ではなく押してから選ばれるのを待つ
   await southbound.click();
-  await expect(southbound).toHaveAttribute("aria-selected", "true");
+  await expect(southbound).toBeChecked();
   await expect(page).toHaveURL(/direction=odpt\.RailDirection%3ASouthbound/);
 
   await page.getByRole("link", { name: "五反田" }).click();
