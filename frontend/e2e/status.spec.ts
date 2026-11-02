@@ -340,8 +340,18 @@ test("運行情報: 再読み込みのボタンで、ページを読み直さず
   await page.evaluate(() => {
     (window as { notReloaded?: boolean }).notReloaded = true;
   });
-  api.set("/status", { body: statuses });
+  let respond = () => {};
+  api.set("/status", {
+    body: statuses,
+    wait: new Promise<void>((r) => (respond = r)),
+  });
   await page.getByRole("button", { name: "再読み込み" }).click();
+
+  // 取り直している間は、読み込み中を出す（データが無いので、エラーから読み込み中に戻る）
+  await expect(
+    page.getByRole("status").filter({ hasText: "読み込み中..." }),
+  ).toBeVisible();
+  respond();
 
   await expect(page.getByRole("link", { name: /^三田線/ })).toContainText(
     "人身事故の影響で",

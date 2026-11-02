@@ -78,7 +78,12 @@ export default function NearbyStations() {
     if (stations.isPending) {
       body = <Loading />;
     } else if (stations.error) {
-      body = <Error onRetry={() => stations.refetch()} />;
+      body = (
+        <Error
+          onRetry={() => stations.refetch()}
+          retrying={stations.isFetching}
+        />
+      );
     } else {
       const nearby = nearbyStations(stations.data, locate.here);
       body =

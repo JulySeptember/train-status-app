@@ -455,6 +455,7 @@ function StatusSection() {
           if (!status.data) status.refetch();
           if (railways.error) railways.refetch();
         }}
+        retrying={status.isFetching || railways.isFetching}
       />
     );
   }

@@ -180,6 +180,7 @@ export default function Account() {
       <Error
         message="ログインの状態を確かめられませんでした。"
         onRetry={() => me.refetch()}
+        retrying={me.isFetching}
       />
     );
   } else if (me.data) {

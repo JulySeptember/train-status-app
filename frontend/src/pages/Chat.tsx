@@ -291,15 +291,15 @@ export default function Chat() {
           )}
         </div>
 
-        {pending && (
-          <div
-            role="status"
-            className="flex items-center gap-2 rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground"
-          >
-            <LoaderCircle size={16} className="animate-spin" aria-hidden />
-            運行状況や時刻表を調べています（10秒ほどかかることがあります）
-          </div>
-        )}
+        {/* 読み上げの領域は中身を入れる前から置いておく（中身ごと差し込むと読み上げない読み上げソフトがある） */}
+        <div role="status" className="empty:hidden">
+          {pending && (
+            <div className="flex items-center gap-2 rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground">
+              <LoaderCircle size={16} className="animate-spin" aria-hidden />
+              運行状況や時刻表を調べています（10秒ほどかかることがあります）
+            </div>
+          )}
+        </div>
 
         {error && <ChatErrorMessage error={error} />}
 

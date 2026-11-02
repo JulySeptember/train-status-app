@@ -562,3 +562,29 @@ test("経路検索: 時刻の指定は矢印キーで選べる", async ({ page }
   await expect(page.getByRole("radio", { name: "出発" })).toBeChecked();
   await expect(page.getByLabel("出発時刻")).toBeVisible();
 });
+
+test("経路検索: 結果を待つ間に画面を離れたら、検索のリクエストを取り消す", async ({
+  page,
+  api,
+}) => {
+  // 応答を返さないまま待たせる
+  api.set("/journeys", { body: journeySearch, wait: new Promise(() => {}) });
+
+  const requests: string[] = [];
+  const failed: string[] = [];
+  const isJourneys = (url: string) => new URL(url).pathname === "/api/journeys";
+  page.on("request", (r) => isJourneys(r.url()) && requests.push(r.url()));
+  page.on("requestfailed", (r) => isJourneys(r.url()) && failed.push(r.url()));
+
+  await page.goto(resultUrl);
+  await expect(page.getByText("読み込み中...")).toBeVisible();
+  // 開発時の StrictMode は一度アンマウントして最初のリクエストを取り消すので、待っているリクエストが残るのを待つ
+  await expect.poll(() => requests.length - failed.length).toBe(1);
+
+  await page
+    .getByRole("navigation", { name: "メイン" })
+    .getByRole("link", { name: "運行情報" })
+    .click();
+
+  await expect.poll(() => requests.length - failed.length).toBe(0);
+});

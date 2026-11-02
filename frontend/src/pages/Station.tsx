@@ -16,7 +16,9 @@ import { stationQuery } from "@/lib/station";
 export default function Station() {
   const { stationId = "" } = useParams();
 
-  const { data, isPending, error, refetch } = useQuery(stationQuery(stationId));
+  const { data, isPending, error, refetch, isFetching } = useQuery(
+    stationQuery(stationId),
+  );
 
   const railway = useRailway(railwayIdOf(stationId));
 
@@ -31,7 +33,7 @@ export default function Station() {
   }
 
   if (error || !data) {
-    return <Error onRetry={() => refetch()} />;
+    return <Error onRetry={() => refetch()} retrying={isFetching} />;
   }
 
   const directions = [...new Set(data.timetables.map((t) => t.railDirection))];

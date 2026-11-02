@@ -17,7 +17,7 @@ import { stationPath, usePrefetchStation } from "@/lib/station";
 export default function Route() {
   const { routeId = "" } = useParams();
 
-  const { data, isPending, error, refetch } = useQuery({
+  const { data, isPending, error, refetch, isFetching } = useQuery({
     queryKey: ["stations", routeId],
     queryFn: ({ signal }) => api.getStations(routeId, { signal }),
   });
@@ -33,7 +33,7 @@ export default function Route() {
 
   if (isPending) return <Loading />;
 
-  if (error) return <Error onRetry={() => refetch()} />;
+  if (error) return <Error onRetry={() => refetch()} retrying={isFetching} />;
 
   return (
     <div className="space-y-6">
