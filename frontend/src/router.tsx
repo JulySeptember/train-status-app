@@ -3,6 +3,7 @@ import { createBrowserRouter } from "react-router-dom";
 
 import Layout from "@/components/Layout";
 import Loading from "@/components/Loading";
+import { loadLazyPage } from "@/lib/lazyPage";
 
 import Home from "@/pages/Home";
 import Route from "@/pages/Route";
@@ -13,9 +14,10 @@ import Journey from "@/pages/Journey";
 import NotFound from "@/pages/NotFound";
 
 // 開く人の少ない画面は、開いたときに読み込む（最初に読み込む JS を小さくする）。
-// 読み込むまでは前の画面を出したままにする（React Router の lazy）
+// 読み込むまでは前の画面を出したままにする（React Router の lazy）。
+// 読み込めなかったとき（デプロイで前の版の JS が消えたときなど）の扱いは loadLazyPage
 const lazyPage = (load: () => Promise<{ default: React.ComponentType }>) => ({
-  lazy: async () => ({ Component: (await load()).default }),
+  lazy: async () => ({ Component: await loadLazyPage(load) }),
 });
 
 export const router = createBrowserRouter([

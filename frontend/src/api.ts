@@ -32,10 +32,14 @@ export class HttpError extends Error {
   }
 }
 
-// 4xx（指定の誤り）か。通信の失敗（fetch の TypeError）や 5xx は false
+// 4xx（指定の誤り）か。通信の失敗（fetch の TypeError）や 5xx は false。
+// 429 は API Gateway の流量の制限で、指定の誤りではないので false
 export function isClientError(error: unknown) {
   return (
-    error instanceof HttpError && error.status >= 400 && error.status < 500
+    error instanceof HttpError &&
+    error.status >= 400 &&
+    error.status < 500 &&
+    error.status !== 429
   );
 }
 

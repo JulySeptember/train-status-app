@@ -184,3 +184,23 @@ test("AI 乗換相談: 1日の上限に達したら、理由と AI を使わな�
     QUESTION,
   );
 });
+
+test("AI 乗換相談: 画面の JS を読み込めなければ、1回だけ読み直し、それでも駄目ならエラーを出す", async ({
+  page,
+}) => {
+  // デプロイで前の版の JS が消えたときを、チャットの画面のモジュールの取得を失敗させて再現する
+  let attempts = 0;
+  await page.route("**/src/pages/Chat.tsx*", (route) => {
+    attempts++;
+    return route.abort();
+  });
+
+  await page.goto("/");
+  await nav(page, "AI 乗換相談").click();
+
+  await expect(page.getByText("画面を読み込めませんでした。")).toBeVisible();
+  // ヘッダーは残る
+  await expect(nav(page, "運行情報")).toBeVisible();
+  // 最初の失敗で1回だけ読み直す（読み直したあとの失敗では読み直さない）
+  expect(attempts).toBe(2);
+});

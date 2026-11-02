@@ -535,3 +535,30 @@ test("経路検索: サーバーのエラー（5xx）なら、指定ではなく
   ).toBeVisible();
   await expect(page.getByText("駅や時刻の指定を確かめて")).toHaveCount(0);
 });
+
+test("経路検索: 流量の制限（429）でも、指定ではなく時間をおくよう案内する", async ({
+  page,
+  api,
+}) => {
+  api.set("/journeys", { status: 429, body: { message: "Too Many Requests" } });
+
+  await page.goto(resultUrl);
+
+  await expect(page.getByText("経路を検索できませんでした。")).toBeVisible({
+    timeout: 10_000,
+  });
+  await expect(
+    page.getByText("時間をおいて、もう一度検索してください。"),
+  ).toBeVisible();
+});
+
+test("経路検索: 時刻の指定は矢印キーで選べる", async ({ page }) => {
+  await page.goto("/journeys");
+
+  const now = page.getByRole("radio", { name: "今すぐ" });
+  await now.focus();
+  await page.keyboard.press("ArrowRight");
+
+  await expect(page.getByRole("radio", { name: "出発" })).toBeChecked();
+  await expect(page.getByLabel("出発時刻")).toBeVisible();
+});
