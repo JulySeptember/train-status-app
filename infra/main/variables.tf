@@ -61,7 +61,7 @@ variable "google_client_id" {
 }
 
 variable "csp_report_only" {
-  description = "true なら CSP を Content-Security-Policy-Report-Only で付ける（違反はブロックせず、ブラウザのコンソールに出すだけ）。違反が無いのを確かめたら false にして強制する"
+  description = "true なら CSP を Content-Security-Policy-Report-Only で付ける（違反はブロックせず、ブラウザのコンソールに出すだけ）。普段は false（強制）。CSP を大きく変えるときに、一時的に true にして本番で違反が無いのを確かめる"
   type        = bool
-  default     = true
+  default     = false
 }

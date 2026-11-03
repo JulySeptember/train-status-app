@@ -15,12 +15,12 @@ data "aws_cloudfront_origin_request_policy" "all_viewer_except_host_header" {
 locals {
   # Google でのログイン（frontend/src/lib/auth.ts の Google Identity Services）に要るものは、
   # https://developers.google.com/identity/gsi/web/guides/get-google-api-clientid#content_security_policy に合わせる。
-  # style-src の 'unsafe-inline' は、Google のボタンが差し込む style 要素のため
+  # style-src の 'unsafe-inline' は、Google のボタン（gsi/client）がアカウントの画面で当てるインラインのスタイルのため
+  # （外すと違反になるのを確かめた）。スクリプトのインラインは許さない
   content_security_policy = join("; ", [
     "default-src 'self'",
     "script-src 'self' https://accounts.google.com/gsi/client",
     "style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style",
-    "img-src 'self' data:",
     "connect-src 'self' https://accounts.google.com/gsi/",
     "frame-src https://accounts.google.com/gsi/",
     "object-src 'none'",
