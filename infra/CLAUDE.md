@@ -10,6 +10,8 @@ CloudFront が `/api/*` を API Gateway（HTTP API）→ Lambda（`provided.al20
 
 SPA のルーティングは CloudFront Function（`main/functions/spa_rewrite.js`）で `/index.html` に書き換えている。`custom_error_response` は `/api/*` のエラーまで `index.html` の 200 にしてしまうので使わない。
 
+レスポンスヘッダーは、`Managed-SecurityHeadersPolicy` と同じ内容に CSP と Permissions-Policy を足した独自のポリシー（`main/cloudfront.tf` の `aws_cloudfront_response_headers_policy.security_headers`）で付ける。CSP は `csp_report_only`（既定 true）の間は `Content-Security-Policy-Report-Only` で付け、違反をブラウザのコンソールに出すだけにする。フロントで外部のスクリプト・画像・通信先・iframe を足したら、`local.content_security_policy` にも足す（強制にしたあとは足さないとブロックされる）。手元で確かめるときは、`vite preview` の応答に Playwright の `route` で CSP を付けて、コンソールに `Content Security Policy` の違反が出ないかを見る（`vite` の開発サーバーはインラインのスクリプトを使うので、強制の CSP では動かない）。
+
 CloudFront は標準の証明書（`cloudfront_default_certificate = true`）を使っている。この場合 AWS が `minimum_protocol_version` を `TLSv1` に固定するので、指定しない（指定すると `plan` に毎回差分が出る）。独自ドメインと ACM 証明書にしたら指定する。
 
 ## API キー（SSM）

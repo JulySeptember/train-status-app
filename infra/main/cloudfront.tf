@@ -10,8 +10,85 @@ data "aws_cloudfront_origin_request_policy" "all_viewer_except_host_header" {
   name = "Managed-AllViewerExceptHostHeader"
 }
 
-data "aws_cloudfront_response_headers_policy" "security_headers" {
-  name = "Managed-SecurityHeadersPolicy"
+# Managed-SecurityHeadersPolicy と同じ内容に、CSP と Permissions-Policy を足したもの。
+# AI の応答を画面に出し、セッション Cookie を使うので、XSS が起きたときの被害を抑える
+locals {
+  # Google でのログイン（frontend/src/lib/auth.ts の Google Identity Services）に要るものは、
+  # https://developers.google.com/identity/gsi/web/guides/get-google-api-clientid#content_security_policy に合わせる。
+  # style-src の 'unsafe-inline' は、Google のボタンが差し込む style 要素のため
+  content_security_policy = join("; ", [
+    "default-src 'self'",
+    "script-src 'self' https://accounts.google.com/gsi/client",
+    "style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style",
+    "img-src 'self' data:",
+    "connect-src 'self' https://accounts.google.com/gsi/",
+    "frame-src https://accounts.google.com/gsi/",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'self'",
+  ])
+
+  # 位置情報は「近くの駅」（frontend/src/components/NearbyStations.tsx）で使う
+  permissions_policy = "geolocation=(self), camera=(), microphone=(), payment=(), usb=()"
+}
+
+resource "aws_cloudfront_response_headers_policy" "security_headers" {
+  name    = "${local.name_prefix}-security-headers"
+  comment = "Managed-SecurityHeadersPolicy + CSP + Permissions-Policy"
+
+  security_headers_config {
+    strict_transport_security {
+      access_control_max_age_sec = 31536000
+      override                   = false
+    }
+
+    content_type_options {
+      override = true
+    }
+
+    frame_options {
+      frame_option = "SAMEORIGIN"
+      override     = false
+    }
+
+    referrer_policy {
+      referrer_policy = "strict-origin-when-cross-origin"
+      override        = false
+    }
+
+    xss_protection {
+      protection = true
+      mode_block = true
+      override   = false
+    }
+
+    # 強制するときだけここで付ける（Report-Only はカスタムヘッダーで付ける）
+    dynamic "content_security_policy" {
+      for_each = var.csp_report_only ? [] : [1]
+      content {
+        content_security_policy = local.content_security_policy
+        override                = true
+      }
+    }
+  }
+
+  custom_headers_config {
+    items {
+      header   = "Permissions-Policy"
+      value    = local.permissions_policy
+      override = true
+    }
+
+    dynamic "items" {
+      for_each = var.csp_report_only ? [1] : []
+      content {
+        header   = "Content-Security-Policy-Report-Only"
+        value    = local.content_security_policy
+        override = true
+      }
+    }
+  }
 }
 
 resource "aws_cloudfront_origin_access_control" "frontend" {
@@ -92,7 +169,7 @@ resource "aws_cloudfront_distribution" "this" {
     compress = true
 
     cache_policy_id            = data.aws_cloudfront_cache_policy.caching_optimized.id
-    response_headers_policy_id = data.aws_cloudfront_response_headers_policy.security_headers.id
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.security_headers.id
 
     function_association {
       event_type   = "viewer-request"
@@ -126,7 +203,7 @@ resource "aws_cloudfront_distribution" "this" {
 
     cache_policy_id            = data.aws_cloudfront_cache_policy.caching_disabled.id
     origin_request_policy_id   = data.aws_cloudfront_origin_request_policy.all_viewer_except_host_header.id
-    response_headers_policy_id = data.aws_cloudfront_response_headers_policy.security_headers.id
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.security_headers.id
   }
 
   restrictions {
