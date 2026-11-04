@@ -329,7 +329,7 @@ export default function Chat() {
               }
             }}
             maxLength={MAX_INPUT_CHARS}
-            placeholder="行きたい場所や、知りたいことを入力"
+            placeholder="行き先や質問を入力"
             aria-label="質問"
             className="max-h-40 min-h-12 text-foreground"
           />
