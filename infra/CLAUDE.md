@@ -41,6 +41,23 @@ action はコミット SHA で固定し（`@<SHA> # v7.0.1`）、`.github/depend
 - Lambda に権限を足すときは、`bootstrap` にポリシーを作って `aws_iam_role_policy_attachment.lambda` に足す。deploy 用ロールには、Lambda の実行ロールの `iam:PassRole` 以外の IAM の権限を与えない（信頼ポリシーやポリシーを変えられると、SSM の API キーを読めるロールを引き受けたり、権限を広げたりできる）
 - plan・deploy 用ロールは `ReadOnlyAccess` を土台にしているので、読ませたくないもの（SSM の API キー、DynamoDB の利用者のデータ、plan では `assets-extra/*` の他社データ）は `github_oidc.tf` で明示的に Deny している。アプリのテーブルや読ませたくないデータを足したら、そこにも足す。Deny は多層防御で、完全には守れない（plan でも `lambda/bootstrap.zip` に埋め込まれた他社データは読める。deploy は `lambda:*` で関数のコードを差し替えれば実行ロールの権限で読める）。deploy 用ロールには、アーティファクト用バケットへは `lambda/bootstrap.zip` を置くことだけを、アプリのテーブルへは Terraform がテーブルを管理する操作だけを許している
 
+## 監視
+
+障害と費用の増加は、SNS トピック `train-status-app-dev-alerts`（`bootstrap/monitoring.tf`）からメールで知らせる。予算（アカウント全体で月 $5。実績が $1・$5 を超えたときと、$5 を超えそうなとき）も bootstrap で作る。CloudWatch のアラーム（両 Lambda の `Errors`、API の Lambda の `Throttles` と `Duration` の p99、API Gateway の `5xx`）と API Gateway のアクセスログ（`/aws/apigateway/train-status-app-dev-api`、JSON、保持30日）は `main/monitoring.tf`。どれも無料の範囲で、標準のアラームは10個まで無料なので、それを超えないようにする。
+
+メールの購読は、公開リポジトリと tfstate にアドレスを残さないよう Terraform で作らない。bootstrap を適用したあと、ユーザーに `! aws sns subscribe --region ap-northeast-1 --topic-arn "$(cd infra/bootstrap && terraform output -raw alert_topic_arn)" --protocol email --notification-endpoint 'メールアドレス'` を実行してもらい、届いた確認のメールのリンクを開いてもらう。
+
+`main` は SNS トピックを `data "aws_sns_topic"` で名前から引くので、bootstrap を先に適用する（無いと plan が失敗する）。
+
+API の Lambda のログは1リクエスト1行の `<メソッド> <パス> <ステータス> <処理時間>`（`backend/internal/middleware/logging.go`）で、panic はスタックも出る。5xx の割合は Logs Insights で数える:
+
+```
+fields @message
+| parse @message /(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS) \S+ (?<status>\d{3}) /
+| filter ispresent(status)
+| stats count(*) as n by status
+```
+
 ## Ruleset
 
 main は Ruleset（`main`）で保護している: PR 必須（承認は不要）、force push・削除の禁止、必須チェックは `changes`・`backend`・`frontend`・`infra`（ci.yml のジョブ名）。`if` でスキップされたジョブは成功として扱われるので、変更のない領域があってもマージできる。`changes` が失敗すると後続がスキップされて通ってしまうため、`changes` も必須にしている。ci.yml のジョブ名を変えたり検証のジョブを足したりしたら、Ruleset の必須チェックも合わせて変える（`gh api repos/JulySeptember/train-status-app/rulesets`）。`infra-plan` は AWS 側の一時的な失敗やフォークからの PR があるので必須にしていない。
