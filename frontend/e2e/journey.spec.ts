@@ -87,6 +87,120 @@ test("経路検索: ホームから駅を選んで検索し、乗り換えと遅
   );
 });
 
+test("経路検索: 結果を乗り換えの少ない順・所要時間の短い順に並べ替え、並び順を URL に残す", async ({
+  page,
+  api,
+}) => {
+  const base = journeySearch.journeys[0];
+  // API の並び（早く着く順）・乗り換えの少ない順・所要時間の短い順が、すべて違う3本
+  api.set("/journeys", {
+    body: {
+      ...journeySearch,
+      journeys: [
+        {
+          ...base,
+          departureTime: "08:05",
+          arrivalTime: "08:30",
+          transfers: 2,
+        },
+        {
+          ...base,
+          departureTime: "08:12",
+          arrivalTime: "08:34",
+          transfers: 1,
+        },
+        {
+          ...base,
+          departureTime: "08:00",
+          arrivalTime: "08:38",
+          transfers: 0,
+        },
+      ],
+    },
+  });
+
+  const badges = page.getByText(/^乗り換え(なし|\d回)$/);
+  const order = ["乗り換え2回", "乗り換え1回", "乗り換えなし"];
+
+  await page.goto(resultUrl);
+  await expect(badges).toHaveText(order);
+  await expect(page.getByRole("radio", { name: "早く着く順" })).toBeChecked();
+
+  let searches = 0;
+  page.on("request", (r) => {
+    if (new URL(r.url()).pathname === "/api/journeys") {
+      searches++;
+    }
+  });
+
+  // 並び順は URL に持たせていて、押したあと少し遅れて選ばれるので、check() ではなく click() で押す
+  await page.getByRole("radio", { name: "乗り換えが少ない順" }).click();
+  await expect(badges).toHaveText([
+    "乗り換えなし",
+    "乗り換え1回",
+    "乗り換え2回",
+  ]);
+  await expect(page).toHaveURL(`${resultUrl}&sort=transfers`);
+
+  await page.getByRole("radio", { name: "所要時間が短い順" }).click();
+  await expect(badges).toHaveText([
+    "乗り換え1回",
+    "乗り換え2回",
+    "乗り換えなし",
+  ]);
+  await expect(page).toHaveURL(`${resultUrl}&sort=duration`);
+  // 並べ替えだけでは検索し直さない
+  expect(searches).toBe(0);
+
+  // 再読み込みしても並び順を保つ
+  await page.reload();
+  await expect(badges).toHaveText([
+    "乗り換え1回",
+    "乗り換え2回",
+    "乗り換えなし",
+  ]);
+  await expect(
+    page.getByRole("radio", { name: "所要時間が短い順" }),
+  ).toBeChecked();
+
+  // 検索し直しても並び順を保つ
+  await page.getByRole("radio", { name: "出発" }).check();
+  await page.getByLabel("出発時刻").fill("09:00");
+  await page.getByRole("button", { name: "検索" }).click();
+  await expect(page).toHaveURL(/departAt=09%3A00/);
+  await expect(page).toHaveURL(/sort=duration/);
+
+  // 既定の並びに戻すと URL から消える
+  await page.getByRole("radio", { name: "早く着く順" }).click();
+  await expect(badges).toHaveText(order);
+  await expect(page).not.toHaveURL(/sort=/);
+});
+
+test("経路検索: 到着時刻の指定では、既定の並び順を遅く出る順と出す", async ({
+  page,
+  api,
+}) => {
+  const base = journeySearch.journeys[0];
+  api.set("/journeys", {
+    body: {
+      ...journeySearch,
+      journeys: [base, { ...base, departureTime: "08:00", transfers: 0 }],
+    },
+  });
+
+  await page.goto(`${resultUrl}&arriveBy=09%3A00`);
+  await expect(page.getByRole("radio", { name: "遅く出る順" })).toBeChecked();
+  await expect(page.getByRole("radio", { name: "早く着く順" })).toHaveCount(0);
+});
+
+test("経路検索: 経路が1本なら並び順を出さない", async ({ page, api }) => {
+  api.set("/journeys", { body: journeySearch });
+
+  await page.goto(resultUrl);
+  await expect(page.getByText("乗り換え1回")).toBeVisible();
+  await expect(page.getByRole("radiogroup", { name: "並び順" })).toHaveCount(0);
+});
+
 test("経路検索: 遅延を反映しない・到着時刻を指定した条件で検索する", async ({
   page,
   api,
