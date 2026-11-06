@@ -32,13 +32,21 @@ updates:
       npm-major:
         update-types: [major]
 
+  # bootstrap はマージの前に手元で適用するので、main とは別の PR にする（infra/CLAUDE.md）
   - package-ecosystem: terraform
-    directories:
-      - /infra/main
-      - /infra/bootstrap
+    directory: /infra/main
     schedule:
       interval: weekly
       timezone: Asia/Tokyo
     groups:
-      terraform:
+      terraform-main:
+        patterns: ["*"]
+
+  - package-ecosystem: terraform
+    directory: /infra/bootstrap
+    schedule:
+      interval: weekly
+      timezone: Asia/Tokyo
+    groups:
+      terraform-bootstrap:
         patterns: ["*"]

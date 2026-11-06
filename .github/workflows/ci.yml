@@ -126,13 +126,20 @@ jobs:
       # 当たったときは、キャッシュに入らない OS のパッケージだけを入れる
       - name: Playwright のバージョンを調べる
         id: playwright
-        run: echo "version=$(npx playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+        run: |
+          version="$(npx playwright --version | awk '{print $2}')"
+          if [ -z "$version" ]; then
+            echo "Playwright のバージョンを取得できませんでした"
+            exit 1
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
 
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium
+          # ImageOS（ubuntu24 など）を入れ、ランナーの OS が変わったら入れ直す
+          key: playwright-${{ env.ImageOS }}-${{ steps.playwright.outputs.version }}-chromium
 
       - if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
@@ -184,8 +191,8 @@ jobs:
 
   # PR に terraform plan の結果をコメントする（同じコメントを更新する）。
   # plan 用のロールは読み取り専用なので、ロックは取らない。
-  # フォークと Dependabot からの PR には ID トークンが発行されず、ロールを使えないので実行しない
-  # （Dependabot の Terraform の更新は、手元で make tf-main-plan を実行して確かめる）。
+  # フォークからの PR には ID トークンが発行されず、ロールを使えないので実行しない。
+  # 依存の更新（Dependabot）の PR でも AWS のロールは使わない（手元で make tf-main-plan を実行して確かめる。infra/CLAUDE.md）。
   infra-plan:
     needs: [changes, infra]
     if: >-

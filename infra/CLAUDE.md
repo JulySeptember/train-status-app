@@ -28,6 +28,8 @@ main へのマージで CI（`.github/workflows/ci.yml`）が、検証が通っ�
 
 main への push が続くと、待機中の実行は新しいものに置き換わり、その push の変更が反映されないことがある（変更の判定は push 単位のため）。その場合も手動実行で反映する。
 
+action はコミット SHA で固定し（`@<SHA> # v7.0.1`）、`.github/dependabot.yml` が github-actions・gomod・npm・terraform を週1回更新する。action を足すときも SHA で固定する。Dependabot の PR では AWS のロールを使わないので `infra-plan` が実行されない。Terraform の更新の PR は、マージ（CD の `terraform apply`）の前に手元で `make tf-main-plan` を実行して確かめ、`infra/bootstrap` の PR は `make tf-bootstrap-plan` で確かめてから `make tf-bootstrap-apply` で適用する。
+
 `deploy.yml` のジョブに GitHub Environment（`environment:`）を付けると、OIDC の `sub` が `repo:<owner>/<repo>:environment:<名前>` に変わり、deploy 用ロールを引き受けられなくなる。付けるときは `bootstrap/github_oidc.tf` の条件も変える。
 
 手元の make（CD が失敗したときや bootstrap の適用に使う）:
