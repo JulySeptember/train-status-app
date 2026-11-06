@@ -20,6 +20,8 @@ env:
   TERRAFORM_VERSION: 1.15.7
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "0"
+  # プロバイダをここに置き、.terraform.lock.hcl ごとに actions/cache で使い回す
+  TF_PLUGIN_CACHE_DIR: /home/runner/.terraform.d/plugin-cache
 
 # main ではデプロイを途中で止めないように、実行中のものは取り消さない
 concurrency:
@@ -36,8 +38,8 @@ jobs:
       frontend: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.frontend }}
       infra: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.infra }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: dorny/paths-filter@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         if: github.event_name != 'workflow_dispatch'
         id: filter
         with:
@@ -66,9 +68,9 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: backend/go.mod
           cache-dependency-path: backend/go.sum
@@ -107,9 +109,9 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: npm
@@ -120,10 +122,26 @@ jobs:
       - run: npm run build
 
       # E2E テスト。/api はテストの中でモックするので、バックエンドは起動しない
-      - run: npx playwright install --with-deps chromium
+      # ブラウザ（~/.cache/ms-playwright）は Playwright のバージョンごとにキャッシュする。
+      # 当たったときは、キャッシュに入らない OS のパッケージだけを入れる
+      - name: Playwright のバージョンを調べる
+        id: playwright
+        run: echo "version=$(npx playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium
+
+      - if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
       - run: npm run test:e2e
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()
         with:
           name: playwright-report
@@ -137,11 +155,19 @@ jobs:
     if: needs.changes.outputs.infra == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: hashicorp/setup-terraform@v4
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: プロバイダのキャッシュのディレクトリを作る
+        run: mkdir -p "$TF_PLUGIN_CACHE_DIR"
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.TF_PLUGIN_CACHE_DIR }}
+          key: terraform-plugins-${{ runner.os }}-${{ hashFiles('infra/**/.terraform.lock.hcl') }}
 
       - name: terraform fmt
         run: terraform fmt -check -recursive infra
@@ -158,30 +184,40 @@ jobs:
 
   # PR に terraform plan の結果をコメントする（同じコメントを更新する）。
   # plan 用のロールは読み取り専用なので、ロックは取らない。
-  # フォークからの PR には ID トークンが発行されず、ロールを使えないので実行しない。
+  # フォークと Dependabot からの PR には ID トークンが発行されず、ロールを使えないので実行しない
+  # （Dependabot の Terraform の更新は、手元で make tf-main-plan を実行して確かめる）。
   infra-plan:
     needs: [changes, infra]
     if: >-
       github.event_name == 'pull_request' &&
       needs.changes.outputs.infra == 'true' &&
-      github.event.pull_request.head.repo.full_name == github.repository
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: aws-actions/configure-aws-credentials@v6
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-to-assume: ${{ env.AWS_PLAN_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - uses: hashicorp/setup-terraform@v4
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
+
+      - name: プロバイダのキャッシュのディレクトリを作る
+        run: mkdir -p "$TF_PLUGIN_CACHE_DIR"
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.TF_PLUGIN_CACHE_DIR }}
+          key: terraform-plugins-${{ runner.os }}-${{ hashFiles('infra/**/.terraform.lock.hcl') }}
 
       - name: terraform plan
         id: plan
