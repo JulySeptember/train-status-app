@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"runtime/debug"
 )
 
+// Recovery は、ハンドラーの panic を 500 に変え、原因を追えるようにスタックをログに出す
 func Recovery(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(
 		w http.ResponseWriter,
@@ -14,7 +16,8 @@ func Recovery(next http.Handler) http.Handler {
 		defer func() {
 			if err := recover(); err != nil {
 
-				log.Printf("panic: %v", err)
+				// panic の値もログに出るので、ODPT のキーが入る *url.Error などを panic に渡さない
+				log.Printf("panic: %s %s: %v\n%s", r.Method, r.URL.EscapedPath(), err, debug.Stack())
 
 				w.Header().Set(
 					"Content-Type",

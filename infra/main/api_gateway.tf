@@ -45,6 +45,12 @@ resource "aws_apigatewayv2_stage" "default" {
     throttling_burst_limit = 20
   }
 
+  # 形式とロググループは monitoring.tf
+  access_log_settings {
+    destination_arn = aws_cloudwatch_log_group.api_access.arn
+    format          = local.api_access_log_format
+  }
+
   tags = local.common_tags
 }
 

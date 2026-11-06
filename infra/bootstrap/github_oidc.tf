@@ -164,11 +164,45 @@ data "aws_iam_policy_document" "github_deploy" {
     ]
   }
 
+  # Lambda のログと、API Gateway のアクセスログ（infra/main/monitoring.tf）
   statement {
     sid     = "Logs"
     actions = ["logs:*"]
     resources = [
       "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.name_prefix}-*",
+      "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/apigateway/${local.name_prefix}-*",
+    ]
+  }
+
+  # HTTP API のアクセスログを有効にするには、ステージを更新する側に Logs の配信の権限が要る。
+  # どれもリソースで絞れない（API Gateway の開発者ガイドの「HTTP API のログ記録を設定する」）
+  statement {
+    sid = "ApiGatewayAccessLogDelivery"
+    actions = [
+      "logs:CreateLogDelivery",
+      "logs:GetLogDelivery",
+      "logs:UpdateLogDelivery",
+      "logs:DeleteLogDelivery",
+      "logs:ListLogDeliveries",
+      "logs:PutResourcePolicy",
+      "logs:DescribeResourcePolicies",
+      "logs:DescribeLogGroups",
+    ]
+    resources = ["*"]
+  }
+
+  # 障害に気づくための CloudWatch のアラーム（infra/main/monitoring.tf）。
+  # 通知先の SNS トピックは bootstrap（monitoring.tf）で作るので、SNS の権限は与えない
+  statement {
+    sid = "CloudWatchAlarms"
+    actions = [
+      "cloudwatch:PutMetricAlarm",
+      "cloudwatch:DeleteAlarms",
+      "cloudwatch:TagResource",
+      "cloudwatch:UntagResource",
+    ]
+    resources = [
+      "arn:aws:cloudwatch:${var.aws_region}:${data.aws_caller_identity.current.account_id}:alarm:${local.name_prefix}-*",
     ]
   }
 

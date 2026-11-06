@@ -17,3 +17,7 @@ output "github_plan_role_arn" {
 output "github_deploy_role_arn" {
   value = aws_iam_role.github_deploy.arn
 }
+
+output "alert_topic_arn" {
+  value = aws_sns_topic.alerts.arn
+}
