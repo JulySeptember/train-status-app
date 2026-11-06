@@ -10,8 +10,16 @@ import JourneyList from "@/components/JourneyList";
 import RealtimeNotice from "@/components/RealtimeNotice";
 import PageTitle from "@/components/PageTitle";
 import FavoriteButton from "@/components/FavoriteButton";
+import SegmentedControl from "@/components/SegmentedControl";
 
 import { journeyFavoriteId } from "@/lib/favorites";
+import {
+  type JourneySort,
+  SORT_PARAM,
+  journeySortOptions,
+  readJourneySort,
+  sortJourneys,
+} from "@/lib/journeySort";
 
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -28,6 +36,33 @@ function Message({ title, children }: { title: string; children: string }) {
 export default function Journey() {
   const [params, setParams] = useSearchParams();
   const query = readJourneyQuery(params);
+  const sort = readJourneySort(params);
+
+  // 並び順を変えても検索はし直さない（queryKey に入らない）。戻るで並び順を1つずつたどらないよう、履歴は置き換える
+  const setSort = (value: JourneySort) => {
+    const next = new URLSearchParams(params);
+    if (value === "time") {
+      next.delete(SORT_PARAM);
+    } else {
+      next.set(SORT_PARAM, value);
+    }
+    setParams(next, { replace: true });
+  };
+
+  // 検索し直しても、選んでいた並び順は保つ
+  const search = (next: URLSearchParams) => {
+    if (sort !== "time") {
+      next.set(SORT_PARAM, sort);
+    }
+    setParams(next);
+  };
+
+  // 入力欄を作り直す鍵。並び順だけが変わったときは作り直さない（入力中の条件を消さない）
+  const formKey = (() => {
+    const p = new URLSearchParams(params);
+    p.delete(SORT_PARAM);
+    return p.toString();
+  })();
 
   const journeys = useQuery({
     queryKey: ["journeys", query],
@@ -51,11 +86,7 @@ export default function Journey() {
       <Card>
         <CardContent>
           {/* URL が変わったら（ホームからの検索・戻る）入力欄を作り直して条件を合わせる */}
-          <JourneyForm
-            key={params.toString()}
-            initial={query}
-            onSearch={setParams}
-          />
+          <JourneyForm key={formKey} initial={query} onSearch={search} />
         </CardContent>
       </Card>
 
@@ -71,13 +102,26 @@ export default function Journey() {
       )}
 
       {query && journeys.data && (
-        <div className="flex justify-end">
-          <FavoriteButton
-            kind="journeys"
-            id={journeyFavoriteId(query.from, query.to)}
-            name={`${stationName(query.from) ?? "出発駅"}から${stationName(query.to) ?? "到着駅"}までの経路`}
-            label
-          />
+        <div className="flex flex-wrap items-center gap-3">
+          {/* 経路が1本なら並べ替えても変わらないので出さない */}
+          {journeys.data.journeys.length > 1 && (
+            <SegmentedControl
+              options={journeySortOptions(!!query.arriveBy)}
+              value={sort}
+              onChange={setSort}
+              label="並び順"
+              optionClassName="px-2"
+            />
+          )}
+
+          <div className="ml-auto">
+            <FavoriteButton
+              kind="journeys"
+              id={journeyFavoriteId(query.from, query.to)}
+              name={`${stationName(query.from) ?? "出発駅"}から${stationName(query.to) ?? "到着駅"}までの経路`}
+              label
+            />
+          </div>
         </div>
       )}
 
@@ -109,7 +153,7 @@ export default function Journey() {
 
       {query && journeys.data && journeys.data.journeys.length > 0 && (
         <JourneyList
-          journeys={journeys.data.journeys}
+          journeys={sortJourneys(journeys.data.journeys, sort)}
           origin={stationName(query.from)}
           destination={stationName(query.to)}
         />
