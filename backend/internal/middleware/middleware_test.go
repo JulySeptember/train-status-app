@@ -36,12 +36,21 @@ func TestLoggingStatus(t *testing.T) {
 			want:    "GET /api/status 429 ",
 		},
 		{
-			name: "最初の WriteHeader だけを使う",
+			// Lambda のアダプターは最後の WriteHeader の値を返すので、ログもそれに合わせる
+			name: "最後の WriteHeader を使う",
 			handler: func(w http.ResponseWriter, _ *http.Request) {
-				w.WriteHeader(http.StatusBadGateway)
 				w.WriteHeader(http.StatusOK)
+				w.WriteHeader(http.StatusBadGateway)
 			},
 			want: "GET /api/status 502 ",
+		},
+		{
+			name: "Write のあとの WriteHeader",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte("ok"))
+				w.WriteHeader(http.StatusInternalServerError)
+			},
+			want: "GET /api/status 500 ",
 		},
 		{
 			name:    "Write だけなら 200",
@@ -70,6 +79,18 @@ func TestLoggingStatus(t *testing.T) {
 				t.Errorf("log にクエリが出ている: %q", got)
 			}
 		})
+	}
+}
+
+func TestLoggingEscapesPath(t *testing.T) {
+	buf := captureLog(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/x%0AGET%20/fake", nil)
+	Logging(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})).ServeHTTP(httptest.NewRecorder(), req)
+
+	got := buf.String()
+	if strings.Count(got, "\n") != 1 || !strings.HasPrefix(got, "GET /api/x%0AGET%20/fake 200 ") {
+		t.Errorf("パスの改行・空白がログの行を分けている: %q", got)
 	}
 }
 
@@ -118,6 +139,21 @@ func TestRecoveryWithLogging(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("log に %q が無い:\n%s", want, got)
 		}
+	}
+}
+
+func TestRecoveryAfterWrite(t *testing.T) {
+	buf := captureLog(t)
+
+	// 200 を書いたあとに panic しても、ログは Recovery が書いた 500 になる（Lambda が返すのも 500）
+	h := Logging(Recovery(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		panic("boom")
+	})))
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/trains", nil))
+
+	if got := buf.String(); !strings.Contains(got, "GET /api/trains 500 ") {
+		t.Errorf("log にステータス 500 が無い:\n%s", got)
 	}
 }
 

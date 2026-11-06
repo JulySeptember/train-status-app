@@ -47,6 +47,10 @@ action はコミット SHA で固定し（`@<SHA> # v7.0.1`）、`.github/depend
 
 メールの購読は、公開リポジトリと tfstate にアドレスを残さないよう Terraform で作らない。bootstrap を適用したあと、ユーザーに `! aws sns subscribe --region ap-northeast-1 --topic-arn "$(cd infra/bootstrap && terraform output -raw alert_topic_arn)" --protocol email --notification-endpoint 'メールアドレス'` を実行してもらい、届いた確認のメールのリンクを開いてもらう。
 
+予算の予測の通知は、数週間分の利用の履歴がたまるまで動かない。API Gateway が CloudFront を通さずに大量に呼ばれると、ステージのスロットリングで返した 429 もアクセスログに1件ずつ書かれ、Logs の無料枠（取り込み 5GB）を超えうる。費用のアラートが鳴ってアクセスログが原因なら、`main/api_gateway.tf` の `access_log_settings` を外して適用する。
+
+deploy 用ロールには、HTTP API のアクセスログに要る `logs:CreateLogDelivery`・`logs:PutResourcePolicy` などを全リソースに与えている（リソースで絞れない。IAM の権限ではないのでロールの権限は広がらないが、アカウントの Logs のリソースポリシーは書き換えられる）。
+
 `main` は SNS トピックを `data "aws_sns_topic"` で名前から引くので、bootstrap を先に適用する（無いと plan が失敗する）。
 
 API の Lambda のログは1リクエスト1行の `<メソッド> <パス> <ステータス> <処理時間>`（`backend/internal/middleware/logging.go`）で、panic はスタックも出る。5xx の割合は Logs Insights で数える:

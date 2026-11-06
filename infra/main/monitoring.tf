@@ -16,8 +16,12 @@ locals {
 # ============================
 
 # API Gateway は CloudFront を通さずにも呼べるので、誰がどれだけ呼んだか、429 がどのリクエストかを追えるようにする。
-# CloudFront を通ったものは userAgent が "Amazon CloudFront" になる。
-# path にクエリは入らない（AI への入力は POST の本文なので、ここには出ない）
+# CloudFront を通ったものは sourceIp が CloudFront の IP になる（範囲はマネージドプレフィックスリスト
+# com.amazonaws.global.cloudfront.origin-facing。User-Agent は利用者のものが転送されるので区別に使えない）。
+# path にクエリは入らない（AI への入力は POST の本文なので、ここには出ない）。
+# 1行を小さくするため、時刻（ログのタイムスタンプがある）などは出さない。
+# 直接たくさん呼ばれると、429 も1件ずつ書かれて Logs の無料枠（取り込み 5GB）を超えうる。
+# そのときは access_log_settings を外す（infra/CLAUDE.md の「監視」）
 resource "aws_cloudwatch_log_group" "api_access" {
   name              = "/aws/apigateway/${local.name_prefix}-api"
   retention_in_days = 30
@@ -27,18 +31,15 @@ resource "aws_cloudwatch_log_group" "api_access" {
 
 locals {
   api_access_log_format = jsonencode({
-    requestId          = "$context.requestId"
-    requestTime        = "$context.requestTime"
-    sourceIp           = "$context.identity.sourceIp"
-    userAgent          = "$context.identity.userAgent"
-    method             = "$context.httpMethod"
-    path               = "$context.path"
-    status             = "$context.status"
-    responseLength     = "$context.responseLength"
-    responseLatency    = "$context.responseLatency"
-    integrationStatus  = "$context.integrationStatus"
-    integrationLatency = "$context.integrationLatency"
-    errorMessage       = "$context.error.message"
+    requestId         = "$context.requestId"
+    sourceIp          = "$context.identity.sourceIp"
+    userAgent         = "$context.identity.userAgent"
+    method            = "$context.httpMethod"
+    path              = "$context.path"
+    status            = "$context.status"
+    latency           = "$context.responseLatency"
+    integrationStatus = "$context.integrationStatus"
+    error             = "$context.error.message"
   })
 }
 
@@ -69,7 +70,8 @@ resource "aws_cloudwatch_metric_alarm" "api_errors" {
 }
 
 # 通知の Lambda が失敗し続けている。再試行しない設定（notifier.tf）なので、1回の失敗は次の5分後に確かめ直される。
-# ODPT の一時的な失敗では鳴らさず、3回（15分）続けて失敗したら知らせる
+# ODPT の一時的な失敗では鳴らさず、15分で3回失敗したら知らせる。
+# 5分の期間を3つ続けて見ると、実行の時刻と期間の区切りがずれて実行の無い期間ができたときに途切れるので、15分の合計で見る
 resource "aws_cloudwatch_metric_alarm" "notifier_errors" {
   alarm_name        = "${local.name_prefix}-notifier-errors"
   alarm_description = "運行情報の通知の Lambda が15分続けて失敗している。/aws/lambda/${local.name_prefix}-notifier のログを見る"
@@ -78,12 +80,11 @@ resource "aws_cloudwatch_metric_alarm" "notifier_errors" {
   metric_name = "Errors"
   dimensions  = { FunctionName = aws_lambda_function.notifier.function_name }
   statistic   = "Sum"
-  period      = 300
+  period      = 900
 
   comparison_operator = "GreaterThanOrEqualToThreshold"
-  threshold           = 1
-  evaluation_periods  = 3
-  datapoints_to_alarm = 3
+  threshold           = 3
+  evaluation_periods  = 1
   treat_missing_data  = "notBreaching"
 
   alarm_actions = local.alarm_actions

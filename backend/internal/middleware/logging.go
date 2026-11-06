@@ -8,7 +8,8 @@ import (
 
 // Logging は、リクエストごとにメソッド・パス・ステータスコード・処理時間を1行で出す。
 // CloudWatch Logs Insights で 5xx・429・502 の割合を数えられるよう、ステータスコードを出す。
-// AI への入力などの本文は出さない（パスだけで、クエリも出さない）
+// AI への入力などの本文は出さない（パスだけで、クエリも出さない）。
+// パスはエスケープしたまま出し、改行や空白で行を分けたり集計から漏らしたりさせない
 func Logging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(
 		w http.ResponseWriter,
@@ -23,23 +24,23 @@ func Logging(next http.Handler) http.Handler {
 		log.Printf(
 			"%s %s %d %s",
 			r.Method,
-			r.URL.Path,
+			r.URL.EscapedPath(),
 			rec.Status(),
 			time.Since(start),
 		)
 	})
 }
 
-// statusRecorder は、ハンドラーが返したステータスコードを覚える
+// statusRecorder は、ハンドラーが返したステータスコードを覚える。
+// Lambda のアダプター（aws-lambda-go-api-proxy の ProxyResponseWriterV2）は最後の WriteHeader の値を返すので、
+// それに合わせて最後の値を覚える（200 を書いたあとに panic して Recovery が 500 にしたときも、500 と出る）
 type statusRecorder struct {
 	http.ResponseWriter
 	status int
 }
 
 func (r *statusRecorder) WriteHeader(code int) {
-	if r.status == 0 {
-		r.status = code
-	}
+	r.status = code
 	r.ResponseWriter.WriteHeader(code)
 }
 

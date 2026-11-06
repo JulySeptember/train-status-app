@@ -19,33 +19,9 @@ resource "aws_sns_topic" "alerts" {
 }
 
 data "aws_iam_policy_document" "alerts_topic" {
-  # アカウントの管理者がトピックを管理・購読できるようにする（既定のポリシーと同じ）
-  statement {
-    sid = "AccountOwner"
-    actions = [
-      "sns:GetTopicAttributes",
-      "sns:SetTopicAttributes",
-      "sns:AddPermission",
-      "sns:RemovePermission",
-      "sns:DeleteTopic",
-      "sns:Subscribe",
-      "sns:ListSubscriptionsByTopic",
-      "sns:Publish",
-    ]
-    resources = [aws_sns_topic.alerts.arn]
-
-    principals {
-      type        = "AWS"
-      identifiers = ["*"]
-    }
-
-    condition {
-      test     = "StringEquals"
-      variable = "AWS:SourceOwner"
-      values   = [data.aws_caller_identity.current.account_id]
-    }
-  }
-
+  # トピックの管理と購読は、このポリシーでは許さず IAM のポリシーに任せる
+  # （Principal を "*" にすると、同じアカウントの deploy 用ロールや Lambda の実行ロールまでトピックを変えられる）
+  #
   # 予算（AWS Budgets）と CloudWatch のアラームが、このアカウントの分だけ通知できるようにする
   statement {
     sid       = "AlertServices"
@@ -78,6 +54,11 @@ resource "aws_budgets_budget" "monthly" {
   limit_unit   = "USD"
   time_unit    = "MONTHLY"
 
+  # クレジットで相殺された費用も数える（無料プランのクレジットがあっても、費用が出たことに気づけるように）
+  cost_types {
+    include_credit = false
+  }
+
   # 実績が $1 を超えた
   notification {
     comparison_operator       = "GREATER_THAN"
@@ -96,7 +77,7 @@ resource "aws_budgets_budget" "monthly" {
     subscriber_sns_topic_arns = [aws_sns_topic.alerts.arn]
   }
 
-  # 月末までに $5 を超えそう
+  # 月末までに $5 を超えそう（予測には数週間分の利用の履歴が要るので、作ってすぐは動かない）
   notification {
     comparison_operator       = "GREATER_THAN"
     threshold                 = 100

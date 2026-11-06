@@ -16,7 +16,8 @@ func Recovery(next http.Handler) http.Handler {
 		defer func() {
 			if err := recover(); err != nil {
 
-				log.Printf("panic: %s %s: %v\n%s", r.Method, r.URL.Path, err, debug.Stack())
+				// panic の値もログに出るので、ODPT のキーが入る *url.Error などを panic に渡さない
+				log.Printf("panic: %s %s: %v\n%s", r.Method, r.URL.EscapedPath(), err, debug.Stack())
 
 				w.Header().Set(
 					"Content-Type",
