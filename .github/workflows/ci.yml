@@ -133,13 +133,15 @@ jobs:
             exit 1
           fi
           echo "version=${version}" >> "$GITHUB_OUTPUT"
+          # ランナーの環境変数（ImageOS）は式の env からは読めないので、ここで出力する
+          echo "image=${ImageOS:-unknown}" >> "$GITHUB_OUTPUT"
 
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
           # ImageOS（ubuntu24 など）を入れ、ランナーの OS が変わったら入れ直す
-          key: playwright-${{ env.ImageOS }}-${{ steps.playwright.outputs.version }}-chromium
+          key: playwright-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-chromium
 
       - if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
