@@ -12,6 +12,7 @@ Go の REST API（AWS Lambda）と React + TypeScript の SPA（S3 + CloudFront�
 - `backend/CLAUDE.md`: Go の層構成、静的データの更新、Swagger、AI の評価セット、ODPT データの注意点
 - `frontend/CLAUDE.md`: React の構成、E2E テスト
 - `infra/CLAUDE.md`: AWS の構成、CD・bootstrap の詳細、SSM、本番 Lambda の調査、Ruleset
+- 構築・移行（新しいアカウントやリポジトリに作るときに入れる値と順番）: `docs/setup.md`
 - 設計: `docs/design/`（`route-search.md`・`ai-api.md`・`login.md`・`multi-operator.md`・`station-guide.md`）
 
 ## 守ること
@@ -22,6 +23,7 @@ Go の REST API（AWS Lambda）と React + TypeScript の SPA（S3 + CloudFront�
 - 列車は列車番号ではなく列車ID で特定する（列車番号は路線間・ダイヤ間で重複する）。運行日は3時前を前日として扱い、24時以降の時刻がある
 - バックエンドの DTO（`backend/internal/service/service.go`）を変えたら、フロントの `src/types.ts`・`src/api.ts`・E2E の `e2e/data.ts` と、Swagger（`backend/docs/`）も合わせる。デプロイは `backend-deploy` → `tf-main-apply` → `frontend-deploy` まで行う（片方だけだと本番で型がずれる）
 - deploy 用ロールには、Lambda の実行ロールの `iam:PassRole` 以外の IAM の権限を与えない。Lambda の実行ロールとポリシーは `infra/bootstrap` で管理する
+- SSM のパラメータ・tfvars の変数・アカウントに固有の値（アカウント ID・バケット名・リポジトリ名など）・AWS の外の設定（Google の OAuth など）を足したり変えたりしたら、`docs/setup.md` も直す
 
 ## コマンド
 
