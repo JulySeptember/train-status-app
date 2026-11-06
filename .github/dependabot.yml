@@ -1,0 +1,52 @@
+# 依存を週1回まとめて更新する PR を作る。
+# action はコミット SHA で固定していて（# v7.0.1 のようなコメント付き）、Dependabot は SHA とコメントを一緒に更新する。
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      timezone: Asia/Tokyo
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: gomod
+    directory: /backend
+    schedule:
+      interval: weekly
+      timezone: Asia/Tokyo
+    groups:
+      go:
+        patterns: ["*"]
+
+  # メジャーの更新は壊れやすいので、マイナー・パッチとは別の PR にする
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      timezone: Asia/Tokyo
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+      npm-major:
+        update-types: [major]
+
+  # bootstrap はマージの前に手元で適用するので、main とは別の PR にする（infra/CLAUDE.md）
+  - package-ecosystem: terraform
+    directory: /infra/main
+    schedule:
+      interval: weekly
+      timezone: Asia/Tokyo
+    groups:
+      terraform-main:
+        patterns: ["*"]
+
+  - package-ecosystem: terraform
+    directory: /infra/bootstrap
+    schedule:
+      interval: weekly
+      timezone: Asia/Tokyo
+    groups:
+      terraform-bootstrap:
+        patterns: ["*"]
