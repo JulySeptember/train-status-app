@@ -169,6 +169,11 @@ test("経路検索: 結果を乗り換えの少ない順・所要時間の短い
   await page.getByRole("button", { name: "検索" }).click();
   await expect(page).toHaveURL(/departAt=09%3A00/);
   await expect(page).toHaveURL(/sort=duration/);
+  await expect(badges).toHaveText([
+    "乗り換え1回",
+    "乗り換え2回",
+    "乗り換えなし",
+  ]);
 
   // 既定の並びに戻すと URL から消える
   await page.getByRole("radio", { name: "早く着く順" }).click();

@@ -7,7 +7,7 @@ export type JourneySort = "time" | "transfers" | "duration";
 
 const SORTS: readonly JourneySort[] = ["time", "transfers", "duration"];
 
-// 並び順は URL の sort に持たせる（再読み込み・共有・お気に入りから開いても同じ並びにする）。
+// 並び順は URL の sort に持たせる（再読み込み・共有しても同じ並びにする）。
 // time は既定なので URL に書かない
 export const SORT_PARAM = "sort";
 

@@ -106,7 +106,7 @@ export default function Journey() {
           {/* 経路が1本なら並べ替えても変わらないので出さない */}
           {journeys.data.journeys.length > 1 && (
             <SegmentedControl
-              options={journeySortOptions(query.arriveBy !== undefined)}
+              options={journeySortOptions(!!query.arriveBy)}
               value={sort}
               onChange={setSort}
               label="並び順"
